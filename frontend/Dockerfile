@@ -2,7 +2,7 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 COPY . .
 ARG VITE_API_BASE_URL
 ARG VITE_FIREBASE_API_KEY
