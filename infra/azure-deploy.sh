@@ -164,6 +164,9 @@ echo "==> [7/8] Configuring environment variables..."
 
 # Backend environment variables
 # Note: Add your actual Azure service keys here or set them manually in the portal
+FRONTEND_URL="https://${FRONTEND_APP_NAME}.azurewebsites.net"
+BACKEND_URL="https://${BACKEND_APP_NAME}.azurewebsites.net"
+
 az webapp config appsettings set \
     --resource-group "${RESOURCE_GROUP}" \
     --name "${BACKEND_APP_NAME}" \
@@ -172,6 +175,16 @@ az webapp config appsettings set \
         ENVIRONMENT="production" \
         LOG_LEVEL="INFO" \
         WEBSITES_PORT="8000" \
+        CORS_ORIGINS="${FRONTEND_URL}" \
+    --output none
+
+# Frontend runtime env var — nginx proxy target
+az webapp config appsettings set \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${FRONTEND_APP_NAME}" \
+    --settings \
+        BACKEND_URL="${BACKEND_URL}" \
+        WEBSITES_PORT="80" \
     --output none
 
 echo "    Backend env vars configured."
@@ -186,9 +199,7 @@ echo "      - AZURE_TRANSLATOR_KEY"
 echo "      - AZURE_TTS_KEY"
 echo "      - FIREBASE_PROJECT_ID"
 
-# Frontend — no runtime env vars needed (baked in at build time),
-# but set the backend URL for nginx proxy reference
-BACKEND_URL="https://${BACKEND_APP_NAME}.azurewebsites.net"
+echo "    Frontend URL: ${FRONTEND_URL}"
 echo "    Backend URL: ${BACKEND_URL}"
 
 # ---------------------------------------------------------------------------
