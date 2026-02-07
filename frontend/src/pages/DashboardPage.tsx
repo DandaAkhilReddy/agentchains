@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, ScanLine, Zap } from "lucide-react";
 import api from "../lib/api";
-import { formatINR, formatMonths } from "../lib/format";
+import { formatMonths } from "../lib/format";
 import { CurrencyDisplay } from "../components/shared/CurrencyDisplay";
 import { LoadingSpinner } from "../components/shared/LoadingSpinner";
 import { EmptyState } from "../components/shared/EmptyState";

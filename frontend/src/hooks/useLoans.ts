@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../lib/api";
-import type { Loan, OptimizationResult, ScanJob, EMIResult } from "../types";
+import type { Loan, OptimizationResult, ScanJob } from "../types";
 
 export function useLoans() {
   return useQuery<Loan[]>({

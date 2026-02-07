@@ -46,10 +46,10 @@ async def health_check():
 @app.get("/api/health/ready")
 async def readiness_check():
     """Readiness probe — checks DB connectivity. Used by Azure App Service."""
-    from app.db.session import async_engine
+    from app.db.session import engine
 
     try:
-        async with async_engine.connect() as conn:
+        async with engine.connect() as conn:
             await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
         db_ok = True
     except Exception:

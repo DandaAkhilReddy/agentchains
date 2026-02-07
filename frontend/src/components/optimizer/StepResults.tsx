@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation } from "@tanstack/react-query";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import api from "../../lib/api";
 import { formatINR, formatINRCompact, formatMonths } from "../../lib/format";
 import type { OptimizationResult } from "../../types";
@@ -10,13 +10,6 @@ interface Props {
   results: OptimizationResult;
   selectedStrategy: string;
 }
-
-const STRATEGY_COLORS: Record<string, string> = {
-  avalanche: "#3b82f6",
-  snowball: "#22c55e",
-  smart_hybrid: "#8b5cf6",
-  proportional: "#f59e0b",
-};
 
 export function StepResults({ results, selectedStrategy }: Props) {
   const { t } = useTranslation();
@@ -107,7 +100,7 @@ export function StepResults({ results, selectedStrategy }: Props) {
               tickFormatter={(v) => formatINRCompact(v)}
               tick={{ fontSize: 12 }}
             />
-            <Tooltip formatter={(value: number) => formatINR(value)} />
+            <Tooltip formatter={(value) => formatINR(Number(value))} />
             <Line type="monotone" dataKey="interestSaved" stroke="#22c55e" strokeWidth={2} name="Interest Saved" />
           </LineChart>
         </ResponsiveContainer>
