@@ -58,7 +58,7 @@ async def upload_document(
     try:
         await repo.update_status(job.id, user.id, "processing")
         scanner = ScannerService()
-        fields = await scanner.analyze_document(blob_url)
+        fields = await scanner.analyze_from_bytes(content, file.content_type)
 
         extracted = {f.field_name: f.value for f in fields}
         confidences = {f.field_name: f.confidence for f in fields}
