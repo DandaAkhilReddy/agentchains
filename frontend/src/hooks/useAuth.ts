@@ -16,7 +16,15 @@ export function useAuth() {
   const { user, loading, setUser, setLoading } = useAuthStore();
 
   useEffect(() => {
+    // Safety net: if Firebase auth hasn't resolved in 5s, stop loading spinner
+    const timeout = setTimeout(() => {
+      if (useAuthStore.getState().loading) {
+        setLoading(false);
+      }
+    }, 5000);
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      clearTimeout(timeout);
       setUser(firebaseUser);
       if (firebaseUser) {
         try {
@@ -29,8 +37,12 @@ export function useAuth() {
         }
       }
     });
-    return unsubscribe;
-  }, [setUser]);
+
+    return () => {
+      clearTimeout(timeout);
+      unsubscribe();
+    };
+  }, [setUser, setLoading]);
 
   const loginWithGoogle = async () => {
     setLoading(true);

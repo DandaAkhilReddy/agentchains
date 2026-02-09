@@ -22,8 +22,8 @@ i18n.use(initReactI18next).init({
   lng: localStorage.getItem("language") || "en",
   fallbackLng: "en",
   interpolation: { escapeValue: false },
+}).then(() => {
+  console.log = _origLog;
 });
-
-console.log = _origLog;
 
 export default i18n;

@@ -15,7 +15,9 @@
 
 **Scan loan documents with AI | Optimize repayment across multiple loans | Save lakhs in interest**
 
-[Getting Started](#-quick-start) | [Features](#-features) | [Architecture](#-architecture) | [API Docs](#-api-endpoints) | [Contributing](#-contributing)
+[Live Demo](https://app-loan-analyzer-web.azurewebsites.net) | [API Swagger](https://app-loan-analyzer-api.azurewebsites.net/docs)
+
+[Getting Started](#quick-start) | [Features](#features) | [Architecture](#architecture) | [API Docs](#api-endpoints) | [CI/CD](#cicd-pipeline) | [Contributing](#contributing)
 
 ---
 
@@ -387,51 +389,66 @@ Open **http://localhost:5173** and you're ready to go!
 ```
 Indian_Loan_Analyzer_Claude/
 │
+├── .github/
+│   └── workflows/
+│       └── deploy.yml            # CI/CD: test → build → deploy to Azure
+│
 ├── backend/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── routes/          # auth, loans, optimizer, scanner, emi, ai
-│   │   │   ├── deps.py          # Firebase auth dependencies
-│   │   │   └── middleware.py    # Logging, rate limiting, error handler
+│   │   │   ├── routes/           # auth, loans, optimizer, scanner, emi, ai
+│   │   │   ├── deps.py           # Firebase auth dependencies
+│   │   │   └── middleware.py     # Logging, rate limiting, error handler
 │   │   ├── core/
-│   │   │   ├── financial_math.py   # EMI, amortization, reverse EMI
-│   │   │   ├── strategies.py       # Avalanche, Snowball, SmartHybrid, Proportional
-│   │   │   ├── optimization.py     # Multi-loan simulator + freed-EMI rollover
-│   │   │   └── indian_rules.py     # Tax 80C/24b/80E/80EEA, RBI rules
+│   │   │   ├── financial_math.py    # EMI, amortization, reverse EMI
+│   │   │   ├── strategies.py        # Avalanche, Snowball, SmartHybrid, Proportional
+│   │   │   ├── optimization.py      # Multi-loan simulator + freed-EMI rollover
+│   │   │   └── indian_rules.py      # Tax 80C/24b/80E/80EEA, RBI rules
 │   │   ├── db/
-│   │   │   ├── models.py          # 7 SQLAlchemy models + pgvector
-│   │   │   ├── session.py         # Async engine + session factory
-│   │   │   └── repositories/     # user, loan, scan, plan, embedding repos
-│   │   ├── schemas/              # Pydantic v2 request/response models
-│   │   ├── services/             # Azure AI, auth, blob, translator, TTS
-│   │   └── config.py             # Environment config (pydantic-settings)
-│   ├── tests/                    # 1,822 lines of unit tests
-│   ├── alembic/                  # Database migrations
+│   │   │   ├── models.py           # 7 SQLAlchemy models + pgvector
+│   │   │   ├── session.py          # Async engine + session factory
+│   │   │   └── repositories/      # user, loan, scan, plan, embedding repos
+│   │   ├── schemas/               # Pydantic v2 request/response models
+│   │   ├── services/              # Azure AI, auth, blob, translator, TTS
+│   │   └── config.py              # Environment config (pydantic-settings)
+│   ├── tests/                     # 409 unit tests (financial math, API, services)
+│   ├── alembic/                   # Database migrations
+│   ├── Dockerfile                 # Python 3.11-slim + uvicorn
+│   ├── .env.example               # Template for backend env vars
 │   └── requirements.txt
 │
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── auth/             # LoginPage (Phone OTP + Google)
-│   │   │   ├── layout/           # AppShell, Header, Sidebar, MobileNav
-│   │   │   ├── optimizer/        # 4-step wizard components
-│   │   │   ├── loans/            # LoanForm
-│   │   │   └── shared/           # ErrorBoundary, CurrencyDisplay, etc.
-│   │   ├── pages/                # 7 lazy-loaded page components
-│   │   ├── hooks/                # useAuth, useLoans, TanStack Query hooks
-│   │   ├── lib/                  # api, firebase, format (INR), emi-math, i18n
-│   │   ├── store/                # Zustand: auth, language, ui stores
-│   │   ├── locales/              # en.json, hi.json, te.json
-│   │   └── types/                # TypeScript interfaces
+│   │   │   ├── auth/              # LoginPage (Email/Password + Google)
+│   │   │   ├── layout/            # AppShell, Header, Sidebar, MobileNav
+│   │   │   ├── optimizer/         # 4-step wizard components
+│   │   │   ├── loans/             # LoanForm
+│   │   │   └── shared/            # ErrorBoundary, CurrencyDisplay, etc.
+│   │   ├── pages/                 # 7 lazy-loaded page components
+│   │   ├── hooks/                 # useAuth, useLoans, TanStack Query hooks
+│   │   ├── lib/                   # api, firebase, format (INR), emi-math, i18n
+│   │   ├── store/                 # Zustand: auth, language, ui stores
+│   │   ├── locales/               # en.json, hi.json, te.json, es.json
+│   │   └── types/                 # TypeScript interfaces
+│   ├── Dockerfile                 # Node build + nginx serve
+│   ├── .env.example               # Template for frontend env vars
 │   ├── package.json
-│   └── vite.config.ts            # Code-splitting + manual chunks
+│   └── vite.config.ts             # Code-splitting + manual chunks
+│
+├── infra/
+│   └── azure-deploy.sh            # Azure resource provisioning script
+│
+├── scripts/
+│   └── smoke-test.sh              # Post-deployment health checks
 │
 ├── docs/
-│   ├── CTO_REVIEW.md             # Architecture review (8.2/10)
-│   └── reference/                # 9 original design PDFs
+│   ├── CTO_REVIEW.md              # Architecture review (8.2/10)
+│   └── reference/                 # 9 original design PDFs
 │
-├── docker-compose.yml            # PostgreSQL 16 + pgvector
-└── .gitignore
+├── docker-compose.yml             # Local dev: PostgreSQL 16 + pgvector
+├── docker-compose.prod.yml        # Production: full stack with nginx
+└── README.md
 ```
 
 ---
@@ -534,6 +551,171 @@ This application includes infrastructure for India's **Digital Personal Data Pro
 - **Audit Trail** — All operations logged in `audit_logs` table
 - **Data Residency** — All processing in Central India (Pune) Azure region
 - **Purpose Limitation** — Consent specifies exact usage purpose
+
+---
+
+## Environment Variables
+
+### Backend (`backend/.env`)
+
+| Variable | Required | Description |
+|:---------|:---------|:------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string (`postgresql+asyncpg://user:pass@host:5432/db?ssl=require` for Azure) |
+| `FIREBASE_PROJECT_ID` | Yes | Firebase project ID for token verification |
+| `AZURE_OPENAI_ENDPOINT` | For AI features | Azure OpenAI endpoint URL |
+| `AZURE_OPENAI_KEY` | For AI features | Azure OpenAI API key |
+| `AZURE_OPENAI_DEPLOYMENT` | For AI features | Deployment name (default: `gpt-4o-mini`) |
+| `AZURE_DOC_INTEL_ENDPOINT` | For scanner | Azure Document Intelligence endpoint |
+| `AZURE_DOC_INTEL_KEY` | For scanner | Azure Document Intelligence key |
+| `AZURE_STORAGE_CONNECTION_STRING` | For scanner | Azure Blob Storage connection string |
+| `AZURE_STORAGE_CONTAINER` | For scanner | Blob container name (default: `loan-documents`) |
+| `AZURE_TRANSLATOR_KEY` | For translation | Azure Translator key |
+| `AZURE_TRANSLATOR_REGION` | For translation | Azure region (default: `centralindia`) |
+| `AZURE_TTS_KEY` | For TTS | Azure Speech Services key |
+| `AZURE_TTS_REGION` | For TTS | Azure region (default: `centralindia`) |
+| `ENVIRONMENT` | No | `development` or `production` (default: `development`) |
+| `LOG_LEVEL` | No | Logging level (default: `INFO`) |
+| `CORS_ORIGINS` | No | Comma-separated allowed origins |
+
+### Frontend (`frontend/.env`)
+
+| Variable | Required | Description |
+|:---------|:---------|:------------|
+| `VITE_API_BASE_URL` | No | Backend API URL (empty string = same-origin proxy in production) |
+| `VITE_FIREBASE_API_KEY` | Yes | Firebase Web API key |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Yes | Firebase auth domain (`project.firebaseapp.com`) |
+| `VITE_FIREBASE_PROJECT_ID` | Yes | Firebase project ID |
+| `VITE_FIREBASE_STORAGE_BUCKET` | No | Firebase storage bucket |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | No | Firebase messaging sender ID |
+| `VITE_FIREBASE_APP_ID` | No | Firebase app ID |
+
+> **Note:** Frontend env vars are baked into the build at compile time via Vite. They are NOT secret — they are embedded in the JS bundle.
+
+---
+
+## CI/CD Pipeline
+
+Automated via **GitHub Actions** (`.github/workflows/deploy.yml`). Triggers on every push to `main`.
+
+```
+push to main
+     │
+     ├── test-backend ────── pip install → pytest (409 tests)
+     │
+     ├── test-frontend ───── npm install → vitest (66 tests)
+     │
+     └── build-and-deploy ── (runs after both test jobs pass)
+              │
+              ├── Login to Azure (service principal)
+              ├── Login to ACR (loanalyzeracr.azurecr.io)
+              ├── Build + push backend Docker image
+              ├── Build + push frontend Docker image (with VITE_FIREBASE_* build args)
+              ├── Deploy backend to App Service (app-loan-analyzer-api)
+              ├── Deploy frontend to App Service (app-loan-analyzer-web)
+              ├── Smoke test backend (/api/health → 200)
+              └── Smoke test frontend (/ → 200)
+```
+
+### Required GitHub Secrets
+
+| Secret | Description |
+|:-------|:------------|
+| `AZURE_CREDENTIALS` | Service principal JSON (`az ad sp create-for-rbac --role Contributor`) |
+| `VITE_FIREBASE_API_KEY` | Firebase Web API key |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase auth domain |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID |
+| `VITE_FIREBASE_STORAGE_BUCKET` | Firebase storage bucket |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase messaging sender ID |
+| `VITE_FIREBASE_APP_ID` | Firebase app ID |
+
+### Azure Resources
+
+| Resource | Name | Purpose |
+|:---------|:-----|:--------|
+| Resource Group | `rg-loan-analyzer` | All resources |
+| Container Registry | `loanalyzeracr.azurecr.io` | Docker images (managed identity pull) |
+| App Service (backend) | `app-loan-analyzer-api` | FastAPI on port 8000 |
+| App Service (frontend) | `app-loan-analyzer-web` | nginx serving React build |
+| PostgreSQL Flexible | `loan-analyzer-db.postgres.database.azure.com` | Database (`loan_analyzer`) |
+
+---
+
+## Testing
+
+### Backend (pytest)
+
+```bash
+cd backend
+pip install -r requirements.txt
+pytest -v --tb=short
+```
+
+**409 tests** covering:
+
+- `test_financial_math.py` — EMI calculation, amortization, reverse EMI, edge cases
+- `test_strategies.py` — All 4 repayment strategies with freed-EMI rollover
+- `test_indian_rules.py` — Tax deductions (80C, 24b, 80E, 80EEA), RBI prepayment rules
+- `test_optimization.py` — Multi-loan optimizer integration
+- `test_routes_*.py` — API endpoint request/response validation
+- `test_services.py` — Azure AI service mocks
+- `test_auth.py` — Firebase token verification
+- `test_schemas.py` — Pydantic model validation
+
+### Frontend (vitest)
+
+```bash
+cd frontend
+npm install
+npm test
+```
+
+**66 tests** covering:
+
+- `format.test.ts` — Indian number formatting (INR ₹1,00,000), compact display (₹1L, ₹1Cr)
+- `emi-math.test.ts` — Client-side EMI calculations
+- `i18n.test.ts` — Translation keys for EN, HI, TE, ES locales
+- `App.test.tsx` — Route rendering and lazy loading
+- Component tests — ErrorBoundary, LoadingSpinner, CurrencyDisplay
+
+### Production Build Check
+
+```bash
+cd frontend
+npm run build    # Zero TypeScript errors required
+```
+
+---
+
+## Development Workflow
+
+### Local Development (recommended)
+
+1. **Start the database** — `docker compose up -d` (PostgreSQL 16 + pgvector on port 5432)
+2. **Start the backend** — `cd backend && uvicorn app.main:app --reload --port 8000` (hot-reload)
+3. **Start the frontend** — `cd frontend && npm run dev` (Vite dev server on port 5173, proxies API calls)
+
+The frontend Vite dev server runs on `http://localhost:5173`. Set `VITE_API_BASE_URL=http://localhost:8000` in `frontend/.env` for local development.
+
+### Production (Docker Compose)
+
+```bash
+# Fill in environment variables
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+
+# Build and run all services
+docker compose -f docker-compose.prod.yml up --build
+```
+
+### Key Development Patterns
+
+- **State management**: Zustand stores (`authStore`, `languageStore`, `uiStore`) — no Redux boilerplate
+- **Server state**: TanStack Query with 5-minute stale time, 2 retries, no refetch-on-focus
+- **API client**: Axios with auto-attached Firebase token (request interceptor) and global error handling (response interceptor)
+- **Routing**: React Router v7 with lazy-loaded pages for code-splitting
+- **i18n**: i18next with JSON locale files — add new languages by creating `locales/xx.json` and registering in `lib/i18n.ts`
+- **Financial math**: All monetary calculations use Python `Decimal` with 28-digit precision, `ROUND_HALF_UP` to the paisa
+- **Auth flow**: Firebase client SDK (frontend) → `getIdToken()` → Bearer header → `firebase_admin.auth.verify_id_token()` (backend)
 
 ---
 
