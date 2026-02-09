@@ -51,6 +51,8 @@ def mock_user() -> MagicMock:
     user.display_name = "Test User"
     user.preferred_language = "en"
     user.tax_regime = "old"
+    user.country = "IN"
+    user.filing_status = "individual"
     user.annual_income = 1200000.0
     user.created_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
     user.updated_at = datetime(2025, 1, 1, tzinfo=timezone.utc)

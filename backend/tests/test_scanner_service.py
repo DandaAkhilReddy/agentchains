@@ -24,8 +24,9 @@ from app.services.scanner_service import (
     ScannerService,
     _clean_amount,
     _extract_with_patterns,
-    BANK_NORMALIZER,
+    BANK_NORMALIZER_IN,
     LOAN_TYPE_NORMALIZER,
+    PATTERNS_IN,
 )
 
 
@@ -268,16 +269,16 @@ class TestNoMatch:
 class TestExtractWithPatterns:
 
     def test_returns_empty_on_no_match(self):
-        value, confidence = _extract_with_patterns("nothing here", "principal")
+        value, confidence = _extract_with_patterns("nothing here", "principal", PATTERNS_IN)
         assert value == ""
         assert confidence == 0.0
 
     def test_returns_match_with_085_confidence(self):
-        value, confidence = _extract_with_patterns("Loan amount: 5,00,000", "principal")
+        value, confidence = _extract_with_patterns("Loan amount: 5,00,000", "principal", PATTERNS_IN)
         assert value == "5,00,000"
         assert confidence == pytest.approx(0.85)
 
     def test_unknown_field_returns_empty(self):
-        value, confidence = _extract_with_patterns("any text", "nonexistent_field")
+        value, confidence = _extract_with_patterns("any text", "nonexistent_field", PATTERNS_IN)
         assert value == ""
         assert confidence == 0.0

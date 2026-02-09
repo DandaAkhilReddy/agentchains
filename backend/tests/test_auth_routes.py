@@ -49,6 +49,8 @@ async def test_update_profile(async_client: AsyncClient, mock_user):
     updated_user.display_name = "New Name"
     updated_user.preferred_language = "en"
     updated_user.tax_regime = "old"
+    updated_user.country = "IN"
+    updated_user.filing_status = "individual"
     updated_user.annual_income = 1200000.0
 
     with patch("app.api.routes.auth.UserRepository") as MockRepo:
