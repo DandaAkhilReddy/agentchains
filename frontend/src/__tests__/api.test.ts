@@ -1,13 +1,7 @@
 /// <reference types="vitest/globals" />
-import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
-import type { User } from "firebase/auth";
+import { AxiosError, InternalAxiosRequestConfig } from "axios";
 
-// Mock modules before importing the api instance
-vi.mock("../lib/firebase", () => ({
-  auth: {
-    currentUser: null,
-  },
-}));
+// Auth is paused — api.ts has no request interceptor, no 401 redirect
 
 vi.mock("../store/toastStore", () => ({
   useToastStore: {
@@ -17,45 +11,15 @@ vi.mock("../store/toastStore", () => ({
   },
 }));
 
-// Import after mocking
 import api from "../lib/api";
-import { auth } from "../lib/firebase";
 import { useToastStore } from "../store/toastStore";
 
-// ---------------------------------------------------------------------------
-// Test Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Extract the request interceptor function from the api instance
- */
-const getRequestInterceptor = () => {
-  // @ts-expect-error - accessing private interceptors for testing
-  const handlers = api.interceptors.request.handlers;
-  return handlers[0]?.fulfilled;
-};
-
-/**
- * Extract the response error interceptor function from the api instance
- */
-const getResponseErrorInterceptor = () => {
-  // @ts-expect-error - accessing private interceptors for testing
-  const handlers = api.interceptors.response.handlers;
-  return handlers[0]?.rejected;
-};
-
-/**
- * Create a mock Axios request config
- */
 const createMockConfig = (): InternalAxiosRequestConfig => ({
   headers: {} as any,
   method: "GET",
   url: "/test",
 });
 
-/**
- * Create a mock Axios error with response
- */
 const createMockError = (status: number): AxiosError => {
   const error = new Error("Request failed") as AxiosError;
   error.isAxiosError = true;
@@ -70,9 +34,6 @@ const createMockError = (status: number): AxiosError => {
   return error;
 };
 
-/**
- * Create a mock Axios error without response (network error)
- */
 const createNetworkError = (): AxiosError => {
   const error = new Error("Network Error") as AxiosError;
   error.isAxiosError = true;
@@ -80,24 +41,20 @@ const createNetworkError = (): AxiosError => {
   return error;
 };
 
-// ---------------------------------------------------------------------------
-// Reset state before each test
-// ---------------------------------------------------------------------------
+const getResponseErrorInterceptor = () => {
+  // @ts-expect-error - accessing private interceptors for testing
+  const handlers = api.interceptors.response.handlers;
+  return handlers[0]?.rejected;
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
-  // Reset auth.currentUser
-  (auth as any).currentUser = null;
-  // Reset window.location.href
   delete (window as any).location;
   window.location = { href: "" } as any;
 });
 
-// ---------------------------------------------------------------------------
-// Axios Instance Configuration Tests
-// ---------------------------------------------------------------------------
 describe("api axios instance configuration", () => {
   it("has correct baseURL from env or empty string", () => {
-    // baseURL is set from VITE_API_BASE_URL or defaults to ""
     expect(api.defaults.baseURL).toBeDefined();
     expect(typeof api.defaults.baseURL).toBe("string");
   });
@@ -111,95 +68,16 @@ describe("api axios instance configuration", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Request Interceptor Tests
-// ---------------------------------------------------------------------------
-describe("request interceptor", () => {
-  it("attaches Bearer token when user exists and getIdToken succeeds", async () => {
-    const mockToken = "mock-firebase-token-123";
-    const mockUser = {
-      uid: "user123",
-      getIdToken: vi.fn().mockResolvedValue(mockToken),
-    } as unknown as User;
-
-    (auth as any).currentUser = mockUser;
-
-    const requestInterceptor = getRequestInterceptor();
-    const config = createMockConfig();
-
-    const result = await requestInterceptor(config);
-
-    expect(mockUser.getIdToken).toHaveBeenCalledTimes(1);
-    expect(result.headers.Authorization).toBe(`Bearer ${mockToken}`);
-  });
-
-  it("does not attach token when user is null", async () => {
-    (auth as any).currentUser = null;
-
-    const requestInterceptor = getRequestInterceptor();
-    const config = createMockConfig();
-
-    const result = await requestInterceptor(config);
-
-    expect(result.headers.Authorization).toBeUndefined();
-  });
-
-  it("does not attach token when user is undefined", async () => {
-    (auth as any).currentUser = undefined;
-
-    const requestInterceptor = getRequestInterceptor();
-    const config = createMockConfig();
-
-    const result = await requestInterceptor(config);
-
-    expect(result.headers.Authorization).toBeUndefined();
-  });
-
-  it("handles getIdToken failure gracefully without throwing", async () => {
-    const mockUser = {
-      uid: "user123",
-      getIdToken: vi.fn().mockRejectedValue(new Error("Token refresh failed")),
-    } as unknown as User;
-
-    (auth as any).currentUser = mockUser;
-
-    const requestInterceptor = getRequestInterceptor();
-    const config = createMockConfig();
-
-    // Should not throw, should return config without token
-    await expect(requestInterceptor(config)).resolves.toBeDefined();
-    const result = await requestInterceptor(config);
-
-    expect(mockUser.getIdToken).toHaveBeenCalledTimes(2); // called twice due to previous expect
-    expect(result.headers.Authorization).toBeUndefined();
-  });
-
-  it("returns the config object for successful token attachment", async () => {
-    const mockToken = "another-token";
-    const mockUser = {
-      uid: "user456",
-      getIdToken: vi.fn().mockResolvedValue(mockToken),
-    } as unknown as User;
-
-    (auth as any).currentUser = mockUser;
-
-    const requestInterceptor = getRequestInterceptor();
-    const config = createMockConfig();
-
-    const result = await requestInterceptor(config);
-
-    expect(result).toBe(config); // Same object reference
-    expect(result.headers).toBeDefined();
+describe("request interceptor (auth paused)", () => {
+  it("has no request interceptor registered", () => {
+    // @ts-expect-error - accessing private interceptors for testing
+    const requestHandlers = api.interceptors.request.handlers.filter(Boolean);
+    expect(requestHandlers.length).toBe(0);
   });
 });
 
-// ---------------------------------------------------------------------------
-// Response Interceptor Tests - Success
-// ---------------------------------------------------------------------------
 describe("response interceptor - success", () => {
   it("passes through successful responses unchanged", () => {
-    // The success handler in the interceptor is just: (response) => response
-    // We can verify this by checking that axios responses work normally
     const mockResponse = {
       data: { message: "success" },
       status: 200,
@@ -218,10 +96,7 @@ describe("response interceptor - success", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Response Interceptor Tests - Error Handling
-// ---------------------------------------------------------------------------
-describe("response interceptor - error handling", () => {
+describe("response interceptor - error handling (auth paused)", () => {
   let mockAddToast: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -231,14 +106,14 @@ describe("response interceptor - error handling", () => {
     });
   });
 
-  it("redirects to /login on 401 error", async () => {
+  it("does NOT redirect to /login on 401 error", async () => {
     const error = createMockError(401);
     const errorInterceptor = getResponseErrorInterceptor();
 
     await expect(errorInterceptor(error)).rejects.toEqual(error);
 
-    expect(window.location.href).toBe("/login");
-    expect(mockAddToast).not.toHaveBeenCalled(); // No toast for 401
+    expect(window.location.href).toBe(""); // No redirect
+    expect(mockAddToast).not.toHaveBeenCalled();
   });
 
   it("shows warning toast on 429 error (rate limit)", async () => {
@@ -251,7 +126,6 @@ describe("response interceptor - error handling", () => {
       type: "warning",
       message: "Too many requests. Please wait a moment.",
     });
-    expect(window.location.href).toBe(""); // No redirect
   });
 
   it("shows error toast on 500 server error", async () => {
@@ -264,7 +138,6 @@ describe("response interceptor - error handling", () => {
       type: "error",
       message: "Server error. Please try again later.",
     });
-    expect(window.location.href).toBe(""); // No redirect
   });
 
   it("shows error toast on 502 bad gateway", async () => {
@@ -301,7 +174,6 @@ describe("response interceptor - error handling", () => {
       type: "error",
       message: "Network error. Check your connection.",
     });
-    expect(window.location.href).toBe(""); // No redirect
   });
 
   it("does not show toast for 400 bad request", async () => {
@@ -311,7 +183,6 @@ describe("response interceptor - error handling", () => {
     await expect(errorInterceptor(error)).rejects.toEqual(error);
 
     expect(mockAddToast).not.toHaveBeenCalled();
-    expect(window.location.href).toBe(""); // No redirect
   });
 
   it("does not show toast for 404 not found", async () => {
@@ -321,7 +192,6 @@ describe("response interceptor - error handling", () => {
     await expect(errorInterceptor(error)).rejects.toEqual(error);
 
     expect(mockAddToast).not.toHaveBeenCalled();
-    expect(window.location.href).toBe(""); // No redirect
   });
 
   it("does not show toast for 403 forbidden", async () => {
@@ -331,7 +201,6 @@ describe("response interceptor - error handling", () => {
     await expect(errorInterceptor(error)).rejects.toEqual(error);
 
     expect(mockAddToast).not.toHaveBeenCalled();
-    expect(window.location.href).toBe(""); // No redirect
   });
 
   it("always rejects with the original error", async () => {
@@ -347,9 +216,6 @@ describe("response interceptor - error handling", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Integration Tests - Full Request/Response Cycle
-// ---------------------------------------------------------------------------
 describe("api integration", () => {
   it("can be imported and used as axios instance", () => {
     expect(api).toBeDefined();
@@ -360,13 +226,9 @@ describe("api integration", () => {
     expect(api.interceptors).toBeDefined();
   });
 
-  it("has both request and response interceptors registered", () => {
+  it("has only response interceptor registered (no request interceptor)", () => {
     // @ts-expect-error - accessing private interceptors for testing
-    const requestHandlers = api.interceptors.request.handlers;
-    // @ts-expect-error - accessing private interceptors for testing
-    const responseHandlers = api.interceptors.response.handlers;
-
-    expect(requestHandlers.length).toBeGreaterThan(0);
+    const responseHandlers = api.interceptors.response.handlers.filter(Boolean);
     expect(responseHandlers.length).toBeGreaterThan(0);
   });
 });
