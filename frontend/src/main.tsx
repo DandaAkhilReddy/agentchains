@@ -6,6 +6,7 @@ import App from "./App";
 import { ToastContainer } from "./components/shared/ToastContainer";
 import { OfflineBanner } from "./components/shared/OfflineBanner";
 import "./index.css";
+import "./lib/suppress-locize"; // Must be before i18n — patches console.log before i18next captures it
 import "./lib/i18n";
 
 const queryClient = new QueryClient({
