@@ -31,7 +31,11 @@
     "noActiveLoansDesc": "Add at least one loan to use the Smart Optimizer",
     "day": "day",
     "month": "month",
-    "months": "months"
+    "months": "months",
+    "offline": "You are offline. Some features may not work.",
+    "serverError": "Server error. Please try again later.",
+    "networkError": "Network error. Check your connection.",
+    "rateLimited": "Too many requests. Please wait a moment."
   },
   "dashboard": {
     "totalDebt": "Total Outstanding Debt",

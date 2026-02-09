@@ -31,7 +31,11 @@
     "noActiveLoansDesc": "Agrega al menos un préstamo para usar el Optimizador",
     "day": "día",
     "month": "mes",
-    "months": "meses"
+    "months": "meses",
+    "offline": "Estás sin conexión. Algunas funciones pueden no funcionar.",
+    "serverError": "Error del servidor. Por favor, inténtalo de nuevo más tarde.",
+    "networkError": "Error de red. Verifica tu conexión.",
+    "rateLimited": "Demasiadas solicitudes. Por favor, espera un momento."
   },
   "dashboard": {
     "totalDebt": "Deuda Total Pendiente",
