@@ -1,0 +1,19 @@
+Updates – Feb 9, 2026
+
+1) Frontend crash guard
+   - Added a head script to suppress the locize console promo and to ignore duplicate customElements.define calls (prevents the “mce-autosize-textarea already defined” error). File: frontend/index.html (propagated to dist/index.html after build).
+
+2) Auth bypass for testing
+   - Introduced VITE_BYPASS_AUTH flag; when true, a fake admin user (uid dev-admin) is injected and ProtectedRoute lets all routes through. Files: frontend/src/hooks/useAuth.ts, frontend/src/components/layout/ProtectedRoute.tsx, frontend/.env (set VITE_BYPASS_AUTH=true).
+
+3) Builds and artifacts
+   - Ran npm run build; latest bundle is in frontend/dist and zipped to frontend/dist.zip for deployment.
+
+4) Deployment status
+   - Successful deploy (older build) from Azure Cloud Shell to app-loan-analyzer-web.azurewebsites.net.
+   - Latest build with auth bypass not yet deployed due to local TLS reset (WinError 10054); deploy from Cloud Shell with:
+     az webapp deploy --resource-group rg-loan-analyzer --name app-loan-analyzer-web --src-path dist.zip --type static --target-path site/wwwroot --restart
+
+5) Pending/notes
+   - If VITE_API_BASE_URL is empty or points to a static site, set it to the API host before rebuilding.
+   - Turn off bypass later by setting VITE_BYPASS_AUTH=false, rebuild, redeploy.

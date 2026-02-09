@@ -1,6 +1,25 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // Guard against duplicate custom element registrations from injected scripts
+      (function () {
+        if (window.customElements && !customElements._patchedForDuplicates) {
+          const origDefine = customElements.define.bind(customElements);
+          customElements.define = (name, ctor, opts) => {
+            if (customElements.get(name)) return;
+            return origDefine(name, ctor, opts);
+          };
+          customElements._patchedForDuplicates = true;
+        }
+        // Silence the locize promo log early, before modules load
+        const origLog = console.log;
+        console.log = (...args) => {
+          if (typeof args[0] === "string" && args[0].includes("locize")) return;
+          return origLog(...args);
+        };
+      })();
+    </script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,8 +27,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <!-- Suppress i18next locize promo — must run before ES module chunks load -->
-    <script>!function(){var o=console.log;console.log=function(){if(typeof arguments[0]==="string"&&arguments[0].indexOf("locize")!==-1)return;o.apply(console,arguments)}}()</script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

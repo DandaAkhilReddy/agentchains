@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import {
   auth,
   signInWithPopup,
@@ -12,10 +12,37 @@ import {
 import { useAuthStore } from "../store/authStore";
 import api from "../lib/api";
 
+const BYPASS_AUTH = import.meta.env.VITE_BYPASS_AUTH === "true";
+
+const fakeUser: User = {
+  uid: "dev-admin",
+  email: "admin@example.com",
+  displayName: "Admin",
+  emailVerified: true,
+  isAnonymous: false,
+  metadata: {} as any,
+  providerData: [],
+  refreshToken: "dev-token",
+  tenantId: null,
+  delete: async () => {},
+  getIdToken: async () => "dev-token",
+  getIdTokenResult: async () => ({ token: "dev-token" } as any),
+  reload: async () => {},
+  toJSON: () => ({}),
+  phoneNumber: null,
+  photoURL: null,
+  providerId: "custom",
+};
+
 export function useAuth() {
   const { user, loading, setUser, setLoading } = useAuthStore();
 
   useEffect(() => {
+    if (BYPASS_AUTH) {
+      setUser(fakeUser);
+      setLoading(false);
+      return;
+    }
     // Safety net: if Firebase auth hasn't resolved in 5s, stop loading spinner
     const timeout = setTimeout(() => {
       if (useAuthStore.getState().loading) {
@@ -45,6 +72,7 @@ export function useAuth() {
   }, [setUser, setLoading]);
 
   const loginWithGoogle = async () => {
+    if (BYPASS_AUTH) return;
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
@@ -54,6 +82,7 @@ export function useAuth() {
   };
 
   const loginWithEmail = async (email: string, password: string) => {
+    if (BYPASS_AUTH) return;
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
@@ -63,6 +92,7 @@ export function useAuth() {
   };
 
   const signupWithEmail = async (email: string, password: string, displayName: string) => {
+    if (BYPASS_AUTH) return;
     setLoading(true);
     try {
       const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password);
@@ -73,10 +103,15 @@ export function useAuth() {
   };
 
   const resetPassword = async (email: string) => {
+    if (BYPASS_AUTH) return;
     await sendPasswordResetEmail(auth, email);
   };
 
   const logout = async () => {
+    if (BYPASS_AUTH) {
+      setUser(fakeUser);
+      return;
+    }
     await auth.signOut();
     setUser(null);
   };
