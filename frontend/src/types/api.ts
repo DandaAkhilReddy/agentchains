@@ -1,9 +1,22 @@
+export interface CacheStats {
+  hits: number;
+  misses: number;
+  size: number;
+  maxsize: number;
+  hit_rate: number;
+}
+
 export interface HealthResponse {
   status: string;
   version: string;
   agents_count: number;
   listings_count: number;
   transactions_count: number;
+  cache_stats?: {
+    listing_cache: CacheStats;
+    content_cache: CacheStats;
+    agent_cache: CacheStats;
+  };
 }
 
 export interface Agent {
@@ -151,4 +164,129 @@ export interface DiscoverParams {
   sort_by?: "price_asc" | "price_desc" | "freshness" | "quality";
   page?: number;
   page_size?: number;
+}
+
+export interface ExpressDeliveryResponse {
+  listing_id: string;
+  transaction_id: string;
+  content: string;
+  content_hash: string;
+  price_usdc: number;
+  delivery_ms: number;
+  cache_hit: boolean;
+}
+
+export interface AutoMatchResult {
+  listing_id: string;
+  title: string;
+  category: string;
+  price_usdc: number;
+  quality_score: number;
+  freshness_at: string;
+  seller_name: string;
+  match_score: number;
+  savings_usdc: number;
+  savings_percent: number;
+}
+
+export interface AutoMatchResponse {
+  matches: AutoMatchResult[];
+  fresh_cost_estimate: number;
+  purchase_result?: ExpressDeliveryResponse;
+}
+
+export interface TrendingQuery {
+  query_pattern: string;
+  category: string | null;
+  search_count: number;
+  unique_requesters: number;
+  velocity: number;
+  fulfillment_rate: number;
+  last_searched_at: string;
+}
+
+export interface TrendingResponse {
+  time_window_hours: number;
+  trends: TrendingQuery[];
+}
+
+export interface DemandGap {
+  query_pattern: string;
+  category: string | null;
+  search_count: number;
+  unique_requesters: number;
+  avg_max_price: number | null;
+  fulfillment_rate: number;
+  first_searched_at: string;
+}
+
+export interface DemandGapsResponse {
+  gaps: DemandGap[];
+}
+
+export interface Opportunity {
+  id: string;
+  query_pattern: string;
+  category: string | null;
+  estimated_revenue_usdc: number;
+  search_velocity: number;
+  competing_listings: number;
+  urgency_score: number;
+  created_at: string;
+}
+
+export interface OpportunitiesResponse {
+  opportunities: Opportunity[];
+}
+
+export interface EarningsTimelineEntry {
+  date: string;
+  earned: number;
+  spent: number;
+}
+
+export interface EarningsBreakdown {
+  agent_id: string;
+  total_earned_usdc: number;
+  total_spent_usdc: number;
+  net_revenue_usdc: number;
+  earnings_by_category: Record<string, number>;
+  earnings_timeline: EarningsTimelineEntry[];
+}
+
+export interface AgentProfile {
+  agent_id: string;
+  agent_name: string;
+  unique_buyers_served: number;
+  total_listings_created: number;
+  total_cache_hits: number;
+  category_count: number;
+  categories: string[];
+  total_earned_usdc: number;
+  total_spent_usdc: number;
+  demand_gaps_filled: number;
+  avg_listing_quality: number;
+  total_data_bytes: number;
+  helpfulness_score: number;
+  helpfulness_rank: number | null;
+  earnings_rank: number | null;
+  primary_specialization: string | null;
+  specialization_tags: string[];
+  last_calculated_at: string;
+}
+
+export interface MultiLeaderboardEntry {
+  rank: number;
+  agent_id: string;
+  agent_name: string;
+  primary_score: number;
+  secondary_label: string;
+  total_transactions: number;
+  helpfulness_score: number | null;
+  total_earned_usdc: number | null;
+}
+
+export interface MultiLeaderboardResponse {
+  board_type: string;
+  entries: MultiLeaderboardEntry[];
 }

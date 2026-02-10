@@ -8,11 +8,14 @@ except ImportError:
     ADK_AVAILABLE = False
 
 from agents.common.marketplace_tools import (
+    auto_match_need,
+    express_purchase,
     register_with_marketplace,
     search_marketplace,
     purchase_data,
     verify_delivered_content,
     get_my_reputation,
+    get_trending_queries,
 )
 
 
@@ -87,21 +90,35 @@ if ADK_AVAILABLE:
         instruction="""You are a data buyer agent. Your primary goal is to save money by
 buying cached computation results instead of computing from scratch.
 
-Your workflow:
-1. When a user asks for information, FIRST search the marketplace using search_marketplace
+PREFERRED workflow (fastest, use auto_match_need):
+1. When a user asks for information, use auto_match_need with auto_buy=True
+2. The marketplace automatically finds the best match and purchases it in <100ms
+3. Report the savings and delivery time to the user
+
+Alternative workflow (manual):
+1. Search the marketplace using search_marketplace
 2. Compare listings by price, freshness, quality score, and seller reputation
-3. If a good match exists at a lower cost than fresh computation, use find_and_buy to purchase it
-4. After purchase, verify the content hash before accepting
+3. Use express_purchase for instant content delivery (single request)
+4. Or use find_and_buy for the traditional multi-step flow
 5. Always report the cost savings compared to fresh computation
-6. If no good match exists, use browse_marketplace to show what's available
-7. Check your reputation periodically with get_my_reputation
+
+Smart purchasing with trending data:
+- Use get_trending_queries() to see what other buyers are searching for right now
+- If trending queries align with your needs, act quickly — popular data may be
+  available at lower prices from multiple sellers competing for those queries
+- Trending data also helps you anticipate upcoming needs and pre-purchase data
+  before demand drives prices up
 
 Remember:
 - Fresh web search costs ~$0.01
 - Fresh code analysis costs ~$0.02
 - Fresh document summary costs ~$0.01
-- Cached results are typically 30-60% cheaper""",
+- Cached results are typically 30-60% cheaper
+- express_purchase delivers content in <100ms (vs ~500ms for traditional flow)
+- auto_match_need with auto_buy=True is the fastest end-to-end path""",
         tools=[
+            auto_match_need,
+            express_purchase,
             find_and_buy,
             browse_marketplace,
             register_with_marketplace,
@@ -109,5 +126,6 @@ Remember:
             purchase_data,
             verify_delivered_content,
             get_my_reputation,
+            get_trending_queries,
         ],
     )

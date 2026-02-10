@@ -1,19 +1,86 @@
 import { useState } from "react";
 import { useTransactions } from "../hooks/useTransactions";
+import { useAuth } from "../hooks/useAuth";
 import DataTable, { type Column } from "../components/DataTable";
 import Badge, { statusVariant } from "../components/Badge";
+import CopyButton from "../components/CopyButton";
 import { truncateId, formatUSDC, relativeTime } from "../lib/format";
-import type { Transaction } from "../types/api";
+import type { Transaction, TransactionStatus } from "../types/api";
+
+const PIPELINE_STEPS: { key: TransactionStatus; label: string }[] = [
+  { key: "initiated", label: "Initiated" },
+  { key: "payment_confirmed", label: "Payment" },
+  { key: "delivered", label: "Delivered" },
+  { key: "completed", label: "Completed" },
+];
+
+const STATUS_ORDER: Record<string, number> = {
+  initiated: 0,
+  payment_pending: 0,
+  payment_confirmed: 1,
+  delivered: 2,
+  verified: 3,
+  completed: 3,
+  failed: -1,
+  disputed: -1,
+};
+
+function Pipeline({ status }: { status: TransactionStatus }) {
+  const currentStep = STATUS_ORDER[status] ?? -1;
+  const isFailed = status === "failed" || status === "disputed";
+
+  return (
+    <div className="flex items-center gap-1">
+      {PIPELINE_STEPS.map((step, i) => {
+        const isComplete = !isFailed && currentStep >= i;
+        const isCurrent = !isFailed && currentStep === i;
+        return (
+          <div key={step.key} className="flex items-center gap-1">
+            <div
+              className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
+                isFailed
+                  ? "border border-red-500/30 bg-red-500/10 text-red-400"
+                  : isComplete
+                    ? "bg-emerald-500 text-white"
+                    : isCurrent
+                      ? "border-2 border-blue-400 text-blue-400"
+                      : "border border-zinc-700 text-zinc-600"
+              }`}
+              title={step.label}
+            >
+              {isComplete ? "\u2713" : i + 1}
+            </div>
+            {i < PIPELINE_STEPS.length - 1 && (
+              <div
+                className={`h-0.5 w-4 ${
+                  !isFailed && currentStep > i ? "bg-emerald-500" : "bg-zinc-700"
+                }`}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const columns: Column<Transaction>[] = [
   {
     key: "id",
     header: "ID",
     render: (tx) => (
-      <span className="text-zinc-400" style={{ fontFamily: "var(--font-mono)" }}>
-        {truncateId(tx.id)}
+      <span className="flex items-center gap-1">
+        <span className="text-zinc-400" style={{ fontFamily: "var(--font-mono)" }}>
+          {truncateId(tx.id)}
+        </span>
+        <CopyButton value={tx.id} />
       </span>
     ),
+  },
+  {
+    key: "pipeline",
+    header: "Progress",
+    render: (tx) => <Pipeline status={tx.status} />,
   },
   {
     key: "amount",
@@ -38,17 +105,11 @@ const columns: Column<Transaction>[] = [
     key: "buyer",
     header: "Buyer",
     render: (tx) => (
-      <span className="text-zinc-500" style={{ fontFamily: "var(--font-mono)" }}>
-        {truncateId(tx.buyer_id)}
-      </span>
-    ),
-  },
-  {
-    key: "seller",
-    header: "Seller",
-    render: (tx) => (
-      <span className="text-zinc-500" style={{ fontFamily: "var(--font-mono)" }}>
-        {truncateId(tx.seller_id)}
+      <span className="flex items-center gap-1">
+        <span className="text-zinc-500" style={{ fontFamily: "var(--font-mono)" }}>
+          {truncateId(tx.buyer_id)}
+        </span>
+        <CopyButton value={tx.buyer_id} />
       </span>
     ),
   },
@@ -72,8 +133,8 @@ const columns: Column<Transaction>[] = [
 ];
 
 export default function TransactionsPage() {
-  const [token, setToken] = useState(() => localStorage.getItem("agent_jwt") ?? "");
-  const [inputToken, setInputToken] = useState(token);
+  const { token, login, logout } = useAuth();
+  const [inputToken, setInputToken] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
 
@@ -84,9 +145,7 @@ export default function TransactionsPage() {
 
   const handleConnect = () => {
     const t = inputToken.trim();
-    setToken(t);
-    if (t) localStorage.setItem("agent_jwt", t);
-    else localStorage.removeItem("agent_jwt");
+    if (t) login(t);
   };
 
   // Token input view
@@ -139,7 +198,7 @@ export default function TransactionsPage() {
           <option value="disputed">Disputed</option>
         </select>
         <button
-          onClick={() => { setToken(""); setInputToken(""); localStorage.removeItem("agent_jwt"); }}
+          onClick={logout}
           className="ml-auto rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800"
         >
           Disconnect

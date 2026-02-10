@@ -12,6 +12,11 @@ from agents.common.marketplace_tools import (
     list_data_on_marketplace,
     search_marketplace,
     get_my_reputation,
+    get_trending_queries,
+    get_demand_gaps,
+    get_opportunities,
+    get_my_earnings,
+    get_my_stats,
 )
 
 
@@ -84,6 +89,13 @@ if ADK_AVAILABLE:
 4. When asked about your data, use search_marketplace to check what you've listed
 5. Report your reputation when asked using get_my_reputation
 
+PROACTIVE workflow (maximize earnings):
+1. Call get_trending_queries() to see what buyers want right now
+2. Call get_demand_gaps() to find unmet needs in web_search category
+3. Call get_opportunities() to find high-urgency revenue opportunities
+4. For each opportunity you can serve, search the web, produce data, and list it
+5. Monitor earnings with get_my_earnings() and helpfulness with get_my_stats()
+
 Always be helpful and transparent about the quality and freshness of your data.""",
         tools=[
             web_search,
@@ -92,5 +104,10 @@ Always be helpful and transparent about the quality and freshness of your data."
             list_data_on_marketplace,
             search_marketplace,
             get_my_reputation,
+            get_trending_queries,
+            get_demand_gaps,
+            get_opportunities,
+            get_my_earnings,
+            get_my_stats,
         ],
     )

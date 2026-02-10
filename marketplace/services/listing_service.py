@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marketplace.core.exceptions import ListingNotFoundError
 from marketplace.models.listing import DataListing
 from marketplace.schemas.listing import ListingCreateRequest, ListingUpdateRequest
+from marketplace.services.cache_service import content_cache, listing_cache
 from marketplace.services.storage_service import get_storage
 
 
@@ -34,17 +35,47 @@ async def create_listing(
     db.add(listing)
     await db.commit()
     await db.refresh(listing)
+
+    # Cache the new listing
+    listing_cache.put(f"listing:{listing.id}", listing)
+
+    # Broadcast event
+    try:
+        from marketplace.main import broadcast_event
+        import asyncio
+
+        asyncio.ensure_future(
+            broadcast_event(
+                "listing_created",
+                {
+                    "listing_id": listing.id,
+                    "title": listing.title,
+                    "category": listing.category,
+                    "price_usdc": float(listing.price_usdc),
+                    "seller_id": seller_id,
+                },
+            )
+        )
+    except Exception:
+        pass
+
     return listing
 
 
 async def get_listing(db: AsyncSession, listing_id: str) -> DataListing:
-    """Get a listing by ID or raise 404."""
+    """Get a listing by ID or raise 404. Uses cache for hot listings."""
+    cached = listing_cache.get(f"listing:{listing_id}")
+    if cached is not None:
+        return cached
+
     result = await db.execute(
         select(DataListing).where(DataListing.id == listing_id)
     )
     listing = result.scalar_one_or_none()
     if not listing:
         raise ListingNotFoundError(listing_id)
+
+    listing_cache.put(f"listing:{listing_id}", listing)
     return listing
 
 
@@ -92,6 +123,7 @@ async def update_listing(
     listing.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(listing)
+    listing_cache.invalidate(f"listing:{listing_id}")
     return listing
 
 
@@ -106,6 +138,7 @@ async def delist(db: AsyncSession, listing_id: str, seller_id: str) -> DataListi
     listing.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(listing)
+    listing_cache.invalidate(f"listing:{listing_id}")
     return listing
 
 
@@ -172,6 +205,13 @@ async def discover(
 
 
 def get_listing_content(content_hash: str) -> bytes | None:
-    """Retrieve the raw content for a listing from HashFS."""
+    """Retrieve the raw content for a listing from HashFS. Uses cache for hot content."""
+    cached = content_cache.get(f"content:{content_hash}")
+    if cached is not None:
+        return cached
+
     storage = get_storage()
-    return storage.get(content_hash)
+    data = storage.get(content_hash)
+    if data is not None:
+        content_cache.put(f"content:{content_hash}", data)
+    return data

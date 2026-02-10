@@ -6,7 +6,8 @@ from marketplace.database import get_db
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.listing import DataListing
 from marketplace.models.transaction import Transaction
-from marketplace.schemas.common import HealthResponse
+from marketplace.schemas.common import CacheStats, HealthResponse
+from marketplace.services.cache_service import agent_cache, content_cache, listing_cache
 
 router = APIRouter(tags=["health"])
 
@@ -19,8 +20,13 @@ async def health_check(db: AsyncSession = Depends(get_db)):
 
     return HealthResponse(
         status="healthy",
-        version="0.1.0",
+        version="0.2.0",
         agents_count=agents,
         listings_count=listings,
         transactions_count=txns,
+        cache_stats=CacheStats(
+            listings=listing_cache.stats(),
+            content=content_cache.stats(),
+            agents=agent_cache.stats(),
+        ),
     )

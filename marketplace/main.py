@@ -1,5 +1,7 @@
+import asyncio
 import json
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -19,7 +21,8 @@ class ConnectionManager:
         self.active.append(ws)
 
     def disconnect(self, ws: WebSocket):
-        self.active.remove(ws)
+        if ws in self.active:
+            self.active.remove(ws)
 
     async def broadcast(self, message: dict):
         dead = []
@@ -29,16 +32,62 @@ class ConnectionManager:
             except Exception:
                 dead.append(ws)
         for ws in dead:
-            self.active.remove(ws)
+            if ws in self.active:
+                self.active.remove(ws)
 
 
 ws_manager = ConnectionManager()
+
+
+async def broadcast_event(event_type: str, data: dict):
+    """Broadcast a typed event to all connected WebSocket clients.
+
+    Called by services (listing, transaction, express) to push real-time updates.
+    """
+    await ws_manager.broadcast({
+        "type": event_type,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "data": data,
+    })
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     # Startup: create tables
     await init_db()
+
+    # Start background demand aggregation
+    async def _demand_loop():
+        while True:
+            try:
+                from marketplace.database import async_session
+                async with async_session() as db:
+                    from marketplace.services import demand_service
+                    signals = await demand_service.aggregate_demand(db)
+                    opps = await demand_service.generate_opportunities(db)
+                    # Broadcast high-velocity demand spikes
+                    for s in signals:
+                        if float(s.velocity or 0) > 10:
+                            await broadcast_event("demand_spike", {
+                                "query_pattern": s.query_pattern,
+                                "velocity": float(s.velocity),
+                                "category": s.category,
+                            })
+                    # Broadcast new high-urgency opportunities
+                    for o in opps:
+                        if float(o.urgency_score or 0) > 0.7:
+                            await broadcast_event("opportunity_created", {
+                                "id": o.id,
+                                "query_pattern": o.query_pattern,
+                                "estimated_revenue_usdc": float(o.estimated_revenue_usdc),
+                                "urgency_score": float(o.urgency_score),
+                            })
+            except Exception:
+                pass
+            await asyncio.sleep(300)  # Every 5 minutes
+
+    task = asyncio.create_task(_demand_loop())
+
     yield
     # Shutdown: nothing to clean up for SQLite
 
@@ -47,7 +96,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Agent-to-Agent Data Marketplace",
         description="Trade cached computation results between AI agents",
-        version="0.1.0",
+        version="0.3.0",
         lifespan=lifespan,
     )
 
@@ -62,7 +111,10 @@ def create_app() -> FastAPI:
 
     # Register routers
     from marketplace.api import (
+        analytics,
+        automatch,
         discovery,
+        express,
         health,
         listings,
         registry,
@@ -78,6 +130,9 @@ def create_app() -> FastAPI:
     app.include_router(transactions.router, prefix="/api/v1")
     app.include_router(verification.router, prefix="/api/v1")
     app.include_router(reputation.router, prefix="/api/v1")
+    app.include_router(express.router, prefix="/api/v1")
+    app.include_router(automatch.router, prefix="/api/v1")
+    app.include_router(analytics.router, prefix="/api/v1")
 
     # WebSocket for live feed
     @app.websocket("/ws/feed")
@@ -95,7 +150,7 @@ def create_app() -> FastAPI:
     async def root():
         return {
             "name": "Agent-to-Agent Data Marketplace",
-            "version": "0.1.0",
+            "version": "0.3.0",
             "docs": "/docs",
             "health": "/api/v1/health",
         }

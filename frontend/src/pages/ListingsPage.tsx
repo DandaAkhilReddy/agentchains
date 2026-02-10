@@ -1,12 +1,24 @@
 import { useState, useCallback } from "react";
 import { useDiscover } from "../hooks/useDiscover";
+import { useAuth } from "../hooks/useAuth";
+import { useToast } from "../components/Toast";
 import SearchInput from "../components/SearchInput";
 import Badge, { categoryVariant } from "../components/Badge";
 import QualityBar from "../components/QualityBar";
-import Spinner from "../components/Spinner";
+import { SkeletonCard } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import { formatUSDC, relativeTime, formatBytes } from "../lib/format";
+import { expressBuy } from "../lib/api";
+import { Search, Code, FileText, Globe, Cpu, Zap } from "lucide-react";
 import type { Category, Listing } from "../types/api";
+
+const CATEGORY_ICONS: Record<string, typeof Search> = {
+  web_search: Search,
+  code_analysis: Code,
+  document_summary: FileText,
+  api_response: Globe,
+  computation: Cpu,
+};
 
 const CATEGORIES: { value: Category | ""; label: string }[] = [
   { value: "", label: "All Categories" },
@@ -19,23 +31,29 @@ const CATEGORIES: { value: Category | ""; label: string }[] = [
 
 const SORTS = [
   { value: "freshness", label: "Freshest" },
-  { value: "price_asc", label: "Price: Low → High" },
-  { value: "price_desc", label: "Price: High → Low" },
+  { value: "price_asc", label: "Price: Low -> High" },
+  { value: "price_desc", label: "Price: High -> Low" },
   { value: "quality", label: "Highest Quality" },
 ] as const;
 
-function ListingCard({ listing }: { listing: Listing }) {
+function ListingCard({ listing, onExpressBuy }: { listing: Listing; onExpressBuy: (id: string) => void }) {
   const catLabel = listing.category.replace(/_/g, " ");
+  const CatIcon = CATEGORY_ICONS[listing.category] ?? Globe;
 
   return (
-    <div className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition-colors hover:border-zinc-700">
+    <div className="group flex flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition-all hover:border-zinc-700 hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20">
       {/* Header */}
       <div className="mb-3 flex items-start justify-between gap-2">
-        <h4 className="line-clamp-2 text-sm font-medium leading-tight">
-          {listing.title}
-        </h4>
+        <div className="flex items-center gap-2">
+          <div className="rounded-lg bg-zinc-800 p-1.5">
+            <CatIcon className="h-3.5 w-3.5 text-zinc-400" />
+          </div>
+          <h4 className="line-clamp-2 text-sm font-medium leading-tight">
+            {listing.title}
+          </h4>
+        </div>
         <span
-          className="flex-shrink-0 whitespace-nowrap text-sm font-semibold text-emerald-400"
+          className="flex-shrink-0 whitespace-nowrap rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400"
           style={{ fontFamily: "var(--font-mono)" }}
         >
           {formatUSDC(listing.price_usdc)}
@@ -86,6 +104,15 @@ function ListingCard({ listing }: { listing: Listing }) {
           )}
         </div>
       )}
+
+      {/* Express Buy button - appears on hover */}
+      <button
+        onClick={() => onExpressBuy(listing.id)}
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white opacity-0 transition-all group-hover:opacity-100 hover:bg-emerald-500"
+      >
+        <Zap className="h-3.5 w-3.5" />
+        Express Buy
+      </button>
     </div>
   );
 }
@@ -95,6 +122,8 @@ export default function ListingsPage() {
   const [category, setCategory] = useState<Category | "">("");
   const [sortBy, setSortBy] = useState<"freshness" | "price_asc" | "price_desc" | "quality">("freshness");
   const [page, setPage] = useState(1);
+  const { token } = useAuth();
+  const { toast } = useToast();
 
   const handleSearch = useCallback((val: string) => {
     setQ(val);
@@ -108,6 +137,22 @@ export default function ListingsPage() {
     page,
     page_size: 12,
   });
+
+  const handleExpressBuy = async (listingId: string) => {
+    if (!token) {
+      toast("Connect your agent JWT first (Transactions tab)", "error");
+      return;
+    }
+    try {
+      const result = await expressBuy(token, listingId);
+      toast(
+        `Purchased! Delivered in ${result.delivery_ms}ms ${result.cache_hit ? "(cache hit)" : ""}`,
+        "success",
+      );
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -149,15 +194,21 @@ export default function ListingsPage() {
 
       {/* Results */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <Spinner />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
       ) : !data || data.results.length === 0 ? (
         <EmptyState message="No listings found" />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {data.results.map((listing) => (
-            <ListingCard key={listing.id} listing={listing} />
+            <ListingCard
+              key={listing.id}
+              listing={listing}
+              onExpressBuy={handleExpressBuy}
+            />
           ))}
         </div>
       )}

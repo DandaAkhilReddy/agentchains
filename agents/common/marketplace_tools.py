@@ -225,3 +225,140 @@ def get_my_reputation() -> dict:
         timeout=30,
     )
     return response.json()
+
+
+def express_purchase(listing_id: str) -> dict:
+    """Express-buy a listing in a single request. Returns content immediately.
+
+    This is the fastest way to buy data — one request, content returned inline.
+    Behind the scenes: auto-creates transaction, auto-confirms payment, auto-verifies.
+
+    Args:
+        listing_id: The ID of the listing to buy
+
+    Returns:
+        Dict with content, transaction_id, delivery_ms, price_usdc, cache_hit
+    """
+    response = httpx.get(
+        f"{MARKETPLACE_URL}/express/{listing_id}",
+        headers=_headers(),
+        timeout=10,
+    )
+    return response.json()
+
+
+def auto_match_need(
+    description: str,
+    category: str | None = None,
+    max_price: float | None = None,
+    auto_buy: bool = False,
+    auto_buy_max_price: float | None = None,
+) -> dict:
+    """Ask the marketplace to automatically find the best listing for your need.
+
+    The marketplace scores listings by keyword overlap, quality, and freshness,
+    and shows estimated savings vs. fresh computation.
+
+    Args:
+        description: Natural language description of what you need
+        category: Optional category filter
+        max_price: Maximum price willing to pay
+        auto_buy: If True, auto-purchase the top match
+        auto_buy_max_price: Max price for auto-purchase
+
+    Returns:
+        Matches with savings estimates. If auto_buy=True, includes purchase result.
+    """
+    response = httpx.post(
+        f"{MARKETPLACE_URL}/agents/auto-match",
+        json={
+            "description": description,
+            "category": category,
+            "max_price": max_price,
+            "auto_buy": auto_buy,
+            "auto_buy_max_price": auto_buy_max_price,
+        },
+        headers=_headers(),
+        timeout=30,
+    )
+    return response.json()
+
+
+def get_trending_queries(limit: int = 10, hours: int = 6) -> dict:
+    """Get currently trending search queries on the marketplace.
+
+    Reveals what buyers are searching for RIGHT NOW. Use this to
+    decide what data to produce and list for sale.
+    """
+    response = httpx.get(
+        f"{MARKETPLACE_URL}/analytics/trending",
+        params={"limit": limit, "hours": hours},
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_demand_gaps(limit: int = 10, category: str | None = None) -> dict:
+    """Get unmet demand — queries that buyers search for but nobody sells.
+
+    These are REVENUE OPPORTUNITIES: produce this data and buyers will pay.
+    """
+    params: dict = {"limit": limit}
+    if category:
+        params["category"] = category
+    response = httpx.get(
+        f"{MARKETPLACE_URL}/analytics/demand-gaps",
+        params=params,
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_opportunities(limit: int = 10, category: str | None = None) -> dict:
+    """Get revenue opportunities ranked by urgency.
+
+    Each opportunity includes estimated revenue and urgency level.
+    Prioritize high-urgency opportunities for maximum earnings.
+    """
+    params: dict = {"limit": limit}
+    if category:
+        params["category"] = category
+    response = httpx.get(
+        f"{MARKETPLACE_URL}/analytics/opportunities",
+        params=params,
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_my_earnings() -> dict:
+    """Get this agent's earnings breakdown.
+
+    Returns total earned, total spent, net revenue, earnings by category,
+    and a daily earnings timeline.
+    """
+    response = httpx.get(
+        f"{MARKETPLACE_URL}/analytics/my-earnings",
+        headers=_headers(),
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_my_stats() -> dict:
+    """Get this agent's performance analytics and helpfulness score.
+
+    Returns unique buyers served, cache hits, category coverage,
+    helpfulness score, and leaderboard rankings.
+    """
+    response = httpx.get(
+        f"{MARKETPLACE_URL}/analytics/my-stats",
+        headers=_headers(),
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json()

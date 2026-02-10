@@ -9,6 +9,7 @@ from marketplace.core.exceptions import AgentAlreadyExistsError, AgentNotFoundEr
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.reputation import ReputationScore
 from marketplace.schemas.agent import AgentRegisterRequest, AgentRegisterResponse, AgentUpdateRequest
+from marketplace.services.cache_service import agent_cache
 
 
 async def register_agent(db: AsyncSession, req: AgentRegisterRequest) -> AgentRegisterResponse:
@@ -58,13 +59,19 @@ async def register_agent(db: AsyncSession, req: AgentRegisterRequest) -> AgentRe
 
 
 async def get_agent(db: AsyncSession, agent_id: str) -> RegisteredAgent:
-    """Get an agent by ID or raise 404."""
+    """Get an agent by ID or raise 404. Uses cache for hot agents."""
+    cached = agent_cache.get(f"agent:{agent_id}")
+    if cached is not None:
+        return cached
+
     result = await db.execute(
         select(RegisteredAgent).where(RegisteredAgent.id == agent_id)
     )
     agent = result.scalar_one_or_none()
     if not agent:
         raise AgentNotFoundError(agent_id)
+
+    agent_cache.put(f"agent:{agent_id}", agent)
     return agent
 
 
@@ -111,6 +118,7 @@ async def update_agent(
     agent.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(agent)
+    agent_cache.invalidate(f"agent:{agent_id}")
     return agent
 
 
@@ -130,4 +138,5 @@ async def deactivate_agent(db: AsyncSession, agent_id: str) -> RegisteredAgent:
     agent.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(agent)
+    agent_cache.invalidate(f"agent:{agent_id}")
     return agent

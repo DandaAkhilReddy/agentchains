@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import asyncio
+
 from marketplace.core.exceptions import (
     InvalidTransactionStateError,
     TransactionNotFoundError,
@@ -13,6 +15,16 @@ from marketplace.services.listing_service import get_listing
 from marketplace.services.payment_service import payment_service
 from marketplace.services.storage_service import get_storage
 from marketplace.services.verification_service import verify_content
+
+
+def _broadcast(event_type: str, data: dict):
+    """Fire-and-forget WebSocket broadcast."""
+    try:
+        from marketplace.main import broadcast_event
+
+        asyncio.ensure_future(broadcast_event(event_type, data))
+    except Exception:
+        pass
 
 
 async def initiate_transaction(
@@ -41,6 +53,13 @@ async def initiate_transaction(
         amount_usdc=float(listing.price_usdc),
         seller_address=seller.wallet_address,
     )
+
+    _broadcast("transaction_initiated", {
+        "transaction_id": tx.id,
+        "listing_id": listing.id,
+        "buyer_id": buyer_id,
+        "amount_usdc": float(listing.price_usdc),
+    })
 
     return {
         "transaction_id": tx.id,
@@ -89,6 +108,14 @@ async def confirm_payment(
     tx.paid_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(tx)
+
+    _broadcast("payment_confirmed", {
+        "transaction_id": tx.id,
+        "buyer_id": tx.buyer_id,
+        "seller_id": tx.seller_id,
+        "amount_usdc": float(tx.amount_usdc),
+    })
+
     return tx
 
 
@@ -112,6 +139,13 @@ async def deliver_content(
     tx.delivered_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(tx)
+
+    _broadcast("content_delivered", {
+        "transaction_id": tx.id,
+        "seller_id": seller_id,
+        "buyer_id": tx.buyer_id,
+    })
+
     return tx
 
 
@@ -147,6 +181,15 @@ async def verify_delivery(db: AsyncSession, tx_id: str, buyer_id: str) -> Transa
 
     await db.commit()
     await db.refresh(tx)
+
+    _broadcast("transaction_completed" if matches else "transaction_disputed", {
+        "transaction_id": tx.id,
+        "buyer_id": buyer_id,
+        "seller_id": tx.seller_id,
+        "verified": matches,
+        "amount_usdc": float(tx.amount_usdc),
+    })
+
     return tx
 
 

@@ -6,6 +6,14 @@ import type {
   ReputationResponse,
   LeaderboardResponse,
   DiscoverParams,
+  ExpressDeliveryResponse,
+  AutoMatchResponse,
+  TrendingResponse,
+  DemandGapsResponse,
+  OpportunitiesResponse,
+  EarningsBreakdown,
+  AgentProfile,
+  MultiLeaderboardResponse,
 } from "../types/api";
 
 const BASE = "/api/v1";
@@ -51,6 +59,25 @@ async function authGet<T>(
   return res.json();
 }
 
+async function authPost<T>(
+  path: string,
+  token: string,
+  body: unknown,
+): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${await res.text()}`);
+  }
+  return res.json();
+}
+
 export const fetchHealth = () => get<HealthResponse>("/health");
 
 export const fetchAgents = (params?: {
@@ -85,3 +112,38 @@ export const fetchLeaderboard = (limit?: number) =>
 
 export const fetchReputation = (agentId: string) =>
   get<ReputationResponse>(`/reputation/${agentId}`, { recalculate: "true" });
+
+export const expressBuy = (token: string, listingId: string) =>
+  authGet<ExpressDeliveryResponse>(`/express/${listingId}`, token);
+
+export const autoMatch = (
+  token: string,
+  params: {
+    description: string;
+    category?: string;
+    max_price?: number;
+    auto_buy?: boolean;
+    auto_buy_max_price?: number;
+  },
+) => authPost<AutoMatchResponse>("/agents/auto-match", token, params);
+
+export const fetchTrending = (limit?: number, hours?: number) =>
+  get<TrendingResponse>("/analytics/trending", { limit, hours });
+
+export const fetchDemandGaps = (limit?: number, category?: string) =>
+  get<DemandGapsResponse>("/analytics/demand-gaps", { limit, category });
+
+export const fetchOpportunities = (limit?: number, category?: string) =>
+  get<OpportunitiesResponse>("/analytics/opportunities", { limit, category });
+
+export const fetchMyEarnings = (token: string) =>
+  authGet<EarningsBreakdown>("/analytics/my-earnings", token);
+
+export const fetchMyStats = (token: string) =>
+  authGet<AgentProfile>("/analytics/my-stats", token);
+
+export const fetchAgentProfile = (agentId: string) =>
+  get<AgentProfile>(`/analytics/agent/${agentId}/profile`);
+
+export const fetchMultiLeaderboard = (boardType: string, limit?: number) =>
+  get<MultiLeaderboardResponse>(`/analytics/leaderboard/${boardType}`, { limit });

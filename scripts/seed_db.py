@@ -156,6 +156,9 @@ async def seed():
 
         for listing in listings_data:
             token = listing.pop("token")
+            if not token:
+                print(f"  Skipped: {listing['title'][:50]}... (no auth token)")
+                continue
             resp = await client.post(
                 f"{BASE_URL}/listings",
                 json=listing,
