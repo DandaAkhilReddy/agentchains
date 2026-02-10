@@ -68,10 +68,10 @@ async def upload_document(
 
         # Auto-create loan from extracted fields with smart defaults
         if fields:
-            principal = float(extracted.get("principal_amount", "0").replace(",", "")) or 0
-            rate = float(extracted.get("interest_rate", "0")) or 8.5  # India avg
+            principal = float((extracted.get("principal_amount", "0") or "0").replace(",", "")) or 0
+            rate = float(extracted.get("interest_rate", "0") or "0") or 8.5  # India avg
             tenure = int(extracted.get("tenure_months", "0") or "0") or 240
-            emi = float(extracted.get("emi_amount", "0").replace(",", "")) or 0
+            emi = float((extracted.get("emi_amount", "0") or "0").replace(",", "")) or 0
             loan_type = extracted.get("loan_type", "personal")
 
             # Auto-calculate EMI if missing but principal is available
