@@ -19,6 +19,17 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("ErrorBoundary caught:", error, info.componentStack);
+
+    // Auto-reload once on chunk load failure (stale deployment)
+    const isChunkError =
+      error.message.includes("dynamically imported module") ||
+      error.message.includes("Loading chunk");
+    const reloadKey = "chunk-reload-" + window.location.pathname;
+
+    if (isChunkError && !sessionStorage.getItem(reloadKey)) {
+      sessionStorage.setItem(reloadKey, "1");
+      window.location.reload();
+    }
   }
 
   render() {
@@ -29,10 +40,10 @@ export class ErrorBoundary extends Component<Props, State> {
             <h2 className="text-xl font-semibold text-red-600 mb-2">Something went wrong</h2>
             <p className="text-gray-500 mb-4">{this.state.error?.message}</p>
             <button
-              onClick={() => this.setState({ hasError: false, error: null })}
+              onClick={() => window.location.reload()}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
-              Try Again
+              Reload Page
             </button>
           </div>
         )

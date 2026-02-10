@@ -1,7 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ErrorBoundary } from "../components/shared/ErrorBoundary";
-import userEvent from "@testing-library/user-event";
 
 // Helper component that throws an error when shouldThrow is true
 interface ThrowErrorProps {
@@ -60,36 +59,16 @@ describe("ErrorBoundary", () => {
     expect(screen.getByText(errorMessage)).toBeInTheDocument();
   });
 
-  it("Try Again button resets error state and re-renders children", async () => {
-    const user = userEvent.setup();
-    // Use a mutable ref so the component reads fresh value on each render
-    const throwRef = { current: true };
-
-    function ConditionalThrow() {
-      if (throwRef.current) throw new Error("Test error");
-      return <div>Normal content</div>;
-    }
-
+  it("Reload Page button is present in error fallback", () => {
     render(
       <ErrorBoundary>
-        <ConditionalThrow />
+        <ThrowError shouldThrow={true} />
       </ErrorBoundary>
     );
 
-    // Error boundary should catch the error
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
-
-    // Stop throwing before clicking Try Again
-    throwRef.current = false;
-
-    // Click Try Again button — boundary resets and re-renders children
-    const tryAgainButton = screen.getByRole("button", { name: /try again/i });
-    await user.click(tryAgainButton);
-
-    // Should show normal content now
-    await waitFor(() => {
-      expect(screen.getByText("Normal content")).toBeInTheDocument();
-    });
+    const reloadButton = screen.getByRole("button", { name: /reload page/i });
+    expect(reloadButton).toBeInTheDocument();
   });
 
   it("custom fallback prop works (renders custom fallback instead of default)", () => {
@@ -133,7 +112,7 @@ describe("ErrorBoundary", () => {
     const heading = screen.getByText("Something went wrong");
     expect(heading).toHaveClass("text-xl", "font-semibold", "text-red-600", "mb-2");
 
-    const button = screen.getByRole("button", { name: /try again/i });
+    const button = screen.getByRole("button", { name: /reload page/i });
     expect(button).toHaveClass("px-4", "py-2", "bg-blue-600", "text-white", "rounded-lg", "hover:bg-blue-700");
   });
 
