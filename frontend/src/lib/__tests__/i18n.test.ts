@@ -90,3 +90,105 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
     return undefined;
   }, obj);
 }
+
+describe("optimizer.results new keys", () => {
+  const newResultsKeys = [
+    "optimizer.results.withoutPlan",
+    "optimizer.results.withPlan",
+    "optimizer.results.payoffTimeline",
+    "optimizer.results.paidOffMonth",
+    "optimizer.results.savedMonths",
+    "optimizer.results.actionPlan",
+    "optimizer.results.actionFocus",
+    "optimizer.results.actionPaidOff",
+    "optimizer.results.actionFreedEmi",
+    "optimizer.results.actionLumpSum",
+    "optimizer.results.actionRateLock",
+    "optimizer.results.perLoanBreakdown",
+  ];
+
+  const en = loadLocale("en");
+  const hi = loadLocale("hi");
+  const te = loadLocale("te");
+
+  it("all new optimizer.results keys exist in en.json", () => {
+    const enKeys = flattenKeys(en);
+    const missing = newResultsKeys.filter((k) => !enKeys.includes(k));
+    expect(missing).toEqual([]);
+  });
+
+  it("all new optimizer.results keys exist in hi.json", () => {
+    const hiKeys = flattenKeys(hi);
+    const missing = newResultsKeys.filter((k) => !hiKeys.includes(k));
+    expect(missing).toEqual([]);
+  });
+
+  it("all new optimizer.results keys exist in te.json", () => {
+    const teKeys = flattenKeys(te);
+    const missing = newResultsKeys.filter((k) => !teKeys.includes(k));
+    expect(missing).toEqual([]);
+  });
+});
+
+describe("scanner keys", () => {
+  const en = loadLocale("en");
+  const hi = loadLocale("hi");
+  const te = loadLocale("te");
+
+  it("scanner.countryAutoSwitched exists in en.json", () => {
+    expect(getNestedValue(en, "scanner.countryAutoSwitched")).toBeDefined();
+  });
+
+  it("scanner.countryAutoSwitched exists in hi.json", () => {
+    expect(getNestedValue(hi, "scanner.countryAutoSwitched")).toBeDefined();
+  });
+
+  it("scanner.countryAutoSwitched exists in te.json", () => {
+    expect(getNestedValue(te, "scanner.countryAutoSwitched")).toBeDefined();
+  });
+});
+
+describe("no key in en.json is missing from hi.json (deep comparison)", () => {
+  const en = loadLocale("en");
+  const hi = loadLocale("hi");
+  const enKeys = flattenKeys(en);
+  const hiKeys = flattenKeys(hi);
+
+  it("every en.json leaf key exists in hi.json", () => {
+    const missing = enKeys.filter((k) => !hiKeys.includes(k));
+    expect(missing).toEqual([]);
+  });
+});
+
+describe("no key in en.json is missing from te.json (deep comparison)", () => {
+  const en = loadLocale("en");
+  const te = loadLocale("te");
+  const enKeys = flattenKeys(en);
+  const teKeys = flattenKeys(te);
+
+  it("every en.json leaf key exists in te.json", () => {
+    const missing = enKeys.filter((k) => !teKeys.includes(k));
+    expect(missing).toEqual([]);
+  });
+});
+
+describe("all translation values are non-empty strings", () => {
+  const locales = ["en", "hi", "te"] as const;
+
+  for (const lang of locales) {
+    it(`all values in ${lang}.json are non-empty strings`, () => {
+      const data = loadLocale(lang);
+      const keys = flattenKeys(data);
+      const emptyKeys: string[] = [];
+
+      for (const key of keys) {
+        const value = getNestedValue(data, key);
+        if (typeof value !== "string" || value.trim() === "") {
+          emptyKeys.push(key);
+        }
+      }
+
+      expect(emptyKeys).toEqual([]);
+    });
+  }
+});

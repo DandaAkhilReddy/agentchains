@@ -34,7 +34,7 @@ export function ChatBot() {
         content: m.text,
       }));
       const res = await api.post("/api/ai/chat", { message, history });
-      return res.data.response;
+      return res.data.text;
     },
     onSuccess: (response) => {
       setMessages((prev) => [
