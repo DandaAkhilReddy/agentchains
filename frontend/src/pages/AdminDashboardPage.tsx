@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, FileText, ScanLine, DollarSign, Star, Trash2 } from "lucide-react";
 import api from "../lib/api";
+import { formatUSD } from "../lib/format";
 
 interface AdminStats {
   user_count: number;
@@ -83,7 +84,7 @@ export function AdminDashboardPage() {
     { label: t("admin.totalUsers"), value: stats?.user_count ?? 0, sub: `+${stats?.new_users_7d ?? 0} ${t("admin.thisWeek")}`, icon: Users, color: "bg-blue-50 text-blue-600" },
     { label: t("admin.totalLoans"), value: stats?.total_loans ?? 0, sub: Object.entries(stats?.loans_by_type ?? {}).map(([k, v]) => `${k}: ${v}`).join(", "), icon: FileText, color: "bg-green-50 text-green-600" },
     { label: t("admin.docsScanned"), value: stats?.total_scans ?? 0, sub: `${stats?.scan_success_rate ?? 0}% ${t("admin.successRate")}`, icon: ScanLine, color: "bg-purple-50 text-purple-600" },
-    { label: t("admin.estCost30d"), value: `$${(usage?.total_cost_30d ?? 0).toFixed(4)}`, sub: `${usage?.total_calls_30d ?? 0} ${t("admin.apiCalls")}`, icon: DollarSign, color: "bg-orange-50 text-orange-600" },
+    { label: t("admin.estCost30d"), value: formatUSD(usage?.total_cost_30d ?? 0, 4), sub: `${usage?.total_calls_30d ?? 0} ${t("admin.apiCalls")}`, icon: DollarSign, color: "bg-orange-50 text-orange-600" },
   ];
 
   // Group daily costs by date
@@ -140,7 +141,7 @@ export function AdminDashboardPage() {
                     <td className="py-2 pr-4">{data.call_count}</td>
                     <td className="py-2 pr-4">{data.tokens_input.toLocaleString()}</td>
                     <td className="py-2 pr-4">{data.tokens_output.toLocaleString()}</td>
-                    <td className="py-2">${data.total_cost.toFixed(4)}</td>
+                    <td className="py-2">{formatUSD(data.total_cost, 4)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -167,7 +168,7 @@ export function AdminDashboardPage() {
                   <tr key={row.date} className="border-b last:border-0">
                     <td className="py-2 pr-4">{row.date}</td>
                     <td className="py-2 pr-4">{row.calls}</td>
-                    <td className="py-2">${row.cost.toFixed(4)}</td>
+                    <td className="py-2">{formatUSD(row.cost, 4)}</td>
                   </tr>
                 ))}
               </tbody>

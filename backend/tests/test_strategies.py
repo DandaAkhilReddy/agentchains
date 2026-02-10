@@ -2,7 +2,7 @@
 
 Tests Avalanche, Snowball, SmartHybrid, and Proportional strategies
 against expected allocation behaviour, including India-specific tax
-benefit adjustments and the 3-EMI quick-win bump.
+benefit adjustments and multi-factor composite scoring.
 """
 
 import pytest
@@ -11,6 +11,7 @@ from copy import deepcopy
 
 from app.core.strategies import (
     LoanSnapshot,
+    LoanScore,
     AvalancheStrategy,
     SnowballStrategy,
     SmartHybridStrategy,
@@ -233,7 +234,7 @@ class TestSnowballStrategy:
 # =====================================================================
 
 class TestSmartHybridStrategy:
-    """SmartHybrid: post-tax effective rate + 3-EMI closure bump."""
+    """SmartHybrid: multi-factor composite scoring with breakeven analysis."""
 
     def test_home_loan_effective_rate_with_24b(self, sbi_home_loan, hdfc_personal_loan):
         """Home 8.5% with 24(b) at 30% bracket -> effective 5.95%, lower than personal 12%.
@@ -282,12 +283,12 @@ class TestSmartHybridStrategy:
 
         assert effective == Decimal("12")
 
-    def test_3_emi_bump_to_top(self, smart_hybrid_loans):
-        """A loan within 3 EMIs of closure should be bumped to the top priority.
+    def test_quick_win_loan_prioritized(self, smart_hybrid_loans):
+        """A loan close to payoff scores high on quick-win factor.
 
-        small_closing (14%, ~2 months left) should be prioritized even if its
-        effective rate is lower than others in the sorted list. Because its
-        months_to_closure <= 3, it gets bumped.
+        small_closing (14%, ~2 months left) gets high composite score from
+        quick-win proximity (25% weight) + highest effective rate (40% weight)
+        + smallest balance efficiency (15% weight).
         """
         strategy = SmartHybridStrategy(tax_bracket=Decimal("0.30"))
         loans = [deepcopy(l) for l in smart_hybrid_loans]
@@ -295,19 +296,67 @@ class TestSmartHybridStrategy:
 
         allocation = strategy.allocate(loans, budget)
 
-        # small_closing should get allocated first (3-EMI bump)
+        # small_closing should get allocated (high composite score)
         assert "small_closing" in allocation
-        # And since its balance is only 20k, remaining 30k goes elsewhere
+        # And since its balance is only 20k, it's capped there
         assert allocation["small_closing"] == Decimal("20000")
 
-    def test_foreclosure_charges_affect_effective_rate(self, fixed_rate_personal_loan):
-        """Foreclosure charges should increase effective rate by penalty * 0.1."""
+    def test_effective_rate_no_foreclosure_adjustment(self, fixed_rate_personal_loan):
+        """Effective rate is purely post-tax — foreclosure handled by separate scoring factor."""
         strategy = SmartHybridStrategy(tax_bracket=Decimal("0.30"))
         effective = strategy._calculate_effective_rate(fixed_rate_personal_loan)
 
-        # 15% (no tax benefit) + 4% * 0.1 = 15.4%
-        expected = Decimal("15") + Decimal("4") * Decimal("0.1")
-        assert effective == expected
+        # 15% personal, no tax benefit => effective = 15% (no foreclosure added)
+        assert effective == Decimal("15")
+
+    def test_breakeven_check_passes_no_penalty(self, hdfc_personal_loan):
+        """Loan with 0% foreclosure always passes breakeven check."""
+        strategy = SmartHybridStrategy(tax_bracket=Decimal("0.30"))
+        hdfc_personal_loan.months_to_closure = 60
+        assert strategy._passes_breakeven_check(hdfc_personal_loan, Decimal("50000")) is True
+
+    def test_breakeven_check_rejects_high_penalty(self):
+        """Loan with very high foreclosure charges and short tenure should fail breakeven."""
+        loan = LoanSnapshot(
+            loan_id="high_penalty",
+            bank_name="BAJAJ",
+            loan_type="personal",
+            outstanding_principal=Decimal("100000"),
+            interest_rate=Decimal("1"),  # Very low rate
+            emi_amount=Decimal("5000"),
+            remaining_tenure_months=3,
+            prepayment_penalty_pct=Decimal("0"),
+            foreclosure_charges_pct=Decimal("50"),  # Extreme penalty
+        )
+        loan.effective_rate = Decimal("1")
+        loan.months_to_closure = 3
+
+        strategy = SmartHybridStrategy(tax_bracket=Decimal("0.30"))
+        assert strategy._passes_breakeven_check(loan, Decimal("50000")) is False
+
+    def test_score_loans_returns_correct_count(self, smart_hybrid_loans):
+        """Score function should return one LoanScore per loan."""
+        strategy = SmartHybridStrategy(tax_bracket=Decimal("0.30"))
+        loans = [deepcopy(l) for l in smart_hybrid_loans]
+        for loan in loans:
+            loan.effective_rate = strategy._calculate_effective_rate(loan)
+            loan.months_to_closure = strategy._estimate_months_to_closure(loan, Decimal("0"))
+
+        scores = strategy._score_loans(loans, Decimal("50000"))
+        assert len(scores) == 3
+        assert all(isinstance(s, LoanScore) for s in scores)
+
+    def test_composite_score_range(self, smart_hybrid_loans):
+        """Composite scores should be between 0 and 100."""
+        strategy = SmartHybridStrategy(tax_bracket=Decimal("0.30"))
+        loans = [deepcopy(l) for l in smart_hybrid_loans]
+        for loan in loans:
+            loan.effective_rate = strategy._calculate_effective_rate(loan)
+            loan.months_to_closure = strategy._estimate_months_to_closure(loan, Decimal("0"))
+
+        scores = strategy._score_loans(loans, Decimal("50000"))
+        for s in scores:
+            assert 0 <= s.composite_score <= 100
 
     def test_empty_loan_list_returns_empty(self):
         """No loans should return empty allocation."""

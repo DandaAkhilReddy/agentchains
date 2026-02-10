@@ -3,7 +3,7 @@
 4 strategies:
 - Avalanche: Highest interest rate first (mathematically optimal)
 - Snowball: Lowest balance first (psychological wins)
-- Smart Hybrid: Post-tax effective rate + 3-EMI bump + foreclosure awareness
+- Smart Hybrid: Multi-factor scoring (effective rate + quick-win + foreclosure + balance)
 - Proportional: Pro-rata by outstanding balance
 """
 
@@ -35,6 +35,24 @@ class LoanSnapshot:
     # Derived
     effective_rate: Decimal = Decimal("0")  # Post-tax rate
     months_to_closure: int = 0  # Estimated months left
+
+
+@dataclass
+class LoanScore:
+    """Composite score for SmartHybridStrategy multi-factor ranking."""
+    loan_id: str
+    effective_rate_score: float
+    quick_win_score: float
+    foreclosure_benefit_score: float
+    balance_efficiency_score: float
+    composite_score: float
+
+
+# Scoring weights for SmartHybrid
+WEIGHT_EFFECTIVE_RATE = 0.40
+WEIGHT_QUICK_WIN = 0.25
+WEIGHT_FORECLOSURE_BENEFIT = 0.20
+WEIGHT_BALANCE_EFFICIENCY = 0.15
 
 
 class RepaymentStrategy(ABC):
@@ -117,30 +135,32 @@ class SnowballStrategy(RepaymentStrategy):
 
 
 class SmartHybridStrategy(RepaymentStrategy):
-    """Country-aware smart strategy: post-tax effective rates + psychological bumps.
+    """Country-aware smart strategy using multi-factor composite scoring.
 
     Algorithm:
-    1. Calculate effective_rate = nominal_rate - tax_benefit_rate
-       India: Home loan 8.5% with 24(b) at 30% bracket → effective = 5.95%
-       US: Mortgage 7% with itemized deduction at 24% bracket → effective = 5.32%
-    2. Sort by effective_rate DESC (avalanche base layer)
-    3. Bump any loan within 3 EMIs of closure to TOP (quick win)
-    4. Factor in foreclosure_charges (penalizes fixed-rate early payoff)
+    1. Calculate post-tax effective_rate for each loan
+    2. Score each loan across 4 factors (each 0-100, weighted):
+       - Effective rate (40%): higher rate = higher score
+       - Quick-win proximity (25%): closer to payoff = higher score
+       - Foreclosure cost-benefit (20%): lower penalty = higher score
+       - Balance efficiency (15%): smaller balance frees EMI sooner
+    3. Sort by composite score DESC
+    4. Breakeven gate: skip loans where foreclosure penalty > interest saved
+    5. Allocate greedily by score order
     """
 
     name = "smart_hybrid"
-    description = "Smart Hybrid (Recommended) — post-tax optimized with quick wins"
+    description = "Smart Hybrid (Recommended) — multi-factor scoring with tax optimization"
 
     def __init__(self, tax_bracket: Decimal = Decimal("0.30"), country: str = "IN"):
         self.tax_bracket = tax_bracket
         self.country = country
 
     def _calculate_effective_rate(self, loan: LoanSnapshot) -> Decimal:
-        """Calculate post-tax effective interest rate."""
+        """Calculate post-tax effective interest rate (pure, no foreclosure adjustment)."""
         tax_benefit_rate = Decimal("0")
 
         if self.country == "US":
-            # US: Mortgage interest and student loan interest deductions
             if loan.eligible_mortgage_deduction:
                 tax_benefit_rate = loan.interest_rate * self.tax_bracket
             elif loan.eligible_student_loan_deduction:
@@ -154,13 +174,7 @@ class SmartHybridStrategy(RepaymentStrategy):
             elif loan.eligible_80c:
                 tax_benefit_rate = loan.interest_rate * self.tax_bracket * Decimal("0.5")
 
-        effective = loan.interest_rate - tax_benefit_rate
-
-        # Factor in foreclosure charges (increases effective cost of early payoff)
-        if loan.foreclosure_charges_pct > 0:
-            effective += loan.foreclosure_charges_pct * Decimal("0.1")
-
-        return effective
+        return loan.interest_rate - tax_benefit_rate
 
     def _estimate_months_to_closure(self, loan: LoanSnapshot, extra_per_month: Decimal) -> int:
         """Estimate how many months until this loan is paid off with extra payments."""
@@ -182,30 +196,116 @@ class SmartHybridStrategy(RepaymentStrategy):
 
         return months
 
+    def _passes_breakeven_check(self, loan: LoanSnapshot, prepayment_amount: Decimal) -> bool:
+        """Return True if prepaying saves more interest than the penalty costs."""
+        if loan.foreclosure_charges_pct <= 0:
+            return True
+
+        actual_prepay = min(prepayment_amount, loan.outstanding_principal)
+        penalty_cost = actual_prepay * loan.foreclosure_charges_pct / 100
+
+        monthly_rate = loan.interest_rate / Decimal("1200")
+        months_remaining = min(loan.months_to_closure, loan.remaining_tenure_months)
+        if months_remaining <= 0:
+            months_remaining = 1
+
+        # Conservative estimate: interest saved on reduced balance over remaining tenure
+        interest_saved = actual_prepay * monthly_rate * Decimal(str(months_remaining)) / Decimal("2")
+
+        return interest_saved >= penalty_cost
+
+    def _score_loans(self, loans: list[LoanSnapshot], extra_budget: Decimal) -> list[LoanScore]:
+        """Score each loan across 4 factors, each normalized 0-100."""
+        if not loans:
+            return []
+
+        effective_rates = [float(l.effective_rate) for l in loans]
+        months_list = [l.months_to_closure for l in loans]
+        balances = [float(l.outstanding_principal) for l in loans]
+        avg_remaining = sum(l.remaining_tenure_months for l in loans) / len(loans) if loans else 60
+
+        # Dynamic quick-win threshold
+        quick_win_threshold = max(2, min(6, int(avg_remaining * 0.05)))
+
+        max_rate = max(effective_rates) if effective_rates else 1
+        min_rate = min(effective_rates) if effective_rates else 0
+        rate_range = max_rate - min_rate if max_rate != min_rate else 1
+
+        max_balance = max(balances) if balances else 1
+        min_balance = min(balances) if balances else 0
+        balance_range = max_balance - min_balance if max_balance != min_balance else 1
+
+        scores: list[LoanScore] = []
+        for loan in loans:
+            # Factor 1: Effective rate (higher = better to pay first)
+            rate_score = ((float(loan.effective_rate) - min_rate) / rate_range) * 100
+
+            # Factor 2: Quick-win proximity
+            if loan.months_to_closure <= quick_win_threshold:
+                qw_score = 100.0
+            elif loan.months_to_closure <= quick_win_threshold * 2:
+                qw_score = 50.0 * (1 - (loan.months_to_closure - quick_win_threshold) / max(quick_win_threshold, 1))
+            else:
+                qw_score = 0.0
+
+            # Factor 3: Foreclosure cost-benefit
+            fc_pct = float(loan.foreclosure_charges_pct)
+            eff_rate = float(loan.effective_rate)
+            if fc_pct <= 0:
+                fc_score = 100.0
+            elif eff_rate > 0:
+                penalty_ratio = fc_pct / eff_rate
+                fc_score = max(0.0, 100.0 * (1.0 - penalty_ratio))
+            else:
+                fc_score = 0.0
+
+            # Factor 4: Balance efficiency (smaller frees EMI sooner)
+            balance_score = ((max_balance - float(loan.outstanding_principal)) / balance_range) * 100 if balance_range > 0 else 50.0
+
+            composite = (
+                WEIGHT_EFFECTIVE_RATE * rate_score
+                + WEIGHT_QUICK_WIN * qw_score
+                + WEIGHT_FORECLOSURE_BENEFIT * fc_score
+                + WEIGHT_BALANCE_EFFICIENCY * balance_score
+            )
+
+            scores.append(LoanScore(
+                loan_id=loan.loan_id,
+                effective_rate_score=rate_score,
+                quick_win_score=qw_score,
+                foreclosure_benefit_score=fc_score,
+                balance_efficiency_score=balance_score,
+                composite_score=composite,
+            ))
+
+        return scores
+
     def allocate(self, active_loans: list[LoanSnapshot], extra_budget: Decimal) -> dict[str, Decimal]:
         if not active_loans or extra_budget <= 0:
             return {}
 
-        # Calculate effective rates
+        # Calculate effective rates and months to closure
         for loan in active_loans:
             loan.effective_rate = self._calculate_effective_rate(loan)
             loan.months_to_closure = self._estimate_months_to_closure(loan, Decimal("0"))
 
-        # Sort by effective rate descending (avalanche base)
-        sorted_loans = sorted(active_loans, key=lambda l: l.effective_rate, reverse=True)
-
-        # Bump loans within 3 EMIs of closure to the top (quick win)
-        quick_wins = [l for l in sorted_loans if l.months_to_closure <= 3]
-        others = [l for l in sorted_loans if l.months_to_closure > 3]
-        sorted_loans = quick_wins + others
+        # Score all loans with multi-factor model
+        scores = self._score_loans(active_loans, extra_budget)
+        sorted_ids = [s.loan_id for s in sorted(scores, key=lambda s: s.composite_score, reverse=True)]
+        loan_map = {l.loan_id: l for l in active_loans}
 
         allocation: dict[str, Decimal] = {}
         remaining = extra_budget
 
-        for loan in sorted_loans:
+        for loan_id in sorted_ids:
             if remaining <= 0:
                 break
-            # Skip loans with high foreclosure charges if penalty exceeds benefit
+            loan = loan_map[loan_id]
+
+            # Foreclosure breakeven gate
+            if not self._passes_breakeven_check(loan, remaining):
+                continue
+
             max_prepayment = loan.outstanding_principal
             payment = min(remaining, max_prepayment)
             if payment > 0:

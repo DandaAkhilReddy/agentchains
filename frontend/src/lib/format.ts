@@ -42,19 +42,20 @@ export function formatINRCompact(amount: number): string {
 
 // ---------- USD (US Dollar) ----------
 
-export function formatUSD(amount: number): string {
+export function formatUSD(amount: number, decimals: number = 2): string {
   if (amount === 0) return "$0";
 
   const isNegative = amount < 0;
   const absAmount = Math.abs(amount);
 
-  const parts = absAmount.toFixed(2).split(".");
+  const parts = absAmount.toFixed(decimals).split(".");
   const integerPart = parts[0];
   const decimalPart = parts[1];
 
   // Standard US grouping: groups of 3
   const formattedInt = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  const formatted = decimalPart === "00" ? formattedInt : `${formattedInt}.${decimalPart}`;
+  const allZeros = decimalPart && /^0+$/.test(decimalPart);
+  const formatted = allZeros ? formattedInt : `${formattedInt}.${decimalPart}`;
   return `${isNegative ? "-" : ""}$${formatted}`;
 }
 

@@ -68,6 +68,22 @@ class OptimizationResult:
     recommended_strategy: str
 
 
+@dataclass
+class SensitivityPoint:
+    """Result at one rate delta."""
+    rate_delta_pct: float
+    total_interest_paid: Decimal
+    total_months: int
+    interest_saved_vs_baseline: Decimal
+
+
+@dataclass
+class SensitivityResult:
+    """Rate sensitivity analysis results."""
+    strategy_name: str
+    points: list[SensitivityPoint]
+
+
 class MultiLoanOptimizer:
     """Month-by-month multi-loan simulator with freed-EMI rollover.
 
@@ -82,10 +98,12 @@ class MultiLoanOptimizer:
         loans: list[LoanSnapshot],
         monthly_extra: Decimal = Decimal("0"),
         lump_sums: dict[int, Decimal] | None = None,
+        annual_growth_pct: Decimal = Decimal("0"),
     ):
         self.original_loans = loans
         self.monthly_extra = monthly_extra
         self.lump_sums = lump_sums or {}
+        self.annual_growth_pct = annual_growth_pct
 
     def _simulate_baseline(self) -> tuple[Decimal, int]:
         """Simulate all loans with minimum payments only (no extra)."""
@@ -150,9 +168,13 @@ class MultiLoanOptimizer:
                 month_interest += interest
                 month_principal += principal_portion
 
-            # Step 2: Calculate extra budget
+            # Step 2: Calculate extra budget (with salary growth)
+            growth_multiplier = Decimal(str(
+                (1 + float(self.annual_growth_pct) / 100) ** ((month - 1) // 12)
+            ))
+            grown_extra = (self.monthly_extra * growth_multiplier).quantize(PAISA, ROUND_HALF_UP)
             lump_sum_this_month = self.lump_sums.get(month, Decimal("0"))
-            extra = self.monthly_extra + freed_emi_pool + lump_sum_this_month
+            extra = grown_extra + freed_emi_pool + lump_sum_this_month
 
             # Step 3: Allocate extra across active loans using strategy
             still_active = [l for l in loans if l.outstanding_principal > 0]
@@ -274,3 +296,55 @@ class MultiLoanOptimizer:
             strategies=results,
             recommended_strategy=best.strategy_name,
         )
+
+    def sensitivity_analysis(
+        self,
+        strategy_name: str = "smart_hybrid",
+        rate_deltas: list[float] | None = None,
+        tax_bracket: Decimal = Decimal("0.30"),
+        country: str = "IN",
+    ) -> SensitivityResult:
+        """Run a strategy at multiple rate deltas to show interest rate sensitivity.
+
+        Args:
+            strategy_name: Strategy to analyze.
+            rate_deltas: Rate adjustments in percentage points, e.g. [-1, 0, +1, +2].
+            tax_bracket: Tax bracket for SmartHybrid.
+            country: Country code.
+
+        Returns:
+            SensitivityResult with interest/months at each delta.
+        """
+        if rate_deltas is None:
+            rate_deltas = [-1.0, 0.0, 1.0, 2.0]
+
+        points: list[SensitivityPoint] = []
+
+        for delta in rate_deltas:
+            adjusted_loans = deepcopy(self.original_loans)
+            for loan in adjusted_loans:
+                new_rate = loan.interest_rate + Decimal(str(delta))
+                loan.interest_rate = max(new_rate, Decimal("0.1"))
+
+            temp_optimizer = MultiLoanOptimizer(
+                loans=adjusted_loans,
+                monthly_extra=self.monthly_extra,
+                lump_sums=self.lump_sums,
+                annual_growth_pct=self.annual_growth_pct,
+            )
+
+            result = temp_optimizer.optimize(
+                strategies=[strategy_name],
+                tax_bracket=tax_bracket,
+                country=country,
+            )
+
+            strat = result.strategies[0]
+            points.append(SensitivityPoint(
+                rate_delta_pct=delta,
+                total_interest_paid=strat.total_interest_paid,
+                total_months=strat.total_months,
+                interest_saved_vs_baseline=strat.interest_saved_vs_baseline,
+            ))
+
+        return SensitivityResult(strategy_name=strategy_name, points=points)

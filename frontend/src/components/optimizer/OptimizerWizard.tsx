@@ -21,6 +21,7 @@ export function OptimizerWizard({ loans }: Props) {
   const [monthlyExtra, setMonthlyExtra] = useState(config.sliderRanges.monthlyExtra.max / 10);
   const [lumpSums, setLumpSums] = useState<{ month: number; amount: number }[]>([]);
   const [strategy, setStrategy] = useState("smart_hybrid");
+  const [annualGrowthPct, setAnnualGrowthPct] = useState(0);
   const [results, setResults] = useState<OptimizationResult | null>(null);
 
   const steps = [
@@ -37,6 +38,7 @@ export function OptimizerWizard({ loans }: Props) {
         monthly_extra: monthlyExtra,
         lump_sums: lumpSums,
         strategies: ["avalanche", "snowball", "smart_hybrid", "proportional"],
+        annual_growth_pct: annualGrowthPct,
       }).then((r) => r.data),
     onSuccess: (data) => {
       setResults(data);
@@ -90,13 +92,22 @@ export function OptimizerWizard({ loans }: Props) {
             onMonthlyExtraChange={setMonthlyExtra}
             lumpSums={lumpSums}
             onLumpSumsChange={setLumpSums}
+            annualGrowthPct={annualGrowthPct}
+            onAnnualGrowthPctChange={setAnnualGrowthPct}
           />
         )}
         {step === 2 && (
           <StepChooseStrategy selected={strategy} onChange={setStrategy} />
         )}
         {step === 3 && results && (
-          <StepResults results={results} selectedStrategy={strategy} />
+          <StepResults
+            results={results}
+            selectedStrategy={strategy}
+            loanIds={selectedLoanIds}
+            monthlyExtra={monthlyExtra}
+            lumpSums={lumpSums}
+            annualGrowthPct={annualGrowthPct}
+          />
         )}
       </div>
 

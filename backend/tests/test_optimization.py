@@ -15,6 +15,8 @@ from app.core.optimization import (
     StrategyResult,
     MonthlySnapshot,
     LoanResult,
+    SensitivityResult,
+    SensitivityPoint,
 )
 from app.core.strategies import LoanSnapshot
 
@@ -601,3 +603,135 @@ class TestOptimizationEdgeCases:
             assert strat.months_saved_vs_baseline >= 0
             for lr in strat.loan_results:
                 assert lr.months_saved >= 0
+
+
+# =====================================================================
+# SALARY GROWTH TESTS
+# =====================================================================
+
+class TestSalaryGrowth:
+    """Tests for the annual salary growth feature."""
+
+    def test_growth_reduces_total_months(self, three_diverse_loans):
+        """With salary growth, loans should be paid off faster."""
+        optimizer_no_growth = MultiLoanOptimizer(
+            loans=deepcopy(three_diverse_loans),
+            monthly_extra=Decimal("10000"),
+            annual_growth_pct=Decimal("0"),
+        )
+        optimizer_with_growth = MultiLoanOptimizer(
+            loans=deepcopy(three_diverse_loans),
+            monthly_extra=Decimal("10000"),
+            annual_growth_pct=Decimal("10"),
+        )
+
+        result_no = optimizer_no_growth.optimize(strategies=["avalanche"])
+        result_with = optimizer_with_growth.optimize(strategies=["avalanche"])
+
+        assert result_with.strategies[0].total_months <= result_no.strategies[0].total_months
+
+    def test_growth_saves_more_interest(self, three_diverse_loans):
+        """Salary growth should save more interest vs baseline."""
+        optimizer_no_growth = MultiLoanOptimizer(
+            loans=deepcopy(three_diverse_loans),
+            monthly_extra=Decimal("10000"),
+            annual_growth_pct=Decimal("0"),
+        )
+        optimizer_with_growth = MultiLoanOptimizer(
+            loans=deepcopy(three_diverse_loans),
+            monthly_extra=Decimal("10000"),
+            annual_growth_pct=Decimal("10"),
+        )
+
+        result_no = optimizer_no_growth.optimize(strategies=["avalanche"])
+        result_with = optimizer_with_growth.optimize(strategies=["avalanche"])
+
+        assert result_with.strategies[0].interest_saved_vs_baseline >= result_no.strategies[0].interest_saved_vs_baseline
+
+    def test_zero_growth_matches_default(self, three_diverse_loans):
+        """0% growth should produce identical results to default (no growth)."""
+        optimizer_default = MultiLoanOptimizer(
+            loans=deepcopy(three_diverse_loans),
+            monthly_extra=Decimal("10000"),
+        )
+        optimizer_zero = MultiLoanOptimizer(
+            loans=deepcopy(three_diverse_loans),
+            monthly_extra=Decimal("10000"),
+            annual_growth_pct=Decimal("0"),
+        )
+
+        result_default = optimizer_default.optimize(strategies=["avalanche"])
+        result_zero = optimizer_zero.optimize(strategies=["avalanche"])
+
+        assert result_default.strategies[0].total_interest_paid == result_zero.strategies[0].total_interest_paid
+        assert result_default.strategies[0].total_months == result_zero.strategies[0].total_months
+
+
+# =====================================================================
+# SENSITIVITY ANALYSIS TESTS
+# =====================================================================
+
+class TestSensitivityAnalysis:
+    """Tests for the rate sensitivity analysis feature."""
+
+    def test_sensitivity_returns_correct_points(self, three_diverse_loans):
+        """Should return one point per rate delta."""
+        optimizer = MultiLoanOptimizer(
+            loans=deepcopy(three_diverse_loans),
+            monthly_extra=Decimal("10000"),
+        )
+
+        result = optimizer.sensitivity_analysis(
+            strategy_name="avalanche",
+            rate_deltas=[-1.0, 0.0, 1.0, 2.0],
+        )
+
+        assert isinstance(result, SensitivityResult)
+        assert result.strategy_name == "avalanche"
+        assert len(result.points) == 4
+
+    def test_sensitivity_higher_rate_more_interest(self, three_diverse_loans):
+        """Higher rates should result in more total interest paid."""
+        optimizer = MultiLoanOptimizer(
+            loans=deepcopy(three_diverse_loans),
+            monthly_extra=Decimal("10000"),
+        )
+
+        result = optimizer.sensitivity_analysis(
+            strategy_name="avalanche",
+            rate_deltas=[-1.0, 0.0, 2.0],
+        )
+
+        interests = {p.rate_delta_pct: p.total_interest_paid for p in result.points}
+        assert interests[-1.0] < interests[0.0] < interests[2.0]
+
+    def test_sensitivity_default_deltas(self, three_diverse_loans):
+        """Default deltas should be [-1, 0, 1, 2]."""
+        optimizer = MultiLoanOptimizer(
+            loans=deepcopy(three_diverse_loans),
+            monthly_extra=Decimal("10000"),
+        )
+
+        result = optimizer.sensitivity_analysis(strategy_name="avalanche")
+
+        deltas = [p.rate_delta_pct for p in result.points]
+        assert deltas == [-1.0, 0.0, 1.0, 2.0]
+
+    def test_sensitivity_point_fields(self, three_diverse_loans):
+        """Each point should have all required fields."""
+        optimizer = MultiLoanOptimizer(
+            loans=deepcopy(three_diverse_loans),
+            monthly_extra=Decimal("10000"),
+        )
+
+        result = optimizer.sensitivity_analysis(
+            strategy_name="avalanche",
+            rate_deltas=[0.0],
+        )
+
+        point = result.points[0]
+        assert isinstance(point, SensitivityPoint)
+        assert point.rate_delta_pct == 0.0
+        assert point.total_interest_paid > Decimal("0")
+        assert point.total_months > 0
+        assert point.interest_saved_vs_baseline >= Decimal("0")

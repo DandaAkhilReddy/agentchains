@@ -8,9 +8,11 @@ interface Props {
   onMonthlyExtraChange: (value: number) => void;
   lumpSums: { month: number; amount: number }[];
   onLumpSumsChange: (sums: { month: number; amount: number }[]) => void;
+  annualGrowthPct: number;
+  onAnnualGrowthPctChange: (value: number) => void;
 }
 
-export function StepSetBudget({ monthlyExtra, onMonthlyExtraChange, lumpSums, onLumpSumsChange }: Props) {
+export function StepSetBudget({ monthlyExtra, onMonthlyExtraChange, lumpSums, onLumpSumsChange, annualGrowthPct, onAnnualGrowthPctChange }: Props) {
   const { t } = useTranslation();
   const config = useCountryConfig();
   const fmt = (n: number) => formatCurrency(n, config.code);
@@ -86,6 +88,24 @@ export function StepSetBudget({ monthlyExtra, onMonthlyExtraChange, lumpSums, on
           </div>
         </div>
       )}
+
+      {/* Salary Growth */}
+      <div>
+        <div className="flex justify-between mb-2">
+          <label className="text-sm font-medium text-gray-700">{t("optimizer.budget.salaryGrowth")}</label>
+          <span className="text-sm font-semibold text-emerald-600">{annualGrowthPct}% / {t("optimizer.budget.year")}</span>
+        </div>
+        <input
+          type="range" min={0} max={30} step={1}
+          value={annualGrowthPct}
+          onChange={(e) => onAnnualGrowthPctChange(Number(e.target.value))}
+          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+        />
+        <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <span>0%</span><span>30%</span>
+        </div>
+        <p className="text-xs text-gray-400 mt-1">{t("optimizer.budget.salaryGrowthDesc")}</p>
+      </div>
 
       {/* Lump Sums */}
       <div>

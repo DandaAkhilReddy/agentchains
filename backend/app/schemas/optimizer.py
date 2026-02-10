@@ -16,6 +16,7 @@ class OptimizerRequest(BaseModel):
     lump_sums: list[LumpSum] = Field(default_factory=list)
     strategies: list[str] = Field(default_factory=lambda: ["avalanche", "snowball", "smart_hybrid", "proportional"])
     tax_bracket: Decimal = Field(Decimal("0.30"), ge=0, le=1)
+    annual_growth_pct: Decimal = Field(Decimal("0"), ge=0, le=50)
 
 
 class LoanResultResponse(BaseModel):
@@ -91,3 +92,25 @@ class TaxImpactResponse(BaseModel):
     savings: Decimal
     explanation: str
     deductions: dict
+
+
+class SensitivityRequest(BaseModel):
+    loan_ids: list[UUID] = Field(..., min_length=1)
+    monthly_extra: Decimal = Field(Decimal("0"), ge=0)
+    lump_sums: list[LumpSum] = Field(default_factory=list)
+    strategy: str = Field("smart_hybrid")
+    tax_bracket: Decimal = Field(Decimal("0.30"), ge=0, le=1)
+    annual_growth_pct: Decimal = Field(Decimal("0"), ge=0, le=50)
+    rate_deltas: list[float] = Field(default_factory=lambda: [-1.0, 0.0, 1.0, 2.0])
+
+
+class SensitivityPointResponse(BaseModel):
+    rate_delta_pct: float
+    total_interest_paid: Decimal
+    total_months: int
+    interest_saved_vs_baseline: Decimal
+
+
+class SensitivityResponse(BaseModel):
+    strategy_name: str
+    points: list[SensitivityPointResponse]

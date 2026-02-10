@@ -138,7 +138,10 @@
       "add": "+ जोड़ें",
       "amount": "राशि",
       "month": "महीना",
-      "remove": "हटाएं"
+      "remove": "हटाएं",
+      "salaryGrowth": "वार्षिक वेतन वृद्धि",
+      "salaryGrowthDesc": "आपका अतिरिक्त भुगतान हर साल इस प्रतिशत से बढ़ेगा",
+      "year": "वर्ष"
     },
     "strategy": {
       "recommended": "अनुशंसित",
@@ -153,7 +156,12 @@
       "comparison": "रणनीति तुलना",
       "payoffOrder": "भुगतान क्रम:",
       "best": "सर्वश्रेष्ठ",
-      "planSaved": "प्लान सहेजा गया!"
+      "planSaved": "प्लान सहेजा गया!",
+      "sensitivityTitle": "ब्याज दर संवेदनशीलता विश्लेषण",
+      "sensitivityDesc": "ब्याज दर में बदलाव आपके भुगतान को कैसे प्रभावित करेगा",
+      "rateChange": "दर परिवर्तन",
+      "totalInterest": "कुल ब्याज",
+      "totalMonths": "कुल महीने"
     }
   },
   "emi": {

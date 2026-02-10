@@ -154,3 +154,15 @@ export interface UsageSummary {
   by_service: Record<string, { call_count: number; total_cost: number; tokens_input: number; tokens_output: number }>;
   daily_costs: { date: string; service: string; call_count: number; total_cost: number }[];
 }
+
+export interface SensitivityPoint {
+  rate_delta_pct: number;
+  total_interest_paid: number;
+  total_months: number;
+  interest_saved_vs_baseline: number;
+}
+
+export interface SensitivityResult {
+  strategy_name: string;
+  points: SensitivityPoint[];
+}

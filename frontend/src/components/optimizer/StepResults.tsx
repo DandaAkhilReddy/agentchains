@@ -1,21 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import api from "../../lib/api";
 import { formatCurrency, formatCurrencyCompact, formatMonths } from "../../lib/format";
 import { useCountryConfig } from "../../hooks/useCountryConfig";
-import type { OptimizationResult } from "../../types";
+import type { OptimizationResult, SensitivityResult } from "../../types";
 
 interface Props {
   results: OptimizationResult;
   selectedStrategy: string;
+  loanIds: string[];
+  monthlyExtra: number;
+  lumpSums: { month: number; amount: number }[];
+  annualGrowthPct: number;
 }
 
-export function StepResults({ results, selectedStrategy }: Props) {
+export function StepResults({ results, selectedStrategy, loanIds, monthlyExtra, lumpSums, annualGrowthPct }: Props) {
   const { t } = useTranslation();
   const config = useCountryConfig();
   const [saved, setSaved] = useState(false);
+  const [sensitivity, setSensitivity] = useState<SensitivityResult | null>(null);
+
+  useEffect(() => {
+    api.post("/api/optimizer/sensitivity", {
+      loan_ids: loanIds,
+      monthly_extra: monthlyExtra,
+      lump_sums: lumpSums,
+      strategy: results.recommended_strategy,
+      annual_growth_pct: annualGrowthPct,
+    }).then((r) => setSensitivity(r.data)).catch(() => {});
+  }, [loanIds, monthlyExtra, lumpSums, annualGrowthPct, results.recommended_strategy]);
 
   const fmt = (n: number) => formatCurrency(n, config.code);
   const fmtC = (n: number) => formatCurrencyCompact(n, config.code);
@@ -108,6 +123,36 @@ export function StepResults({ results, selectedStrategy }: Props) {
           </LineChart>
         </ResponsiveContainer>
       </div>
+
+      {/* Rate Sensitivity Analysis */}
+      {sensitivity && sensitivity.points.length > 0 && (
+        <div className="bg-white rounded-xl p-4 border border-gray-100">
+          <h3 className="font-semibold text-gray-900 mb-4">{t("optimizer.results.sensitivityTitle")}</h3>
+          <p className="text-xs text-gray-400 mb-3">{t("optimizer.results.sensitivityDesc")}</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-gray-500">
+                  <th className="py-2 pr-4">{t("optimizer.results.rateChange")}</th>
+                  <th className="py-2 pr-4">{t("optimizer.results.totalInterest")}</th>
+                  <th className="py-2 pr-4">{t("optimizer.results.totalMonths")}</th>
+                  <th className="py-2">{t("optimizer.interestSaved")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sensitivity.points.map((p) => (
+                  <tr key={p.rate_delta_pct} className={`border-b last:border-0 ${p.rate_delta_pct === 0 ? "bg-blue-50 font-medium" : ""}`}>
+                    <td className="py-2 pr-4">{p.rate_delta_pct > 0 ? "+" : ""}{p.rate_delta_pct}%</td>
+                    <td className="py-2 pr-4">{fmtC(Number(p.total_interest_paid))}</td>
+                    <td className="py-2 pr-4">{formatMonths(p.total_months)}</td>
+                    <td className="py-2 text-green-600">{fmtC(Number(p.interest_saved_vs_baseline))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Save Plan */}
       <button

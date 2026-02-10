@@ -138,7 +138,10 @@
       "add": "+ Add",
       "amount": "Amount",
       "month": "Month",
-      "remove": "Remove"
+      "remove": "Remove",
+      "salaryGrowth": "Annual Salary Growth",
+      "salaryGrowthDesc": "Your extra payment will grow each year by this percentage",
+      "year": "year"
     },
     "strategy": {
       "recommended": "Recommended",
@@ -153,7 +156,12 @@
       "comparison": "Strategy Comparison",
       "payoffOrder": "Payoff order:",
       "best": "Best",
-      "planSaved": "Plan Saved!"
+      "planSaved": "Plan Saved!",
+      "sensitivityTitle": "Rate Sensitivity Analysis",
+      "sensitivityDesc": "How interest rate changes would affect your payoff",
+      "rateChange": "Rate Change",
+      "totalInterest": "Total Interest",
+      "totalMonths": "Total Months"
     }
   },
   "emi": {

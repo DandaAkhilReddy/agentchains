@@ -15,6 +15,7 @@ from app.schemas.optimizer import (
     QuickCompareRequest, QuickCompareResponse,
     WhatIfRequest, WhatIfResponse,
     SavePlanRequest, TaxImpactRequest, TaxImpactResponse,
+    SensitivityRequest, SensitivityResponse, SensitivityPointResponse,
 )
 from app.core.strategies import LoanSnapshot
 from app.core.optimization import MultiLoanOptimizer
@@ -70,6 +71,7 @@ async def analyze(
         loans=snapshots,
         monthly_extra=req.monthly_extra,
         lump_sums=lump_dict,
+        annual_growth_pct=req.annual_growth_pct,
     )
     result = optimizer.optimize(strategies=req.strategies, tax_bracket=req.tax_bracket, country=country)
 
@@ -242,6 +244,50 @@ async def list_plans(
         }
         for p in plans
     ]
+
+
+@router.post("/sensitivity", response_model=SensitivityResponse)
+async def sensitivity(
+    req: SensitivityRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rate sensitivity analysis — how interest rate changes affect payoff."""
+    repo = LoanRepository(db)
+    loans = await repo.list_by_user(user.id, status="active")
+
+    selected = [l for l in loans if l.id in [UUID(str(lid)) for lid in req.loan_ids]]
+    if not selected:
+        raise HTTPException(status_code=400, detail="No matching active loans found")
+
+    country = user.country or "IN"
+    snapshots = [_loan_to_snapshot(l, country) for l in selected]
+    lump_dict = {ls.month: ls.amount for ls in req.lump_sums}
+
+    optimizer = MultiLoanOptimizer(
+        loans=snapshots,
+        monthly_extra=req.monthly_extra,
+        lump_sums=lump_dict,
+        annual_growth_pct=req.annual_growth_pct,
+    )
+    result = optimizer.sensitivity_analysis(
+        strategy_name=req.strategy,
+        rate_deltas=req.rate_deltas,
+        tax_bracket=req.tax_bracket,
+        country=country,
+    )
+
+    return SensitivityResponse(
+        strategy_name=result.strategy_name,
+        points=[
+            SensitivityPointResponse(
+                rate_delta_pct=p.rate_delta_pct,
+                total_interest_paid=p.total_interest_paid,
+                total_months=p.total_months,
+                interest_saved_vs_baseline=p.interest_saved_vs_baseline,
+            ) for p in result.points
+        ],
+    )
 
 
 @router.post("/tax-impact", response_model=TaxImpactResponse)
