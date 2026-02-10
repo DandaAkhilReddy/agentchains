@@ -69,10 +69,10 @@ export function LoanForm({ onSubmit, onClose, isLoading, initialData }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-gray-100">
-          <h2 className="text-lg font-semibold">{t("loanForm.quickAdd")}</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg">
+      <div className="bg-[var(--color-bg-card)] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scale-in">
+        <div className="flex items-center justify-between p-4 border-b border-[var(--color-border-subtle)]">
+          <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">{t("loanForm.quickAdd")}</h2>
+          <button onClick={onClose} className="p-1 hover:bg-[var(--color-bg-inset)] rounded-lg">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -80,11 +80,11 @@ export function LoanForm({ onSubmit, onClose, isLoading, initialData }: Props) {
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("loans.bank")}</label>
+              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("loans.bank")}</label>
               <select
                 value={form.bank_name}
                 onChange={(e) => handleChange("bank_name", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
                 required
               >
                 <option value="">{t("loanForm.selectBank")}</option>
@@ -92,11 +92,11 @@ export function LoanForm({ onSubmit, onClose, isLoading, initialData }: Props) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("loans.type")}</label>
+              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("loans.type")}</label>
               <select
                 value={form.loan_type}
                 onChange={(e) => handleChange("loan_type", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm capitalize"
+                className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm bg-[var(--color-bg-app)] text-[var(--color-text-primary)] capitalize"
               >
                 {config.loanTypes.map((lt) => <option key={lt} value={lt}>{lt.replace("_", " ")}</option>)}
               </select>
@@ -104,12 +104,12 @@ export function LoanForm({ onSubmit, onClose, isLoading, initialData }: Props) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t("loanForm.loanAmount")} ({sym})</label>
+            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("loanForm.loanAmount")} ({sym})</label>
             <input
               type="number"
               value={form.loan_amount}
               onChange={(e) => handleChange("loan_amount", e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
               required
               min="1"
               placeholder="e.g. 2500000"
@@ -118,13 +118,13 @@ export function LoanForm({ onSubmit, onClose, isLoading, initialData }: Props) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("loanForm.interestRate")}</label>
+              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("loanForm.interestRate")}</label>
               <input
                 type="number"
                 step="0.01"
                 value={form.interest_rate}
                 onChange={(e) => handleChange("interest_rate", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
                 required
                 min="0"
                 max="50"
@@ -132,12 +132,12 @@ export function LoanForm({ onSubmit, onClose, isLoading, initialData }: Props) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("loanForm.emiAmount")} ({sym})</label>
+              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("loanForm.emiAmount")} ({sym})</label>
               <input
                 type="number"
                 value={form.emi_amount}
                 onChange={(e) => handleChange("emi_amount", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
                 required
                 min="1"
                 placeholder="e.g. 22000"
@@ -148,7 +148,7 @@ export function LoanForm({ onSubmit, onClose, isLoading, initialData }: Props) {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="w-full py-2.5 bg-[var(--color-accent)] text-white rounded-lg font-medium hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
           >
             {isLoading ? t("loanForm.saving") : t("loanForm.saveLoan")}
           </button>

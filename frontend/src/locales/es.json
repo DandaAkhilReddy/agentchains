@@ -252,7 +252,11 @@
     "marriedSeparately": "Casado Declaración Separada",
     "headOfHousehold": "Jefe de Familia",
     "india": "India",
-    "unitedStates": "Estados Unidos"
+    "unitedStates": "Estados Unidos",
+    "theme": "Tema",
+    "themeLight": "Claro",
+    "themeDark": "Oscuro",
+    "themeSystem": "Sistema"
   },
   "chat": {
     "title": "Asistente AI de Préstamos",

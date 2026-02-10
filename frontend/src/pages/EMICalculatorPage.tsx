@@ -27,14 +27,14 @@ export function EMICalculatorPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-xl font-bold text-gray-900">{t("emi.title")}</h1>
+      <h1 className="text-xl font-bold text-[var(--color-text-primary)]">{t("emi.title")}</h1>
 
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-6">
+      <div className="bg-[var(--color-bg-card)] rounded-xl p-6 shadow-sm border border-[var(--color-border-subtle)] space-y-6">
         {/* Principal Slider */}
         <div>
           <div className="flex justify-between mb-2">
-            <label className="text-sm font-medium text-gray-700">{t("emi.principal")}</label>
-            <span className="text-sm font-semibold text-blue-600">{fmt(principal)}</span>
+            <label className="text-sm font-medium text-[var(--color-text-primary)]">{t("emi.principal")}</label>
+            <span className="text-sm font-semibold text-[var(--color-accent)]">{fmt(principal)}</span>
           </div>
           <input
             type="range"
@@ -43,7 +43,7 @@ export function EMICalculatorPage() {
             onChange={(e) => setPrincipal(Number(e.target.value))}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
           />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <div className="flex justify-between text-xs text-[var(--color-text-tertiary)] mt-1">
             <span>{fmtC(pRange.min)}</span><span>{fmtC(pRange.max)}</span>
           </div>
         </div>
@@ -51,8 +51,8 @@ export function EMICalculatorPage() {
         {/* Rate Slider */}
         <div>
           <div className="flex justify-between mb-2">
-            <label className="text-sm font-medium text-gray-700">{t("emi.rate")}</label>
-            <span className="text-sm font-semibold text-blue-600">{rate}%</span>
+            <label className="text-sm font-medium text-[var(--color-text-primary)]">{t("emi.rate")}</label>
+            <span className="text-sm font-semibold text-[var(--color-accent)]">{rate}%</span>
           </div>
           <input
             type="range"
@@ -61,7 +61,7 @@ export function EMICalculatorPage() {
             onChange={(e) => setRate(Number(e.target.value))}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
           />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <div className="flex justify-between text-xs text-[var(--color-text-tertiary)] mt-1">
             <span>1%</span><span>25%</span>
           </div>
         </div>
@@ -69,8 +69,8 @@ export function EMICalculatorPage() {
         {/* Tenure Slider */}
         <div>
           <div className="flex justify-between mb-2">
-            <label className="text-sm font-medium text-gray-700">{t("emi.tenure")}</label>
-            <span className="text-sm font-semibold text-blue-600">{tenureYears} years</span>
+            <label className="text-sm font-medium text-[var(--color-text-primary)]">{t("emi.tenure")}</label>
+            <span className="text-sm font-semibold text-[var(--color-accent)]">{tenureYears} years</span>
           </div>
           <input
             type="range"
@@ -79,7 +79,7 @@ export function EMICalculatorPage() {
             onChange={(e) => setTenureYears(Number(e.target.value))}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
           />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <div className="flex justify-between text-xs text-[var(--color-text-tertiary)] mt-1">
             <span>1yr</span><span>30yr</span>
           </div>
         </div>
@@ -87,9 +87,9 @@ export function EMICalculatorPage() {
 
       {/* Results */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-blue-50 rounded-xl p-5 text-center">
-          <p className="text-sm text-blue-600 mb-1">{t("emi.monthlyEmi")}</p>
-          <p className="text-2xl font-bold text-blue-700">{fmt(result.emi)}</p>
+        <div className="bg-[var(--color-accent-subtle)] rounded-xl p-5 text-center">
+          <p className="text-sm text-[var(--color-accent)] mb-1">{t("emi.monthlyEmi")}</p>
+          <p className="text-2xl font-bold text-[var(--color-accent-text)]">{fmt(result.emi)}</p>
         </div>
         <div className="bg-red-50 rounded-xl p-5 text-center">
           <p className="text-sm text-red-600 mb-1">{t("emi.totalInterest")}</p>
@@ -102,9 +102,9 @@ export function EMICalculatorPage() {
       </div>
 
       {/* Visual Breakdown */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <h3 className="text-sm font-medium text-gray-700 mb-3">{t("emi.paymentBreakdown")}</h3>
-        <div className="h-6 bg-gray-100 rounded-full overflow-hidden flex">
+      <div className="bg-[var(--color-bg-card)] rounded-xl p-6 shadow-sm border border-[var(--color-border-subtle)]">
+        <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-3">{t("emi.paymentBreakdown")}</h3>
+        <div className="h-6 bg-[var(--color-bg-inset)] rounded-full overflow-hidden flex">
           <div className="bg-blue-500 h-full" style={{ width: `${100 - interestPercent}%` }} />
           <div className="bg-red-400 h-full" style={{ width: `${interestPercent}%` }} />
         </div>

@@ -108,24 +108,24 @@ export function LoginPage() {
   };
 
   const inputClass =
-    "w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm";
+    "w-full px-3 py-2.5 border border-[var(--color-border-strong)] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm";
   const btnPrimary =
-    "w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm";
+    "w-full py-2.5 bg-[var(--color-accent)] text-white rounded-lg font-medium hover:bg-[var(--color-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed text-sm";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-900 dark:to-slate-800 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{t("app.title")}</h1>
-          <p className="text-gray-500">{t("app.tagline")}</p>
+          <h1 className="text-3xl font-bold text-[var(--color-text-primary)] mb-2">{t("app.title")}</h1>
+          <p className="text-[var(--color-text-secondary)]">{t("app.tagline")}</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-6 space-y-5">
+        <div className="bg-[var(--color-bg-card)] rounded-2xl shadow-lg p-6 space-y-5 animate-scale-in">
           {/* Google Sign-In */}
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 text-sm"
+            className="w-full flex items-center justify-center gap-3 py-2.5 border border-[var(--color-border-strong)] rounded-lg font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] disabled:opacity-50 text-sm"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
@@ -139,22 +139,22 @@ export function LoginPage() {
           {/* Divider */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200" />
+              <div className="w-full border-t border-[var(--color-border-default)]" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="bg-white px-3 text-gray-400">{t("auth.orContinueWith")}</span>
+              <span className="bg-[var(--color-bg-card)] px-3 text-[var(--color-text-tertiary)]">{t("auth.orContinueWith")}</span>
             </div>
           </div>
 
           {/* Tab Toggle (only for signin/signup, not forgot-password) */}
           {view !== "forgot-password" && (
-            <div className="flex bg-gray-100 rounded-lg p-0.5">
+            <div className="flex bg-[var(--color-bg-inset)] rounded-lg p-0.5">
               <button
                 onClick={() => switchView("signin")}
                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
                   view === "signin"
-                    ? "bg-white text-blue-700 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
+                    ? "bg-[var(--color-bg-card)] text-[var(--color-accent-text)] shadow-sm"
+                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                 }`}
               >
                 {t("auth.signIn")}
@@ -163,8 +163,8 @@ export function LoginPage() {
                 onClick={() => switchView("signup")}
                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
                   view === "signup"
-                    ? "bg-white text-blue-700 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
+                    ? "bg-[var(--color-bg-card)] text-[var(--color-accent-text)] shadow-sm"
+                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                 }`}
               >
                 {t("auth.signUp")}
@@ -176,7 +176,7 @@ export function LoginPage() {
           {view === "signin" && (
             <form onSubmit={handleEmailSignIn} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("auth.email")}</label>
+                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("auth.email")}</label>
                 <input
                   type="email"
                   value={email}
@@ -187,7 +187,7 @@ export function LoginPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("auth.password")}</label>
+                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("auth.password")}</label>
                 <input
                   type="password"
                   value={password}
@@ -201,7 +201,7 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => switchView("forgot-password")}
-                  className="text-xs text-blue-600 hover:text-blue-700"
+                  className="text-xs text-[var(--color-accent)] hover:text-[var(--color-accent-hover)]"
                 >
                   {t("auth.forgotPassword")}
                 </button>
@@ -216,7 +216,7 @@ export function LoginPage() {
           {view === "signup" && (
             <form onSubmit={handleEmailSignUp} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("auth.fullName")}</label>
+                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("auth.fullName")}</label>
                 <input
                   type="text"
                   value={displayName}
@@ -227,7 +227,7 @@ export function LoginPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("auth.email")}</label>
+                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("auth.email")}</label>
                 <input
                   type="email"
                   value={email}
@@ -238,7 +238,7 @@ export function LoginPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("auth.password")}</label>
+                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("auth.password")}</label>
                 <input
                   type="password"
                   value={password}
@@ -249,7 +249,7 @@ export function LoginPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("auth.confirmPassword")}</label>
+                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("auth.confirmPassword")}</label>
                 <input
                   type="password"
                   value={confirmPassword}
@@ -269,11 +269,11 @@ export function LoginPage() {
           {view === "forgot-password" && (
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-1">{t("auth.resetPassword")}</h3>
-                <p className="text-xs text-gray-500 mb-3">Enter your email and we'll send you a reset link.</p>
+                <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-1">{t("auth.resetPassword")}</h3>
+                <p className="text-xs text-[var(--color-text-secondary)] mb-3">Enter your email and we'll send you a reset link.</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("auth.email")}</label>
+                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("auth.email")}</label>
                 <input
                   type="email"
                   value={email}
@@ -289,7 +289,7 @@ export function LoginPage() {
               <button
                 type="button"
                 onClick={() => switchView("signin")}
-                className="w-full text-sm text-gray-500 hover:text-gray-700"
+                className="w-full text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
               >
                 {t("auth.backToSignIn")}
               </button>
@@ -298,12 +298,12 @@ export function LoginPage() {
 
           {/* Success Message */}
           {successMessage && (
-            <p className="text-sm text-green-600 text-center bg-green-50 rounded-lg py-2 px-3">{successMessage}</p>
+            <p className="text-sm text-green-600 dark:text-green-400 text-center bg-green-50 dark:bg-green-900/20 rounded-lg py-2 px-3">{successMessage}</p>
           )}
 
           {/* Error Message */}
           {error && (
-            <p className="text-sm text-red-600 text-center bg-red-50 rounded-lg py-2 px-3">{error}</p>
+            <p className="text-sm text-red-600 dark:text-red-400 text-center bg-red-50 dark:bg-red-900/20 rounded-lg py-2 px-3">{error}</p>
           )}
         </div>
       </div>

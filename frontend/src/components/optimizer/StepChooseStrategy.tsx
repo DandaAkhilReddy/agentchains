@@ -35,14 +35,14 @@ export function StepChooseStrategy({ selected, onChange }: Props) {
 
   return (
     <div className="space-y-4">
-      <h2 className="font-semibold text-gray-900">{t("optimizer.choosePriority")}</h2>
+      <h2 className="font-semibold text-[var(--color-text-primary)]">{t("optimizer.choosePriority")}</h2>
 
       <div className="space-y-3">
         {strategies.map((s) => (
           <label
             key={s.id}
             className={`flex items-center gap-4 p-5 rounded-xl border-2 cursor-pointer transition-all ${
-              selected === s.id ? s.borderColor : "border-gray-200 hover:border-gray-300"
+              selected === s.id ? s.borderColor : "border-[var(--color-border-default)] hover:border-[var(--color-border-strong)]"
             }`}
           >
             <input
@@ -58,7 +58,7 @@ export function StepChooseStrategy({ selected, onChange }: Props) {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900">
+                <span className="font-semibold text-[var(--color-text-primary)]">
                   {t(`optimizer.${s.id === "smart_hybrid" ? "smartHybrid" : s.id}`)}
                 </span>
                 {s.recommended && (
@@ -67,7 +67,7 @@ export function StepChooseStrategy({ selected, onChange }: Props) {
                   </span>
                 )}
               </div>
-              <p className="text-sm text-gray-500 mt-0.5">
+              <p className="text-sm text-[var(--color-text-secondary)] mt-0.5">
                 {t(`optimizer.strategy.${s.id === "smart_hybrid" ? "smartHybridDesc" : s.id + "Desc"}`)}
               </p>
             </div>

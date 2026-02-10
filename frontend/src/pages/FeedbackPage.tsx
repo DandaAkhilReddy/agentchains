@@ -67,11 +67,11 @@ export function FeedbackPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6 animate-fade-up">
       <h1 className="text-2xl font-bold">{t("feedback.title")}</h1>
 
       {/* Submit Form */}
-      <div className="bg-white rounded-xl border p-5 shadow-sm">
+      <div className="bg-[var(--color-bg-card)] rounded-xl border p-5 shadow-card">
         <h2 className="text-lg font-semibold mb-4">{t("feedback.submitTitle")}</h2>
 
         {/* Type Selector */}
@@ -84,7 +84,7 @@ export function FeedbackPage() {
                 key={tp}
                 onClick={() => setType(tp)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm transition-colors ${
-                  type === tp ? cfg.color : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
+                  type === tp ? cfg.color : "bg-[var(--color-bg-app)] border-[var(--color-border-default)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-inset)]"
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -98,7 +98,7 @@ export function FeedbackPage() {
           {/* Star Rating (for feedback/testimonial) */}
           {type !== "feature_request" && (
             <div className="flex items-center gap-1">
-              <span className="text-sm text-gray-500 mr-2">{t("feedback.rating")}:</span>
+              <span className="text-sm text-[var(--color-text-secondary)] mr-2">{t("feedback.rating")}:</span>
               {[1, 2, 3, 4, 5].map((s) => (
                 <button
                   key={s}
@@ -110,7 +110,7 @@ export function FeedbackPage() {
                 >
                   <Star
                     className={`w-6 h-6 transition-colors ${
-                      s <= (hoverRating || rating) ? "text-yellow-400 fill-yellow-400" : "text-gray-300"
+                      s <= (hoverRating || rating) ? "text-yellow-400 fill-yellow-400" : "text-[var(--color-border-strong)]"
                     }`}
                   />
                 </button>
@@ -125,7 +125,7 @@ export function FeedbackPage() {
             onChange={(e) => setTitle(e.target.value)}
             required
             maxLength={200}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            className="w-full border border-[var(--color-border-strong)] bg-[var(--color-bg-app)] text-[var(--color-text-primary)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)] outline-none"
           />
 
           <textarea
@@ -135,13 +135,13 @@ export function FeedbackPage() {
             required
             maxLength={2000}
             rows={4}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+            className="w-full border border-[var(--color-border-strong)] bg-[var(--color-bg-app)] text-[var(--color-text-primary)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)] outline-none resize-none"
           />
 
           <button
             type="submit"
             disabled={submit.isPending || !title || !content}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-[var(--color-accent)] text-white text-sm font-medium rounded-lg hover:bg-[var(--color-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submit.isPending ? t("common.saving") : t("feedback.submit")}
           </button>
@@ -154,14 +154,14 @@ export function FeedbackPage() {
 
       {/* My Reviews */}
       {(myReviews ?? []).length > 0 && (
-        <div className="bg-white rounded-xl border p-5 shadow-sm">
+        <div className="bg-[var(--color-bg-card)] rounded-xl border p-5 shadow-card">
           <h2 className="text-lg font-semibold mb-3">{t("feedback.myReviews")}</h2>
           <div className="space-y-3">
             {myReviews!.map((r) => (
-              <div key={r.id} className="border rounded-lg p-3">
+              <div key={r.id} className="border border-[var(--color-border-default)] rounded-lg p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    typeConfig[r.review_type as keyof typeof typeConfig]?.color ?? "bg-gray-100 text-gray-600"
+                    typeConfig[r.review_type as keyof typeof typeConfig]?.color ?? "bg-[var(--color-bg-inset)] text-[var(--color-text-secondary)]"
                   }`}>
                     {t(`feedback.type_${r.review_type}`)}
                   </span>
@@ -173,20 +173,20 @@ export function FeedbackPage() {
                     </span>
                   )}
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    r.status === "approved" || r.status === "done" ? "bg-green-100 text-green-700" :
-                    r.status === "rejected" ? "bg-red-100 text-red-700" :
-                    "bg-gray-100 text-gray-600"
+                    r.status === "approved" || r.status === "done" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" :
+                    r.status === "rejected" ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" :
+                    "bg-[var(--color-bg-inset)] text-[var(--color-text-secondary)]"
                   }`}>{r.status}</span>
                 </div>
                 <p className="text-sm font-medium">{r.title}</p>
-                <p className="text-sm text-gray-600">{r.content}</p>
+                <p className="text-sm text-[var(--color-text-secondary)]">{r.content}</p>
                 {r.admin_response && (
                   <div className="mt-2 pl-3 border-l-2 border-blue-200">
                     <p className="text-xs text-blue-600 font-medium">{t("feedback.adminReply")}:</p>
-                    <p className="text-sm text-gray-600">{r.admin_response}</p>
+                    <p className="text-sm text-[var(--color-text-secondary)]">{r.admin_response}</p>
                   </div>
                 )}
-                <p className="text-xs text-gray-400 mt-1">{new Date(r.created_at).toLocaleDateString()}</p>
+                <p className="text-xs text-[var(--color-text-tertiary)] mt-1">{new Date(r.created_at).toLocaleDateString()}</p>
               </div>
             ))}
           </div>
@@ -195,11 +195,11 @@ export function FeedbackPage() {
 
       {/* Public Testimonials */}
       {(publicReviews ?? []).length > 0 && (
-        <div className="bg-white rounded-xl border p-5 shadow-sm">
+        <div className="bg-[var(--color-bg-card)] rounded-xl border p-5 shadow-card">
           <h2 className="text-lg font-semibold mb-3">{t("feedback.publicTestimonials")}</h2>
           <div className="space-y-3">
             {publicReviews!.map((r) => (
-              <div key={r.id} className="border rounded-lg p-3">
+              <div key={r.id} className="border border-[var(--color-border-default)] rounded-lg p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-medium text-sm">{r.user_display_name || t("feedback.anonymous")}</span>
                   {r.rating && (
@@ -211,7 +211,7 @@ export function FeedbackPage() {
                   )}
                 </div>
                 <p className="text-sm font-medium">{r.title}</p>
-                <p className="text-sm text-gray-600">{r.content}</p>
+                <p className="text-sm text-[var(--color-text-secondary)]">{r.content}</p>
               </div>
             ))}
           </div>

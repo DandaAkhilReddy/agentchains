@@ -106,27 +106,27 @@ export function AdminDashboardPage() {
       {/* Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {metricCards.map((card) => (
-          <div key={card.label} className="bg-white rounded-xl border p-4 shadow-sm">
+          <div key={card.label} className="bg-[var(--color-bg-card)] rounded-xl border p-4 shadow-sm">
             <div className="flex items-center gap-3 mb-2">
               <div className={`p-2 rounded-lg ${card.color}`}>
                 <card.icon className="w-5 h-5" />
               </div>
-              <span className="text-sm text-gray-500">{card.label}</span>
+              <span className="text-sm text-[var(--color-text-secondary)]">{card.label}</span>
             </div>
             <div className="text-2xl font-bold">{card.value}</div>
-            <div className="text-xs text-gray-400 mt-1 truncate">{card.sub}</div>
+            <div className="text-xs text-[var(--color-text-tertiary)] mt-1 truncate">{card.sub}</div>
           </div>
         ))}
       </div>
 
       {/* Usage by Service */}
       {usage?.by_service && Object.keys(usage.by_service).length > 0 && (
-        <div className="bg-white rounded-xl border p-4 shadow-sm">
+        <div className="bg-[var(--color-bg-card)] rounded-xl border p-4 shadow-sm">
           <h2 className="text-lg font-semibold mb-3">{t("admin.usageByService")}</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-gray-500">
+                <tr className="border-b text-left text-[var(--color-text-secondary)]">
                   <th className="py-2 pr-4">{t("admin.service")}</th>
                   <th className="py-2 pr-4">{t("admin.calls")}</th>
                   <th className="py-2 pr-4">{t("admin.tokensIn")}</th>
@@ -152,12 +152,12 @@ export function AdminDashboardPage() {
 
       {/* Daily Costs */}
       {dailyRows.length > 0 && (
-        <div className="bg-white rounded-xl border p-4 shadow-sm">
+        <div className="bg-[var(--color-bg-card)] rounded-xl border p-4 shadow-sm">
           <h2 className="text-lg font-semibold mb-3">{t("admin.dailyCosts")}</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-gray-500">
+                <tr className="border-b text-left text-[var(--color-text-secondary)]">
                   <th className="py-2 pr-4">{t("admin.date")}</th>
                   <th className="py-2 pr-4">{t("admin.calls")}</th>
                   <th className="py-2">{t("admin.cost")}</th>
@@ -178,12 +178,12 @@ export function AdminDashboardPage() {
       )}
 
       {/* Users */}
-      <div className="bg-white rounded-xl border p-4 shadow-sm">
+      <div className="bg-[var(--color-bg-card)] rounded-xl border p-4 shadow-sm">
         <h2 className="text-lg font-semibold mb-3">{t("admin.users")}</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b text-left text-gray-500">
+              <tr className="border-b text-left text-[var(--color-text-secondary)]">
                 <th className="py-2 pr-4">{t("admin.name")}</th>
                 <th className="py-2 pr-4">{t("admin.email")}</th>
                 <th className="py-2 pr-4">{t("admin.joined")}</th>
@@ -205,10 +205,10 @@ export function AdminDashboardPage() {
       </div>
 
       {/* Reviews / Feedback */}
-      <div className="bg-white rounded-xl border p-4 shadow-sm">
+      <div className="bg-[var(--color-bg-card)] rounded-xl border p-4 shadow-sm">
         <h2 className="text-lg font-semibold mb-3">{t("admin.reviewsTitle")}</h2>
         {feedbackReviews.length === 0 ? (
-          <p className="text-sm text-gray-400">{t("admin.noReviews")}</p>
+          <p className="text-sm text-[var(--color-text-tertiary)]">{t("admin.noReviews")}</p>
         ) : (
           <div className="space-y-3">
             {feedbackReviews.map((r) => (
@@ -226,7 +226,7 @@ export function AdminDashboardPage() {
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
                       r.status === "approved" ? "bg-green-100 text-green-700" :
                       r.status === "rejected" ? "bg-red-100 text-red-700" :
-                      "bg-gray-100 text-gray-600"
+                      "bg-[var(--color-bg-inset)] text-[var(--color-text-secondary)]"
                     }`}>{r.status}</span>
                   </div>
                   <div className="flex gap-1">
@@ -243,14 +243,14 @@ export function AdminDashboardPage() {
                       </>
                     )}
                     <button onClick={() => deleteReview.mutate(r.id)}
-                      className="text-xs p-1 text-gray-400 hover:text-red-500">
+                      className="text-xs p-1 text-[var(--color-text-tertiary)] hover:text-red-500">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
                 <p className="text-sm font-medium">{r.title}</p>
-                <p className="text-sm text-gray-600">{r.content}</p>
-                <p className="text-xs text-gray-400 mt-1">{new Date(r.created_at).toLocaleDateString()}</p>
+                <p className="text-sm text-[var(--color-text-secondary)]">{r.content}</p>
+                <p className="text-xs text-[var(--color-text-tertiary)] mt-1">{new Date(r.created_at).toLocaleDateString()}</p>
               </div>
             ))}
           </div>
@@ -258,10 +258,10 @@ export function AdminDashboardPage() {
       </div>
 
       {/* Feature Requests */}
-      <div className="bg-white rounded-xl border p-4 shadow-sm">
+      <div className="bg-[var(--color-bg-card)] rounded-xl border p-4 shadow-sm">
         <h2 className="text-lg font-semibold mb-3">{t("admin.featureRequests")}</h2>
         {featureRequests.length === 0 ? (
-          <p className="text-sm text-gray-400">{t("admin.noFeatureRequests")}</p>
+          <p className="text-sm text-[var(--color-text-tertiary)]">{t("admin.noFeatureRequests")}</p>
         ) : (
           <div className="space-y-3">
             {featureRequests.map((r) => (
@@ -281,12 +281,12 @@ export function AdminDashboardPage() {
                     </select>
                   </div>
                   <button onClick={() => deleteReview.mutate(r.id)}
-                    className="text-xs p-1 text-gray-400 hover:text-red-500">
+                    className="text-xs p-1 text-[var(--color-text-tertiary)] hover:text-red-500">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <p className="text-sm text-gray-600">{r.content}</p>
-                <p className="text-xs text-gray-400 mt-1">{r.user_display_name || "User"} &middot; {new Date(r.created_at).toLocaleDateString()}</p>
+                <p className="text-sm text-[var(--color-text-secondary)]">{r.content}</p>
+                <p className="text-xs text-[var(--color-text-tertiary)] mt-1">{r.user_display_name || "User"} &middot; {new Date(r.created_at).toLocaleDateString()}</p>
               </div>
             ))}
           </div>

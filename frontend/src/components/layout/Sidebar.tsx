@@ -22,7 +22,7 @@ export function Sidebar() {
   const items = isAdmin ? [...navItems, adminItem] : navItems;
 
   return (
-    <aside className="h-[calc(100vh-64px)] sticky top-16 border-r border-gray-200 bg-white p-4">
+    <aside className="h-[calc(100vh-64px)] sticky top-16 border-r border-[var(--color-border-default)] bg-[var(--color-bg-card)] p-4 transition-colors">
       <nav className="space-y-1">
         {items.map((item) => (
           <NavLink
@@ -32,8 +32,8 @@ export function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  ? "bg-[var(--color-sidebar-active)] text-[var(--color-sidebar-active-text)]"
+                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-inset)] hover:text-[var(--color-text-primary)]"
               }`
             }
           >

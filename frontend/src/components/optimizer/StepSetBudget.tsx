@@ -39,7 +39,7 @@ export function StepSetBudget({ monthlyExtra, onMonthlyExtraChange, lumpSums, on
 
   return (
     <div className="space-y-6">
-      <h2 className="font-semibold text-gray-900">{t("optimizer.budget.howMuchExtra")}</h2>
+      <h2 className="font-semibold text-[var(--color-text-primary)]">{t("optimizer.budget.howMuchExtra")}</h2>
 
       {/* Budget Mode Toggle (Gullak / Piggy Bank) */}
       <div className="flex items-center justify-between p-4 bg-amber-50 rounded-xl border border-amber-200">
@@ -49,7 +49,7 @@ export function StepSetBudget({ monthlyExtra, onMonthlyExtraChange, lumpSums, on
         </div>
         <button
           onClick={handleBudgetModeToggle}
-          className={`relative w-12 h-6 rounded-full transition-colors ${budgetMode ? "bg-amber-500" : "bg-gray-300"}`}
+          className={`relative w-12 h-6 rounded-full transition-colors ${budgetMode ? "bg-amber-500" : "bg-[var(--color-border-strong)]"}`}
         >
           <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${budgetMode ? "translate-x-6" : "translate-x-0.5"}`} />
         </button>
@@ -58,32 +58,32 @@ export function StepSetBudget({ monthlyExtra, onMonthlyExtraChange, lumpSums, on
       {budgetMode ? (
         <div>
           <div className="flex justify-between mb-2">
-            <label className="text-sm font-medium text-gray-700">{t("optimizer.budget.dailySaving")}</label>
+            <label className="text-sm font-medium text-[var(--color-text-primary)]">{t("optimizer.budget.dailySaving")}</label>
             <span className="text-sm font-semibold text-amber-600">{fmt(dailySaving)}/{t("common.day")} = {fmt(dailySaving * 30)}/{t("common.month")}</span>
           </div>
           <input
             type="range" min={dRange.min} max={dRange.max} step={dRange.step}
             value={dailySaving}
             onChange={(e) => handleDailyChange(Number(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
+            className="w-full h-2 bg-[var(--color-bg-inset)] rounded-lg appearance-none cursor-pointer accent-amber-500"
           />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <div className="flex justify-between text-xs text-[var(--color-text-tertiary)] mt-1">
             <span>{fmt(dRange.min)}/{t("common.day")}</span><span>{fmt(dRange.max)}/{t("common.day")}</span>
           </div>
         </div>
       ) : (
         <div>
           <div className="flex justify-between mb-2">
-            <label className="text-sm font-medium text-gray-700">{t("optimizer.budget.monthlyExtra")}</label>
-            <span className="text-sm font-semibold text-blue-600">{fmt(monthlyExtra)}</span>
+            <label className="text-sm font-medium text-[var(--color-text-primary)]">{t("optimizer.budget.monthlyExtra")}</label>
+            <span className="text-sm font-semibold text-[var(--color-accent)]">{fmt(monthlyExtra)}</span>
           </div>
           <input
             type="range" min={mRange.min} max={mRange.max} step={mRange.step}
             value={monthlyExtra}
             onChange={(e) => onMonthlyExtraChange(Number(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            className="w-full h-2 bg-[var(--color-bg-inset)] rounded-lg appearance-none cursor-pointer accent-blue-600"
           />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <div className="flex justify-between text-xs text-[var(--color-text-tertiary)] mt-1">
             <span>{fmt(mRange.min)}</span><span>{fmt(mRange.max)}</span>
           </div>
         </div>
@@ -92,26 +92,26 @@ export function StepSetBudget({ monthlyExtra, onMonthlyExtraChange, lumpSums, on
       {/* Salary Growth */}
       <div>
         <div className="flex justify-between mb-2">
-          <label className="text-sm font-medium text-gray-700">{t("optimizer.budget.salaryGrowth")}</label>
+          <label className="text-sm font-medium text-[var(--color-text-primary)]">{t("optimizer.budget.salaryGrowth")}</label>
           <span className="text-sm font-semibold text-emerald-600">{annualGrowthPct}% / {t("optimizer.budget.year")}</span>
         </div>
         <input
           type="range" min={0} max={30} step={1}
           value={annualGrowthPct}
           onChange={(e) => onAnnualGrowthPctChange(Number(e.target.value))}
-          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+          className="w-full h-2 bg-[var(--color-bg-inset)] rounded-lg appearance-none cursor-pointer accent-emerald-600"
         />
-        <div className="flex justify-between text-xs text-gray-400 mt-1">
+        <div className="flex justify-between text-xs text-[var(--color-text-tertiary)] mt-1">
           <span>0%</span><span>30%</span>
         </div>
-        <p className="text-xs text-gray-400 mt-1">{t("optimizer.budget.salaryGrowthDesc")}</p>
+        <p className="text-xs text-[var(--color-text-tertiary)] mt-1">{t("optimizer.budget.salaryGrowthDesc")}</p>
       </div>
 
       {/* Lump Sums */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-gray-700">{t("optimizer.budget.lumpSum")}</label>
-          <button onClick={addLumpSum} className="text-sm text-blue-600 hover:text-blue-700">+ {t("optimizer.budget.add")}</button>
+          <label className="text-sm font-medium text-[var(--color-text-primary)]">{t("optimizer.budget.lumpSum")}</label>
+          <button onClick={addLumpSum} className="text-sm text-[var(--color-accent)] hover:text-[var(--color-accent-hover)]">+ {t("optimizer.budget.add")}</button>
         </div>
         {lumpSums.map((ls, i) => (
           <div key={i} className="flex gap-3 mb-2">
@@ -124,7 +124,7 @@ export function StepSetBudget({ monthlyExtra, onMonthlyExtraChange, lumpSums, on
                   updated[i].amount = Number(e.target.value);
                   onLumpSumsChange(updated);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm"
               />
             </div>
             <div className="w-24">
@@ -136,7 +136,7 @@ export function StepSetBudget({ monthlyExtra, onMonthlyExtraChange, lumpSums, on
                   updated[i].month = Number(e.target.value);
                   onLumpSumsChange(updated);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm"
               />
             </div>
             <button

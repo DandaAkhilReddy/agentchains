@@ -275,7 +275,11 @@
     "marriedSeparately": "వివాహిత వేర్వేరు ఫైలింగ్",
     "headOfHousehold": "గృహ యజమాని",
     "india": "భారతదేశం",
-    "unitedStates": "యునైటెడ్ స్టేట్స్"
+    "unitedStates": "యునైటెడ్ స్టేట్స్",
+    "theme": "థీమ్",
+    "themeLight": "లైట్",
+    "themeDark": "డార్క్",
+    "themeSystem": "సిస్టమ్"
   },
   "chat": {
     "title": "లోన్ AI సహాయకుడు",

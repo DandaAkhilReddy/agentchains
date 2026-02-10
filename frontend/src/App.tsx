@@ -1,10 +1,11 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
 import { AppShell } from "./components/layout/AppShell";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { LoadingSpinner } from "./components/shared/LoadingSpinner";
 import { ErrorBoundary } from "./components/shared/ErrorBoundary";
+import { useUIStore } from "./store/uiStore";
 
 // Code-split pages for <170KB critical path
 const LoginPage = lazy(() => import("./components/auth/LoginPage").then((m) => ({ default: m.LoginPage })));
@@ -24,6 +25,13 @@ function PageLoader() {
 
 export default function App() {
   useAuth();
+
+  const resolvedTheme = useUIStore((s) => s.resolvedTheme);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
+    document.documentElement.style.colorScheme = resolvedTheme;
+  }, [resolvedTheme]);
 
   return (
     <ErrorBoundary>

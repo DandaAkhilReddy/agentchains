@@ -65,25 +65,25 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="max-w-lg mx-auto space-y-6">
-      <h1 className="text-xl font-bold text-gray-900">{t("nav.settings")}</h1>
+    <div className="max-w-lg mx-auto space-y-6 animate-fade-up">
+      <h1 className="text-xl font-bold text-[var(--color-text-primary)]">{t("nav.settings")}</h1>
 
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
+      <div className="bg-[var(--color-bg-card)] rounded-xl p-6 shadow-card border border-[var(--color-border-subtle)] space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.displayName")}</label>
+          <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("settings.displayName")}</label>
           <input
             value={form.display_name}
             onChange={(e) => setForm((p) => ({ ...p, display_name: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.country")}</label>
+          <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("settings.country")}</label>
           <select
             value={country}
             onChange={(e) => setCountry(e.target.value as "IN" | "US")}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm"
           >
             <option value="IN">India</option>
             <option value="US">United States</option>
@@ -91,8 +91,8 @@ export function SettingsPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.language")}</label>
-          <select value={language} onChange={(e) => setLanguage(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+          <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("settings.language")}</label>
+          <select value={language} onChange={(e) => setLanguage(e.target.value)} className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm">
             <option value="en">English</option>
             <option value="hi">हिन्दी (Hindi)</option>
             <option value="te">తెలుగు (Telugu)</option>
@@ -103,8 +103,8 @@ export function SettingsPage() {
         {/* India: Tax Regime */}
         {config.hasTaxSections && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.taxRegime")}</label>
-            <select value={form.tax_regime} onChange={(e) => setForm((p) => ({ ...p, tax_regime: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("settings.taxRegime")}</label>
+            <select value={form.tax_regime} onChange={(e) => setForm((p) => ({ ...p, tax_regime: e.target.value }))} className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm">
               <option value="old">{t("settings.oldRegime")}</option>
               <option value="new">{t("settings.newRegime")}</option>
             </select>
@@ -114,8 +114,8 @@ export function SettingsPage() {
         {/* US: Filing Status */}
         {config.hasFilingStatus && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.filingStatus")}</label>
-            <select value={form.filing_status} onChange={(e) => setForm((p) => ({ ...p, filing_status: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("settings.filingStatus")}</label>
+            <select value={form.filing_status} onChange={(e) => setForm((p) => ({ ...p, filing_status: e.target.value }))} className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm">
               <option value="single">{t("settings.single")}</option>
               <option value="married_jointly">{t("settings.marriedJointly")}</option>
               <option value="married_separately">{t("settings.marriedSeparately")}</option>
@@ -125,12 +125,12 @@ export function SettingsPage() {
         )}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.annualIncome")} ({config.currencySymbol})</label>
+          <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">{t("settings.annualIncome")} ({config.currencySymbol})</label>
           <input
             type="number"
             value={form.annual_income}
             onChange={(e) => setForm((p) => ({ ...p, annual_income: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="w-full px-3 py-2 border border-[var(--color-border-strong)] rounded-lg text-sm"
             placeholder={t("settings.forTaxOptimization")}
           />
         </div>
@@ -138,18 +138,18 @@ export function SettingsPage() {
         <button
           onClick={handleSave}
           disabled={updateProfile.isPending}
-          className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="w-full py-2.5 bg-[var(--color-accent)] text-white rounded-lg font-medium hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
         >
           {updateProfile.isPending ? t("common.saving") : t("common.save")}
         </button>
       </div>
 
       {/* Data Management */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
-        <h2 className="font-semibold text-gray-900">{t("settings.dataManagement")}</h2>
+      <div className="bg-[var(--color-bg-card)] rounded-xl p-6 shadow-card border border-[var(--color-border-subtle)] space-y-4">
+        <h2 className="font-semibold text-[var(--color-text-primary)]">{t("settings.dataManagement")}</h2>
         <button
           onClick={() => exportData.mutate()}
-          className="w-full py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+          className="w-full py-2 border border-[var(--color-border-strong)] rounded-lg text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
         >
           {t("settings.exportData")} ({t(config.privacyLawKey)})
         </button>
@@ -166,11 +166,11 @@ export function SettingsPage() {
               }
             }
           }}
-          className="w-full py-2 border border-red-300 rounded-lg text-sm text-red-600 hover:bg-red-50"
+          className="w-full py-2 border border-red-300 dark:border-red-800 rounded-lg text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
         >
           {t("settings.deleteAccount")}
         </button>
-        <p className="text-xs text-gray-400">{t("settings.appVersion")}: 0.2.0</p>
+        <p className="text-xs text-[var(--color-text-tertiary)]">{t("settings.appVersion")}: 0.2.0</p>
       </div>
     </div>
   );

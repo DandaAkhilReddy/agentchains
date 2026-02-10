@@ -113,7 +113,7 @@ describe("ErrorBoundary", () => {
     expect(heading).toHaveClass("text-xl", "font-semibold", "text-red-600", "mb-2");
 
     const button = screen.getByRole("button", { name: /reload page/i });
-    expect(button).toHaveClass("px-4", "py-2", "bg-blue-600", "text-white", "rounded-lg", "hover:bg-blue-700");
+    expect(button).toHaveClass("px-4", "py-2", "text-white", "rounded-lg");
   });
 
   it("maintains error boundary state across re-renders", () => {

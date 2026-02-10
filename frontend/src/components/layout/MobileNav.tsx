@@ -22,7 +22,7 @@ export function MobileNav() {
   const items = isAdmin ? [...navItems, adminItem] : navItems;
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-2 py-1 z-50">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[var(--color-bg-card)] border-t border-[var(--color-border-default)] px-2 py-1 z-50 transition-colors">
       <div className="flex justify-around">
         {items.map((item) => (
           <NavLink
@@ -30,8 +30,8 @@ export function MobileNav() {
             to={item.to}
             end={item.to === "/"}
             className={({ isActive }) =>
-              `flex flex-col items-center py-1.5 px-2 text-xs ${
-                isActive ? "text-blue-600" : "text-gray-400"
+              `flex flex-col items-center py-1.5 px-2 text-xs transition-colors ${
+                isActive ? "text-[var(--color-accent)]" : "text-[var(--color-text-tertiary)]"
               }`
             }
           >

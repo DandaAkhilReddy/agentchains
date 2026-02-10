@@ -275,7 +275,11 @@
     "marriedSeparately": "विवाहित अलग फाइलिंग",
     "headOfHousehold": "परिवार का मुखिया",
     "india": "भारत",
-    "unitedStates": "संयुक्त राज्य अमेरिका"
+    "unitedStates": "संयुक्त राज्य अमेरिका",
+    "theme": "थीम",
+    "themeLight": "लाइट",
+    "themeDark": "डार्क",
+    "themeSystem": "सिस्टम"
   },
   "chat": {
     "title": "लोन AI सहायक",

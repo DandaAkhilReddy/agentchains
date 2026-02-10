@@ -27,6 +27,13 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
+// ── Mock AnimatedNumber (uses requestAnimationFrame which doesn't work in JSDOM) ──
+vi.mock("../components/shared/AnimatedNumber", () => ({
+  AnimatedNumber: ({ value, formatter, className }: { value: number; formatter?: (n: number) => string; className?: string }) => (
+    <span className={className}>{formatter ? formatter(Math.round(value)) : Math.round(value).toLocaleString()}</span>
+  ),
+}));
+
 // ── Mock useCountryConfig (used by CurrencyDisplay) ──────────────────────────
 vi.mock("../hooks/useCountryConfig", () => ({
   useCountryConfig: () => ({
@@ -176,7 +183,7 @@ describe("DashboardPage", () => {
 
   // ── 1. Loading spinner ─────────────────────────────────────────────────────
   describe("Loading state", () => {
-    it("shows loading spinner initially while loans are being fetched", () => {
+    it("shows skeleton loading state initially while loans are being fetched", () => {
       // Never resolve the loans request so we stay in loading state
       mockGet.mockImplementation(
         () => new Promise(() => {}) as any,
@@ -184,9 +191,9 @@ describe("DashboardPage", () => {
 
       renderDashboard();
 
-      // LoadingSpinner renders a div with animate-spin class
-      const spinner = document.querySelector(".animate-spin");
-      expect(spinner).toBeInTheDocument();
+      // DashboardSkeleton renders shimmer skeleton elements
+      const skeleton = document.querySelector(".skeleton");
+      expect(skeleton).toBeInTheDocument();
     });
   });
 

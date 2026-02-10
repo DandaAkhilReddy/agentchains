@@ -99,7 +99,7 @@ export function ChatBot() {
 
       {/* Chat Panel */}
       {open && (
-        <div className="fixed bottom-20 md:bottom-6 right-4 z-50 w-[calc(100vw-2rem)] sm:w-96 h-[500px] max-h-[70vh] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
+        <div className="fixed bottom-20 md:bottom-6 right-4 z-50 w-[calc(100vw-2rem)] sm:w-96 h-[500px] max-h-[70vh] bg-[var(--color-bg-card)] rounded-2xl shadow-modal border border-[var(--color-border-default)] flex flex-col overflow-hidden animate-slide-in-up">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
             <div className="flex items-center gap-2">
@@ -120,8 +120,8 @@ export function ChatBot() {
             {messages.length === 0 && (
               <div className="text-center py-8">
                 <Bot className="w-10 h-10 text-indigo-300 mx-auto mb-3" />
-                <p className="text-sm font-medium text-gray-700">{t("chat.welcome")}</p>
-                <p className="text-xs text-gray-400 mt-1">{t("chat.welcomeDesc")}</p>
+                <p className="text-sm font-medium text-[var(--color-text-primary)]">{t("chat.welcome")}</p>
+                <p className="text-xs text-[var(--color-text-tertiary)] mt-1">{t("chat.welcomeDesc")}</p>
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                   {[t("chat.suggestion1"), t("chat.suggestion2"), t("chat.suggestion3")].map((s) => (
                     <button
@@ -131,7 +131,7 @@ export function ChatBot() {
                         setMessages([{ id: crypto.randomUUID(), role: "user", text: s, timestamp: new Date() }]);
                         chatMutation.mutate(s);
                       }}
-                      className="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 transition-colors"
+                      className="text-xs px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
                     >
                       {s}
                     </button>
@@ -146,15 +146,15 @@ export function ChatBot() {
                 className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 {msg.role === "assistant" && (
-                  <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Bot className="w-3.5 h-3.5 text-indigo-600" />
+                  <div className="w-6 h-6 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Bot className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                   </div>
                 )}
                 <div
                   className={`max-w-[80%] px-3 py-2 rounded-xl text-sm leading-relaxed ${
                     msg.role === "user"
                       ? "bg-indigo-600 text-white rounded-br-sm"
-                      : "bg-gray-100 text-gray-800 rounded-bl-sm"
+                      : "bg-[var(--color-bg-inset)] text-[var(--color-text-primary)] rounded-bl-sm"
                   }`}
                 >
                   {msg.text}
@@ -169,11 +169,11 @@ export function ChatBot() {
 
             {chatMutation.isPending && (
               <div className="flex gap-2 items-start">
-                <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-3.5 h-3.5 text-indigo-600" />
+                <div className="w-6 h-6 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                 </div>
-                <div className="bg-gray-100 px-3 py-2 rounded-xl rounded-bl-sm">
-                  <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                <div className="bg-[var(--color-bg-inset)] px-3 py-2 rounded-xl rounded-bl-sm">
+                  <Loader2 className="w-4 h-4 text-[var(--color-text-tertiary)] animate-spin" />
                 </div>
               </div>
             )}
@@ -182,7 +182,7 @@ export function ChatBot() {
           </div>
 
           {/* Input */}
-          <div className="border-t border-gray-200 p-3">
+          <div className="border-t border-[var(--color-border-default)] p-3">
             <div className="flex gap-2">
               <input
                 ref={inputRef}
@@ -190,7 +190,7 @@ export function ChatBot() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={t("chat.placeholder")}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                className="flex-1 px-3 py-2 border border-[var(--color-border-strong)] rounded-xl text-sm bg-[var(--color-bg-app)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                 disabled={chatMutation.isPending}
               />
               <button

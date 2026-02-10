@@ -522,8 +522,8 @@ describe("StepResults", () => {
 
       const baselineCell = screen.getByText("0%");
       const row = baselineCell.closest("tr");
-      expect(row).toHaveClass("bg-blue-50");
       expect(row).toHaveClass("font-medium");
+      expect(row?.className).toContain("accent-subtle");
     });
 
     it("shows sensitivity description text", async () => {

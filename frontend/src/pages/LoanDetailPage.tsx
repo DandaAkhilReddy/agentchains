@@ -41,28 +41,28 @@ export function LoanDetailPage() {
   });
 
   if (isLoading) return <LoadingSpinner size="lg" />;
-  if (!loan) return <div className="text-center py-8 text-gray-500">{t("loanDetail.notFound")}</div>;
+  if (!loan) return <div className="text-center py-8 text-[var(--color-text-secondary)]">{t("loanDetail.notFound")}</div>;
 
   const paidPercent = Math.round((1 - loan.outstanding_principal / loan.principal_amount) * 100);
 
   return (
-    <div className="space-y-6">
-      <button onClick={() => navigate("/loans")} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm">
+    <div className="space-y-6 animate-fade-up">
+      <button onClick={() => navigate("/loans")} className="flex items-center gap-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] text-sm">
         <ArrowLeft className="w-4 h-4" /> {t("loanDetail.backToLoans")}
       </button>
 
       {/* Loan Summary */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="bg-[var(--color-bg-card)] rounded-xl p-6 shadow-card border border-[var(--color-border-subtle)]">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{loan.bank_name}</h1>
-            <p className="text-sm text-gray-500 capitalize">{loan.loan_type} loan — {loan.interest_rate_type} rate</p>
+            <h1 className="text-xl font-bold text-[var(--color-text-primary)]">{loan.bank_name}</h1>
+            <p className="text-sm text-[var(--color-text-secondary)] capitalize">{loan.loan_type} loan — {loan.interest_rate_type} rate</p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold text-blue-600">{loan.interest_rate}%</span>
+            <span className="text-2xl font-bold text-[var(--color-accent)]">{loan.interest_rate}%</span>
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              className="p-2 text-[var(--color-text-tertiary)] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
               title={t("loanDetail.deleteLoan")}
             >
               <Trash2 className="w-5 h-5" />
@@ -84,7 +84,7 @@ export function LoanDetailPage() {
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="px-3 py-1.5 bg-white text-gray-700 rounded-lg text-sm font-medium border border-gray-300 hover:bg-gray-50"
+                className="px-3 py-1.5 bg-[var(--color-bg-card)] text-[var(--color-text-primary)] rounded-lg text-sm font-medium border border-[var(--color-border-strong)] hover:bg-[var(--color-bg-subtle)]"
               >
                 {t("common.cancel")}
               </button>
@@ -94,29 +94,29 @@ export function LoanDetailPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <p className="text-xs text-gray-400">{t("loanDetail.originalAmount")}</p>
+            <p className="text-xs text-[var(--color-text-tertiary)]">{t("loanDetail.originalAmount")}</p>
             <p className="font-semibold">{fmt(loan.principal_amount)}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-400">{t("loanDetail.outstanding")}</p>
+            <p className="text-xs text-[var(--color-text-tertiary)]">{t("loanDetail.outstanding")}</p>
             <p className="font-semibold">{fmt(loan.outstanding_principal)}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-400">{t("loanDetail.monthlyEmi")}</p>
+            <p className="text-xs text-[var(--color-text-tertiary)]">{t("loanDetail.monthlyEmi")}</p>
             <p className="font-semibold">{fmt(loan.emi_amount)}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-400">{t("loanDetail.remaining")}</p>
+            <p className="text-xs text-[var(--color-text-tertiary)]">{t("loanDetail.remaining")}</p>
             <p className="font-semibold">{formatMonths(loan.remaining_tenure_months)}</p>
           </div>
         </div>
 
         <div className="mt-4">
-          <div className="flex justify-between text-xs text-gray-400 mb-1">
+          <div className="flex justify-between text-xs text-[var(--color-text-tertiary)] mb-1">
             <span>{t("loanDetail.paidPercent", { percent: paidPercent })}</span>
             <span>{t("loanDetail.amountRemaining", { amount: fmt(loan.outstanding_principal) })}</span>
           </div>
-          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-2 bg-[var(--color-bg-inset)] rounded-full overflow-hidden">
             <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.max(2, paidPercent)}%` }} />
           </div>
         </div>
@@ -124,20 +124,20 @@ export function LoanDetailPage() {
 
       {/* Amortization Table */}
       {amortization?.schedule && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">{t("loanDetail.amortizationSchedule")}</h2>
-            <p className="text-sm text-gray-500">{t("loanDetail.totalInterest")}: {fmt(amortization.total_interest)}</p>
+        <div className="bg-[var(--color-bg-card)] rounded-xl shadow-card border border-[var(--color-border-subtle)] overflow-hidden">
+          <div className="p-4 border-b border-[var(--color-border-subtle)]">
+            <h2 className="font-semibold text-[var(--color-text-primary)]">{t("loanDetail.amortizationSchedule")}</h2>
+            <p className="text-sm text-[var(--color-text-secondary)]">{t("loanDetail.totalInterest")}: {fmt(amortization.total_interest)}</p>
           </div>
           <div className="overflow-x-auto max-h-96">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 sticky top-0">
+              <thead className="bg-[var(--color-bg-app)] sticky top-0">
                 <tr>
-                  <th className="text-left px-4 py-2 text-gray-500 font-medium">{t("loanDetail.month")}</th>
-                  <th className="text-right px-4 py-2 text-gray-500 font-medium">{t("loanDetail.emi")}</th>
-                  <th className="text-right px-4 py-2 text-gray-500 font-medium">{t("loanDetail.principal")}</th>
-                  <th className="text-right px-4 py-2 text-gray-500 font-medium">{t("loanDetail.interest")}</th>
-                  <th className="text-right px-4 py-2 text-gray-500 font-medium">{t("loanDetail.balance")}</th>
+                  <th className="text-left px-4 py-2 text-[var(--color-text-secondary)] font-medium">{t("loanDetail.month")}</th>
+                  <th className="text-right px-4 py-2 text-[var(--color-text-secondary)] font-medium">{t("loanDetail.emi")}</th>
+                  <th className="text-right px-4 py-2 text-[var(--color-text-secondary)] font-medium">{t("loanDetail.principal")}</th>
+                  <th className="text-right px-4 py-2 text-[var(--color-text-secondary)] font-medium">{t("loanDetail.interest")}</th>
+                  <th className="text-right px-4 py-2 text-[var(--color-text-secondary)] font-medium">{t("loanDetail.balance")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">

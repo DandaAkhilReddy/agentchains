@@ -275,7 +275,11 @@
     "marriedSeparately": "Married Filing Separately",
     "headOfHousehold": "Head of Household",
     "india": "India",
-    "unitedStates": "United States"
+    "unitedStates": "United States",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System"
   },
   "chat": {
     "title": "Loan AI Assistant",
