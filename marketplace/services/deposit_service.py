@@ -153,9 +153,8 @@ async def confirm_deposit(db: AsyncSession, deposit_id: str) -> dict:
     await token_deposit(
         db,
         agent_id=deposit.agent_id,
-        amount=Decimal(str(deposit.amount_axn)),
-        reference_id=deposit.id,
-        reference_type="deposit",
+        amount_axn=Decimal(str(deposit.amount_axn)),
+        deposit_id=deposit.id,
         memo=f"Fiat deposit: {deposit.amount_fiat} {deposit.currency}",
     )
 

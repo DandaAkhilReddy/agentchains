@@ -1,9 +1,10 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.config import settings
 from marketplace.core.auth import get_current_agent_id
 from marketplace.database import get_db
 from marketplace.services.token_service import (
@@ -41,12 +42,15 @@ class BalanceResponse(BaseModel):
 
 class HistoryEntry(BaseModel):
     id: str
+    direction: str
     tx_type: str
     amount: float
-    balance_after: float
-    counterparty_id: Optional[str] = None
+    fee_amount: float = 0.0
+    burn_amount: float = 0.0
+    reference_id: Optional[str] = None
+    reference_type: Optional[str] = None
     memo: Optional[str] = None
-    created_at: str
+    created_at: Optional[str] = None
 
 
 class HistoryResponse(BaseModel):
@@ -96,7 +100,7 @@ async def wallet_balance(
 ):
     """Return the authenticated agent's AXN balance and tier info."""
     data = await get_balance(db, agent_id)
-    return BalanceResponse(**data)
+    return BalanceResponse(**data, token_name=settings.token_name)
 
 
 @router.get("/history", response_model=HistoryResponse)
@@ -107,8 +111,8 @@ async def wallet_history(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Return paginated ledger history for the authenticated agent."""
-    data = await get_history(db, agent_id, page, page_size)
-    return HistoryResponse(**data)
+    entries, total = await get_history(db, agent_id, page, page_size)
+    return HistoryResponse(entries=entries, total=total, page=page, page_size=page_size)
 
 
 @router.post("/deposit")
@@ -118,7 +122,10 @@ async def wallet_deposit(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Create a fiat deposit request that will be converted to AXN."""
-    deposit = await create_deposit(db, agent_id, req.amount_fiat, req.currency)
+    try:
+        deposit = await create_deposit(db, agent_id, req.amount_fiat, req.currency)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return deposit
 
 
@@ -139,7 +146,12 @@ async def wallet_supply(
 ):
     """Public endpoint: return AXN token supply statistics."""
     data = await get_supply(db)
-    return SupplyResponse(**data)
+    return SupplyResponse(
+        total_minted=data["total_minted"],
+        total_burned=data["total_burned"],
+        circulating=data["circulating"],
+        treasury=data.get("platform_balance", 0.0),
+    )
 
 
 @router.post("/transfer")
@@ -149,15 +161,26 @@ async def wallet_transfer(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Transfer AXN tokens to another agent."""
-    entry = await transfer(
-        db,
-        from_agent_id=agent_id,
-        to_agent_id=req.to_agent_id,
-        amount=req.amount,
-        tx_type="transfer",
-        memo=req.memo,
-    )
-    return entry
+    try:
+        entry = await transfer(
+            db,
+            from_agent_id=agent_id,
+            to_agent_id=req.to_agent_id,
+            amount=req.amount,
+            tx_type="transfer",
+            memo=req.memo,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {
+        "id": entry.id,
+        "amount": float(entry.amount),
+        "fee_amount": float(entry.fee_amount),
+        "burn_amount": float(entry.burn_amount),
+        "tx_type": entry.tx_type,
+        "memo": entry.memo,
+        "created_at": entry.created_at.isoformat() if entry.created_at else None,
+    }
 
 
 @router.get("/tiers", response_model=TiersResponse)
