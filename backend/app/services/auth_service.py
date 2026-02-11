@@ -20,7 +20,7 @@ def _init_firebase():
     if _app is not None:
         return
     try:
-        # Strategy 1: Base64-encoded service account JSON (preferred for Azure)
+        # Strategy 1: Base64-encoded service account JSON (preferred for deployment)
         if settings.firebase_service_account_base64:
             sa_json = json.loads(
                 base64.b64decode(settings.firebase_service_account_base64)

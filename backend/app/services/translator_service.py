@@ -1,16 +1,14 @@
-"""Azure Translator service — EN to HI/TE translation.
+"""OpenAI-based translation service — EN to HI/TE/ES translation.
 
-Free tier: 2M characters/month.
+Uses the same OpenAI API key as the rest of the app.
 """
 
 import logging
-import httpx
+from openai import AsyncOpenAI
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
-
-TRANSLATOR_ENDPOINT = "https://api.cognitive.microsofttranslator.com"
 
 SUPPORTED_LANGUAGES = {
     "en": "English",
@@ -21,17 +19,19 @@ SUPPORTED_LANGUAGES = {
 
 
 class TranslatorService:
-    """Azure Translator for multi-language AI output."""
+    """OpenAI-based translator for multi-language AI output."""
 
     def __init__(self):
-        self.key = settings.azure_translator_key
-        self.region = settings.azure_translator_region
-        self.configured = bool(self.key)
-        if not self.configured:
-            logger.warning("Azure Translator not configured")
+        if settings.openai_api_key:
+            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+            self.configured = True
+        else:
+            self.client = None
+            self.configured = False
+            logger.warning("OpenAI not configured — translation unavailable")
 
     async def translate(self, text: str, target_language: str, source_language: str = "en") -> str:
-        """Translate text to target language.
+        """Translate text to target language using OpenAI.
 
         Args:
             text: Source text
@@ -51,51 +51,48 @@ class TranslatorService:
             logger.warning(f"Unsupported language: {target_language}")
             return text
 
+        target_name = SUPPORTED_LANGUAGES[target_language]
+        source_name = SUPPORTED_LANGUAGES.get(source_language, source_language)
+
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{TRANSLATOR_ENDPOINT}/translate",
-                    params={
-                        "api-version": "3.0",
-                        "from": source_language,
-                        "to": target_language,
+            response = await self.client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"You are a translator. Translate the following text from {source_name} to {target_name}. "
+                                   f"Return ONLY the translated text, nothing else.",
                     },
-                    headers={
-                        "Ocp-Apim-Subscription-Key": self.key,
-                        "Ocp-Apim-Subscription-Region": self.region,
-                        "Content-Type": "application/json",
-                    },
-                    json=[{"text": text}],
-                    timeout=10.0,
-                )
-                response.raise_for_status()
-                result = response.json()
-                return result[0]["translations"][0]["text"]
+                    {"role": "user", "content": text},
+                ],
+                temperature=0.3,
+                max_tokens=1000,
+            )
+            return response.choices[0].message.content.strip()
         except Exception as e:
             logger.error(f"Translation error: {e}")
             return text
 
     async def detect_language(self, text: str) -> str:
-        """Detect the language of input text."""
+        """Detect the language of input text using OpenAI."""
         if not self.configured:
             return "en"
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{TRANSLATOR_ENDPOINT}/detect",
-                    params={"api-version": "3.0"},
-                    headers={
-                        "Ocp-Apim-Subscription-Key": self.key,
-                        "Ocp-Apim-Subscription-Region": self.region,
-                        "Content-Type": "application/json",
+            response = await self.client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Detect the language of the following text. "
+                                   "Return ONLY the ISO 639-1 language code (e.g., 'en', 'hi', 'te', 'es'). Nothing else.",
                     },
-                    json=[{"text": text}],
-                    timeout=10.0,
-                )
-                response.raise_for_status()
-                result = response.json()
-                return result[0]["language"]
+                    {"role": "user", "content": text},
+                ],
+                temperature=0.0,
+                max_tokens=5,
+            )
+            return response.choices[0].message.content.strip().lower()
         except Exception as e:
             logger.error(f"Language detection error: {e}")
             return "en"

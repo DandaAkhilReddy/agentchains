@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-BACKEND_URL="${1:-https://app-loan-analyzer-api.azurewebsites.net}"
-FRONTEND_URL="${2:-https://app-loan-analyzer-web.azurewebsites.net}"
+BACKEND_URL="${1:-http://localhost:8000}"
+FRONTEND_URL="${2:-http://localhost:5173}"
 PASS=0
 FAIL=0
 
@@ -42,12 +42,8 @@ EMI=$(curl -sf -X POST "$BACKEND_URL/api/emi/calculate" \
 FE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL/" 2>/dev/null)
 [ "$FE_STATUS" = "200" ] && check "Frontend serves HTML" "PASS" || check "Frontend serves HTML" "HTTP $FE_STATUS"
 
-# 5. API proxy works (frontend URL → backend)
-PROXY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL/api/health" 2>/dev/null)
-[ "$PROXY_STATUS" = "200" ] && check "API proxy via nginx" "PASS" || check "API proxy via nginx" "HTTP $PROXY_STATUS"
-
-# 6. Auth endpoint returns 400/401 (not connection refused)
-AUTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$FRONTEND_URL/api/auth/verify-token" \
+# 5. Auth endpoint returns 400/401 (not connection refused)
+AUTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/api/auth/verify-token" \
   -H "Content-Type: application/json" -d '{}' 2>/dev/null)
 [[ "$AUTH_STATUS" =~ ^(400|401|422)$ ]] && check "Auth endpoint reachable" "PASS" || check "Auth endpoint reachable" "HTTP $AUTH_STATUS"
 

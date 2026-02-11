@@ -145,13 +145,13 @@ class TestCORSHeaders:
         resp = await async_client.options(
             "/api/health",
             headers={
-                "Origin": "https://app-loan-analyzer-web.azurewebsites.net",
+                "Origin": "http://localhost:5173",
                 "Access-Control-Request-Method": "GET",
             },
         )
         assert resp.status_code == 200
         assert resp.headers["access-control-allow-origin"] == (
-            "https://app-loan-analyzer-web.azurewebsites.net"
+            "http://localhost:5173"
         )
         assert "GET" in resp.headers.get("access-control-allow-methods", "")
 
@@ -176,7 +176,7 @@ class TestCORSHeaders:
         resp = await async_client.options(
             "/api/health",
             headers={
-                "Origin": "https://app-loan-analyzer-web.azurewebsites.net",
+                "Origin": "http://localhost:5173",
                 "Access-Control-Request-Method": "GET",
             },
         )

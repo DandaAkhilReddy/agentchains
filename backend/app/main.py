@@ -74,7 +74,7 @@ async def health_check():
 
 @app.get("/api/health/ready")
 async def readiness_check():
-    """Readiness probe — checks DB connectivity. Used by Azure App Service."""
+    """Readiness probe — checks DB connectivity."""
     from app.db.session import engine
 
     try:

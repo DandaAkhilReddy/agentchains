@@ -6,14 +6,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-# Mock Azure/Firebase/OpenAI SDK modules before any app imports
+# Mock SDK modules before any app imports
 for _mod in [
-    "azure", "azure.ai", "azure.ai.documentintelligence",
-    "azure.ai.documentintelligence.models", "azure.core",
-    "azure.core.credentials", "azure.storage", "azure.storage.blob",
-    "azure.cognitiveservices", "azure.cognitiveservices.speech",
     "firebase_admin", "firebase_admin.auth",
     "openai",
+    "pdfplumber",
 ]:
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
@@ -31,17 +28,10 @@ class TestConfigFields:
 
         expected_fields = [
             "database_url",
-            "azure_openai_endpoint",
-            "azure_openai_key",
-            "azure_openai_deployment",
-            "azure_doc_intel_endpoint",
-            "azure_doc_intel_key",
-            "azure_storage_connection_string",
-            "azure_storage_container",
-            "azure_translator_key",
-            "azure_translator_region",
-            "azure_tts_key",
-            "azure_tts_region",
+            "openai_api_key",
+            "openai_model",
+            "openai_embedding_model",
+            "upload_dir",
             "firebase_project_id",
             "firebase_service_account_base64",
             "environment",
@@ -84,25 +74,21 @@ class TestConfigDefaults:
         s = self._make_settings()
         assert s.log_level == "INFO"
 
-    def test_azure_openai_deployment_default(self):
+    def test_openai_model_default(self):
         s = self._make_settings()
-        assert s.azure_openai_deployment == "gpt-4o-mini"
+        assert s.openai_model == "gpt-4o-mini"
 
-    def test_azure_storage_container_default(self):
+    def test_openai_embedding_model_default(self):
         s = self._make_settings()
-        assert s.azure_storage_container == "loan-documents"
+        assert s.openai_embedding_model == "text-embedding-3-small"
 
-    def test_azure_translator_region_default(self):
+    def test_upload_dir_default(self):
         s = self._make_settings()
-        assert s.azure_translator_region == "centralindia"
-
-    def test_azure_tts_region_default(self):
-        s = self._make_settings()
-        assert s.azure_tts_region == "centralindia"
+        assert s.upload_dir == "./uploads"
 
     def test_cors_origins_default(self):
         s = self._make_settings()
-        assert s.cors_origins == "https://app-loan-analyzer-web.azurewebsites.net"
+        assert s.cors_origins == "http://localhost:5173"
 
 
 # ---------------------------------------------------------------------------
@@ -184,25 +170,19 @@ class TestDatabaseUrlFormat:
 
 
 # ---------------------------------------------------------------------------
-# 5. Optional Azure service fields default to None/empty
+# 5. OpenAI fields default to empty
 # ---------------------------------------------------------------------------
 
-class TestOptionalAzureDefaults:
-    """Azure service credentials should default to empty strings."""
+class TestOptionalOpenAIDefaults:
+    """OpenAI credentials should default to empty strings."""
 
-    def test_azure_fields_default_to_empty(self):
+    def test_openai_fields_default_to_empty(self):
         from app.config import Settings
 
         with patch.dict("os.environ", {}, clear=True):
             s = Settings(_env_file=None)
 
-        assert s.azure_openai_endpoint == ""
-        assert s.azure_openai_key == ""
-        assert s.azure_doc_intel_endpoint == ""
-        assert s.azure_doc_intel_key == ""
-        assert s.azure_storage_connection_string == ""
-        assert s.azure_translator_key == ""
-        assert s.azure_tts_key == ""
+        assert s.openai_api_key == ""
 
     def test_firebase_fields_default_to_empty(self):
         from app.config import Settings
@@ -213,18 +193,16 @@ class TestOptionalAzureDefaults:
         assert s.firebase_project_id == ""
         assert s.firebase_service_account_base64 == ""
 
-    def test_azure_fields_set_from_env(self):
+    def test_openai_fields_set_from_env(self):
         from app.config import Settings
 
         env = {
-            "AZURE_OPENAI_ENDPOINT": "https://my-openai.openai.azure.com/",
-            "AZURE_OPENAI_KEY": "secret-key-123",
+            "OPENAI_API_KEY": "sk-test-key-123",
         }
         with patch.dict("os.environ", env, clear=True):
             s = Settings(_env_file=None)
 
-        assert s.azure_openai_endpoint == "https://my-openai.openai.azure.com/"
-        assert s.azure_openai_key == "secret-key-123"
+        assert s.openai_api_key == "sk-test-key-123"
 
 
 # ---------------------------------------------------------------------------

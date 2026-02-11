@@ -1,4 +1,4 @@
-"""Azure OpenAI GPT-4o-mini integration for AI insights.
+"""OpenAI GPT-4o-mini integration for AI insights.
 
 Features:
 - Loan explanation in plain language (country-aware)
@@ -7,7 +7,7 @@ Features:
 """
 
 import logging
-from openai import AsyncAzureOpenAI
+from openai import AsyncOpenAI
 
 from app.config import settings
 
@@ -116,28 +116,24 @@ def _get_prompts(country: str) -> tuple[str, str, str, str]:
 
 
 class AIService:
-    """Azure OpenAI service for loan explanations and RAG Q&A."""
+    """OpenAI service for loan explanations and RAG Q&A."""
 
     def __init__(self):
-        if settings.azure_openai_endpoint and settings.azure_openai_key:
-            self.client = AsyncAzureOpenAI(
-                azure_endpoint=settings.azure_openai_endpoint,
-                api_key=settings.azure_openai_key,
-                api_version="2024-10-21",
-            )
-            self.deployment = settings.azure_openai_deployment
+        if settings.openai_api_key:
+            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+            self.model = settings.openai_model
         else:
             self.client = None
-            logger.warning("Azure OpenAI not configured")
+            logger.warning("OpenAI not configured — set OPENAI_API_KEY")
 
     async def _chat(self, system_prompt: str, user_prompt: str) -> tuple[str, dict]:
         """Send a chat completion request. Returns (text, usage_dict)."""
         if not self.client:
-            return "AI service not configured. Please set Azure OpenAI credentials.", {}
+            return "AI service not configured. Please set your OpenAI API key.", {}
 
         try:
             response = await self.client.chat.completions.create(
-                model=self.deployment,
+                model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -154,7 +150,7 @@ class AIService:
                 }
             return response.choices[0].message.content or "", usage
         except Exception as e:
-            logger.error(f"Azure OpenAI error: {e}")
+            logger.error(f"OpenAI error: {e}")
             return f"Sorry, I couldn't generate an explanation right now. Error: {str(e)}", {}
 
     async def explain_loan(
@@ -221,7 +217,7 @@ class AIService:
     ) -> tuple[str, dict]:
         """Chat with conversation history and RAG context. Returns (text, usage)."""
         if not self.client:
-            return "AI service not configured. Please set Azure OpenAI credentials.", {}
+            return "AI service not configured. Please set your OpenAI API key.", {}
 
         system, _, _, _ = _get_prompts(country)
         context = "\n\n---\n\n".join(context_chunks) if context_chunks else "No specific context available."
@@ -238,7 +234,7 @@ You also have access to this knowledge base context (use it when relevant):
 
         try:
             response = await self.client.chat.completions.create(
-                model=self.deployment,
+                model=self.model,
                 messages=messages,
                 temperature=0.7,
                 max_tokens=500,

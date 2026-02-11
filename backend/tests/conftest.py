@@ -14,14 +14,11 @@ import pytest
 from decimal import Decimal
 from httpx import ASGITransport, AsyncClient
 
-# Mock Azure SDK modules that are not installed in the test environment
+# Mock SDK modules that are not installed in the test environment
 for _mod in [
-    "azure", "azure.ai", "azure.ai.documentintelligence",
-    "azure.ai.documentintelligence.models", "azure.core",
-    "azure.core.credentials", "azure.storage", "azure.storage.blob",
-    "azure.cognitiveservices", "azure.cognitiveservices.speech",
     "firebase_admin", "firebase_admin.auth",
     "openai",
+    "pdfplumber",
 ]:
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()

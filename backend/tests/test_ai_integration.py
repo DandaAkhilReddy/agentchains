@@ -1,10 +1,10 @@
 """End-to-end integration tests for /api/ai/* routes.
 
 Tests the full route-to-service flow with mocked external services:
-- AIService (Azure OpenAI GPT-4o-mini)
-- EmbeddingService (Azure OpenAI text-embedding-3-small)
-- TranslatorService (Azure Translator)
-- TTSService (Azure Neural TTS)
+- AIService (OpenAI GPT-4o-mini)
+- EmbeddingService (OpenAI text-embedding-3-small)
+- TranslatorService (OpenAI-based translation)
+- TTSService (stub — browser Web Speech API)
 
 Coverage:
 1. Create loan -> explain loan -> verify response

@@ -7,7 +7,7 @@ Handles:
 """
 
 import logging
-from openai import AsyncAzureOpenAI
+from openai import AsyncOpenAI
 
 from app.config import settings
 
@@ -64,18 +64,15 @@ KNOWLEDGE_BASE = [
 
 
 class EmbeddingService:
-    """Generate and manage text embeddings using Azure OpenAI."""
+    """Generate and manage text embeddings using OpenAI."""
 
     def __init__(self):
-        if settings.azure_openai_endpoint and settings.azure_openai_key:
-            self.client = AsyncAzureOpenAI(
-                azure_endpoint=settings.azure_openai_endpoint,
-                api_key=settings.azure_openai_key,
-                api_version="2024-10-21",
-            )
+        if settings.openai_api_key:
+            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+            self.embedding_model = settings.openai_embedding_model
         else:
             self.client = None
-            logger.warning("Azure OpenAI not configured for embeddings")
+            logger.warning("OpenAI not configured for embeddings")
 
     async def generate_embedding(self, text: str) -> list[float]:
         """Generate embedding for a text chunk using text-embedding-3-small."""
@@ -85,7 +82,7 @@ class EmbeddingService:
         try:
             response = await self.client.embeddings.create(
                 input=text,
-                model="text-embedding-3-small",
+                model=self.embedding_model,
             )
             return response.data[0].embedding
         except Exception as e:
@@ -100,7 +97,7 @@ class EmbeddingService:
         try:
             response = await self.client.embeddings.create(
                 input=texts,
-                model="text-embedding-3-small",
+                model=self.embedding_model,
             )
             return [item.embedding for item in response.data]
         except Exception as e:

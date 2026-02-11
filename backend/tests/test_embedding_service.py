@@ -1,7 +1,7 @@
-"""Tests for the EmbeddingService (Azure OpenAI text-embedding-3-small).
+"""Tests for the EmbeddingService (OpenAI text-embedding-3-small).
 
 Covers:
-- Initialization with and without Azure credentials
+- Initialization with and without OpenAI API key
 - Single embedding generation (success, no client, empty text, API error, model param)
 - Batch embedding generation (multiple, single, no client, empty list, API error)
 - Knowledge base content validation (count, types, keys, text content)
@@ -19,10 +19,10 @@ class TestInit:
     """Test EmbeddingService __init__ client setup."""
 
     def test_client_created_when_configured(self):
-        """When endpoint and key are present, client should be set (not None)."""
+        """When openai_api_key is present, client should be set (not None)."""
         with patch("app.services.embedding_service.settings") as mock_settings:
-            mock_settings.azure_openai_endpoint = "https://example.openai.azure.com/"
-            mock_settings.azure_openai_key = "test-key-123"
+            mock_settings.openai_api_key = "sk-test-key-123"
+            mock_settings.openai_embedding_model = "text-embedding-3-small"
 
             from app.services.embedding_service import EmbeddingService
             svc = EmbeddingService()
@@ -30,10 +30,9 @@ class TestInit:
             assert svc.client is not None
 
     def test_client_none_when_not_configured(self):
-        """When endpoint is empty, client should be None."""
+        """When openai_api_key is empty, client should be None."""
         with patch("app.services.embedding_service.settings") as mock_settings:
-            mock_settings.azure_openai_endpoint = ""
-            mock_settings.azure_openai_key = ""
+            mock_settings.openai_api_key = ""
 
             from app.services.embedding_service import EmbeddingService
             svc = EmbeddingService()
@@ -63,6 +62,7 @@ class TestGenerateEmbedding:
         mock_response.data = [mock_item]
 
         svc.client = MagicMock()
+        svc.embedding_model = "text-embedding-3-small"
         svc.client.embeddings = MagicMock()
         svc.client.embeddings.create = AsyncMock(return_value=mock_response)
 
@@ -100,6 +100,7 @@ class TestGenerateEmbedding:
         mock_response.data = [mock_item]
 
         svc.client = MagicMock()
+        svc.embedding_model = "text-embedding-3-small"
         svc.client.embeddings = MagicMock()
         svc.client.embeddings.create = AsyncMock(return_value=mock_response)
 
@@ -114,6 +115,7 @@ class TestGenerateEmbedding:
 
         svc = EmbeddingService.__new__(EmbeddingService)
         svc.client = MagicMock()
+        svc.embedding_model = "text-embedding-3-small"
         svc.client.embeddings = MagicMock()
         svc.client.embeddings.create = AsyncMock(
             side_effect=Exception("API rate limit exceeded")
@@ -126,7 +128,7 @@ class TestGenerateEmbedding:
 
     @pytest.mark.asyncio
     async def test_model_parameter_is_correct(self):
-        """Verify that model='text-embedding-3-small' is passed in the API call."""
+        """Verify that the configured embedding model is passed in the API call."""
         from app.services.embedding_service import EmbeddingService
 
         svc = EmbeddingService.__new__(EmbeddingService)
@@ -139,6 +141,7 @@ class TestGenerateEmbedding:
         mock_response.data = [mock_item]
 
         svc.client = MagicMock()
+        svc.embedding_model = "text-embedding-3-small"
         svc.client.embeddings = MagicMock()
         svc.client.embeddings.create = AsyncMock(return_value=mock_response)
 
@@ -175,6 +178,7 @@ class TestGenerateEmbeddingsBatch:
         mock_response.data = mock_items
 
         svc.client = MagicMock()
+        svc.embedding_model = "text-embedding-3-small"
         svc.client.embeddings = MagicMock()
         svc.client.embeddings.create = AsyncMock(return_value=mock_response)
 
@@ -201,6 +205,7 @@ class TestGenerateEmbeddingsBatch:
         mock_response.data = [mock_item]
 
         svc.client = MagicMock()
+        svc.embedding_model = "text-embedding-3-small"
         svc.client.embeddings = MagicMock()
         svc.client.embeddings.create = AsyncMock(return_value=mock_response)
 
@@ -243,6 +248,7 @@ class TestGenerateEmbeddingsBatch:
 
         svc = EmbeddingService.__new__(EmbeddingService)
         svc.client = MagicMock()
+        svc.embedding_model = "text-embedding-3-small"
         svc.client.embeddings = MagicMock()
         svc.client.embeddings.create = AsyncMock(
             side_effect=Exception("Service unavailable")

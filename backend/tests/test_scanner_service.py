@@ -1,6 +1,6 @@
 """Tests for app.services.scanner_service — regex extraction and helpers.
 
-These tests exercise the pure-function extraction logic (no Azure calls).
+These tests exercise the pure-function extraction logic (no API calls).
 """
 
 import sys
@@ -8,16 +8,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Mock the Azure SDK modules before importing scanner_service
-_azure_mocks = {}
-for mod_name in [
-    "azure", "azure.ai", "azure.ai.documentintelligence",
-    "azure.ai.documentintelligence.models", "azure.core",
-    "azure.core.credentials",
-]:
+# Mock SDK modules before importing scanner_service
+for mod_name in ["pdfplumber"]:
     if mod_name not in sys.modules:
-        _azure_mocks[mod_name] = MagicMock()
-        sys.modules[mod_name] = _azure_mocks[mod_name]
+        sys.modules[mod_name] = MagicMock()
 
 from app.services.scanner_service import (
     ExtractedField,
@@ -38,14 +32,10 @@ from app.services.scanner_service import (
 
 @pytest.fixture
 def scanner():
-    """ScannerService with clients=None (Azure services not configured)."""
+    """ScannerService with client=None (OpenAI not configured)."""
     with patch("app.services.scanner_service.settings") as mock_settings:
-        mock_settings.azure_doc_intel_endpoint = ""
-        mock_settings.azure_doc_intel_key = ""
-        mock_settings.azure_openai_endpoint = ""
-        mock_settings.azure_openai_key = ""
+        mock_settings.openai_api_key = ""
         svc = ScannerService()
-        assert svc.doc_intel_client is None
         assert svc.ai_client is None
         return svc
 
@@ -328,7 +318,6 @@ class TestCurrencyDetection:
 class TestDualPatternExtraction:
 
     def test_us_document_detected_with_in_default(self, scanner):
-        """US dollar document should still extract when default country is IN."""
         text = "Chase Home Loan: $250,000 at 6.5% APR for 30 year term. Monthly payment: $1,580"
         fields = scanner._extract_fields(text, country="IN")
         bank = _find_field(fields, "bank_name")
@@ -339,7 +328,6 @@ class TestDualPatternExtraction:
         assert currency.value == "USD"
 
     def test_indian_document_still_works(self, scanner):
-        """Indian document continues to work as before."""
         text = "SBI Home Loan: ₹50,00,000 at 8.5% p.a. for 240 months. EMI: ₹43,391"
         fields = scanner._extract_fields(text, country="IN")
         principal = _find_field(fields, "principal_amount")
@@ -350,7 +338,6 @@ class TestDualPatternExtraction:
         assert currency.value == "INR"
 
     def test_us_document_with_us_country(self, scanner):
-        """US document with country=US should use US patterns as primary."""
         text = "Wells Fargo mortgage: $350,000 at 7% annual for 30 year loan"
         fields = scanner._extract_fields(text, country="US")
         bank = _find_field(fields, "bank_name")
@@ -361,7 +348,6 @@ class TestDualPatternExtraction:
         assert currency.value == "USD"
 
     def test_no_currency_detected(self, scanner):
-        """Text with no currency signals should not have a detected_currency field."""
         text = "Loan term: 20 years at 8.5%"
         fields = scanner._extract_fields(text, country="IN")
         currency = _find_field(fields, "detected_currency")

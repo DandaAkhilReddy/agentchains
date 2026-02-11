@@ -1,4 +1,4 @@
-"""Tests for app.services.ai_service — Azure OpenAI GPT integration."""
+"""Tests for app.services.ai_service — OpenAI GPT integration."""
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,11 +11,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 @pytest.fixture
 def unconfigured_ai_service():
-    """AIService with no Azure OpenAI credentials (client=None)."""
+    """AIService with no OpenAI credentials (client=None)."""
     with patch("app.services.ai_service.settings") as mock_settings:
-        mock_settings.azure_openai_endpoint = ""
-        mock_settings.azure_openai_key = ""
-        mock_settings.azure_openai_deployment = "gpt-4o-mini"
+        mock_settings.openai_api_key = ""
+        mock_settings.openai_model = "gpt-4o-mini"
         from app.services.ai_service import AIService
 
         svc = AIService()
@@ -25,13 +24,12 @@ def unconfigured_ai_service():
 
 @pytest.fixture
 def configured_ai_service():
-    """AIService with a mocked AsyncAzureOpenAI client."""
+    """AIService with a mocked AsyncOpenAI client."""
     with patch("app.services.ai_service.settings") as mock_settings:
-        mock_settings.azure_openai_endpoint = "https://fake.openai.azure.com"
-        mock_settings.azure_openai_key = "fake-key"
-        mock_settings.azure_openai_deployment = "gpt-4o-mini"
+        mock_settings.openai_api_key = "sk-fake-key"
+        mock_settings.openai_model = "gpt-4o-mini"
 
-        with patch("app.services.ai_service.AsyncAzureOpenAI") as MockClient:
+        with patch("app.services.ai_service.AsyncOpenAI") as MockClient:
             mock_client_instance = AsyncMock()
             MockClient.return_value = mock_client_instance
 
@@ -39,7 +37,7 @@ def configured_ai_service():
 
             svc = AIService()
             svc.client = mock_client_instance
-            svc.deployment = "gpt-4o-mini"
+            svc.model = "gpt-4o-mini"
             return svc
 
 
@@ -49,7 +47,7 @@ def configured_ai_service():
 
 
 class TestAIServiceNotConfigured:
-    """When Azure OpenAI is not configured, all methods return a fallback."""
+    """When OpenAI is not configured, all methods return a fallback."""
 
     @pytest.mark.asyncio
     async def test_explain_loan_not_configured(self, unconfigured_ai_service):
@@ -95,7 +93,7 @@ class TestAIServiceNotConfigured:
 
 
 class TestAIServiceErrorHandling:
-    """When the Azure OpenAI client raises, the service returns an error message."""
+    """When the OpenAI client raises, the service returns an error message."""
 
     @pytest.mark.asyncio
     async def test_chat_error_handling(self, configured_ai_service):
@@ -262,12 +260,9 @@ class TestChatWithHistory:
         call_kwargs = configured_ai_service.client.chat.completions.create.call_args
         messages = call_kwargs.kwargs["messages"]
         system_content = messages[0]["content"]
-        # Both context chunks should be present in the system prompt
         assert "RBI mandates zero prepayment penalty" in system_content
         assert "Fixed rate loans may have up to 2%" in system_content
-        # The separator should be used
         assert "---" in system_content
-        # The knowledge base preamble should be present
         assert "knowledge base context" in system_content
 
     @pytest.mark.asyncio
@@ -288,25 +283,18 @@ class TestChatWithHistory:
 
         call_kwargs = configured_ai_service.client.chat.completions.create.call_args
         messages = call_kwargs.kwargs["messages"]
-        # system + 1 user = 2 messages
         assert len(messages) == 2
         assert messages[0]["role"] == "system"
         assert messages[1] == {"role": "user", "content": "Hello"}
 
     @pytest.mark.asyncio
     async def test_all_history_entries_forwarded(self, configured_ai_service):
-        """The service forwards ALL history entries to the API (trimming is the caller's job).
-
-        The route trims to last 6 via ``req.history[-6:]`` before calling
-        ``chat_with_history``, so the service itself must pass through everything
-        it receives — even if there are more than 6 entries.
-        """
+        """The service forwards ALL history entries to the API."""
         mock_response = _make_mock_response("Here's your answer.")
         configured_ai_service.client.chat.completions.create = AsyncMock(
             return_value=mock_response
         )
 
-        # Build 8 history entries (more than the route-level trim of 6)
         history = [
             ("user", f"Question {i}")
             if i % 2 == 0
@@ -322,11 +310,9 @@ class TestChatWithHistory:
 
         call_kwargs = configured_ai_service.client.chat.completions.create.call_args
         messages = call_kwargs.kwargs["messages"]
-        # system + 8 history + 1 user = 10 messages
         assert len(messages) == 10
         assert messages[0]["role"] == "system"
         assert messages[-1] == {"role": "user", "content": "Final question"}
-        # Verify all 8 history entries are present
         for i in range(8):
             expected_content = f"Question {i}" if i % 2 == 0 else f"Answer {i}"
             assert messages[i + 1]["content"] == expected_content
@@ -368,7 +354,6 @@ class TestExplainLoanCountryContext:
 
     @pytest.mark.asyncio
     async def test_us_country_uses_us_system_prompt(self, configured_ai_service):
-        """When country='US', the system prompt references American context and $ currency."""
         mock_response = _make_mock_response("Your mortgage explanation...")
         configured_ai_service.client.chat.completions.create = AsyncMock(
             return_value=mock_response
@@ -389,18 +374,15 @@ class TestExplainLoanCountryContext:
         call_kwargs = configured_ai_service.client.chat.completions.create.call_args
         messages = call_kwargs.kwargs["messages"]
         system_content = messages[0]["content"]
-        # US system prompt markers
         assert "American" in system_content
         assert "$" in system_content or "US numbering" in system_content
 
-        # User prompt should use $ formatting (from LOAN_EXPLANATION_PROMPT_US)
         user_content = messages[1]["content"]
         assert "$" in user_content
         assert "tax deductions" in user_content
 
     @pytest.mark.asyncio
     async def test_in_country_uses_india_system_prompt(self, configured_ai_service):
-        """When country='IN' (default), the system prompt references Indian context and rupees."""
         mock_response = _make_mock_response("Your SBI home loan explanation...")
         configured_ai_service.client.chat.completions.create = AsyncMock(
             return_value=mock_response
@@ -421,11 +403,9 @@ class TestExplainLoanCountryContext:
         call_kwargs = configured_ai_service.client.chat.completions.create.call_args
         messages = call_kwargs.kwargs["messages"]
         system_content = messages[0]["content"]
-        # India system prompt markers
         assert "Indian" in system_content
         assert "\u20b9" in system_content or "Indian numbering" in system_content
 
-        # User prompt should use rupee formatting (from LOAN_EXPLANATION_PROMPT_IN)
         user_content = messages[1]["content"]
         assert "\u20b9" in user_content
 
@@ -436,11 +416,9 @@ class TestExplainLoanCountryContext:
 
 
 class TestExplainStrategy:
-    """Verify that explain_strategy includes the relay-race metaphor."""
 
     @pytest.mark.asyncio
     async def test_includes_relay_race_metaphor(self, configured_ai_service):
-        """The strategy prompt includes the relay race metaphor for motivation."""
         mock_response = _make_mock_response("Great strategy! Think of it like a relay race...")
         configured_ai_service.client.chat.completions.create = AsyncMock(
             return_value=mock_response
@@ -461,13 +439,11 @@ class TestExplainStrategy:
         user_content = messages[1]["content"]
         assert "relay race" in user_content.lower()
         assert "baton" in user_content.lower()
-        # Verify payoff order is joined with arrow
         assert "HDFC Personal" in user_content
-        assert "\u2192" in user_content  # → arrow character
+        assert "\u2192" in user_content
 
     @pytest.mark.asyncio
     async def test_us_strategy_also_has_relay_metaphor(self, configured_ai_service):
-        """US strategy prompt also uses the relay race metaphor."""
         mock_response = _make_mock_response("Think of a relay race!")
         configured_ai_service.client.chat.completions.create = AsyncMock(
             return_value=mock_response
@@ -487,7 +463,6 @@ class TestExplainStrategy:
         messages = call_kwargs.kwargs["messages"]
         user_content = messages[1]["content"]
         assert "relay race" in user_content.lower()
-        # US prompt uses $ formatting
         assert "$" in user_content
 
 
@@ -497,11 +472,9 @@ class TestExplainStrategy:
 
 
 class TestAskWithContext:
-    """Verify that ask_with_context injects context into the RAG prompt."""
 
     @pytest.mark.asyncio
     async def test_uses_context_in_prompt(self, configured_ai_service):
-        """Context chunks are joined and placed into the user prompt."""
         mock_response = _make_mock_response("Based on the knowledge base...")
         configured_ai_service.client.chat.completions.create = AsyncMock(
             return_value=mock_response
@@ -521,9 +494,7 @@ class TestAskWithContext:
 
         call_kwargs = configured_ai_service.client.chat.completions.create.call_args
         messages = call_kwargs.kwargs["messages"]
-        # System prompt should be Indian
         assert "Indian" in messages[0]["content"]
-        # User prompt should contain the context chunks and question
         user_content = messages[1]["content"]
         assert "Section 80C" in user_content
         assert "Section 24(b)" in user_content
@@ -531,7 +502,6 @@ class TestAskWithContext:
 
     @pytest.mark.asyncio
     async def test_empty_context_uses_fallback(self, configured_ai_service):
-        """When context_chunks is empty, a fallback text is used."""
         mock_response = _make_mock_response("I don't have specific information...")
         configured_ai_service.client.chat.completions.create = AsyncMock(
             return_value=mock_response
@@ -550,7 +520,6 @@ class TestAskWithContext:
 
     @pytest.mark.asyncio
     async def test_us_context_uses_us_prompts(self, configured_ai_service):
-        """US country code selects US RAG prompt and system prompt."""
         mock_response = _make_mock_response("In the US, you can deduct...")
         configured_ai_service.client.chat.completions.create = AsyncMock(
             return_value=mock_response
@@ -569,19 +538,16 @@ class TestAskWithContext:
 
 
 # ---------------------------------------------------------------------------
-# Tests: graceful handling when Azure OpenAI is not configured
+# Tests: graceful handling when OpenAI is not configured
 # ---------------------------------------------------------------------------
 
 
 class TestServiceGracefullyHandlesNotConfigured:
-    """All public methods must return safe fallback values when client=None."""
 
     @pytest.mark.asyncio
     async def test_all_methods_return_fallback(self, unconfigured_ai_service):
-        """Every public method returns ('...not configured...', {}) when client is None."""
         svc = unconfigured_ai_service
 
-        # explain_loan
         text, usage = await svc.explain_loan(
             bank_name="SBI", loan_type="home", principal=5000000,
             outstanding=4500000, rate=8.5, rate_type="floating",
@@ -590,7 +556,6 @@ class TestServiceGracefullyHandlesNotConfigured:
         assert "not configured" in text.lower()
         assert usage == {}
 
-        # explain_strategy
         text, usage = await svc.explain_strategy(
             strategy_name="Avalanche", num_loans=3, extra=10000,
             interest_saved=250000, months_saved=18,
@@ -599,14 +564,12 @@ class TestServiceGracefullyHandlesNotConfigured:
         assert "not configured" in text.lower()
         assert usage == {}
 
-        # ask_with_context
         text, usage = await svc.ask_with_context(
             question="What is EMI?", context_chunks=["Some context"],
         )
         assert "not configured" in text.lower()
         assert usage == {}
 
-        # chat_with_history
         text, usage = await svc.chat_with_history(
             message="Hello", history=[], context_chunks=[],
         )
@@ -614,9 +577,7 @@ class TestServiceGracefullyHandlesNotConfigured:
         assert usage == {}
 
     def test_client_is_none_when_not_configured(self, unconfigured_ai_service):
-        """The client attribute should be None when credentials are missing."""
         assert unconfigured_ai_service.client is None
 
     def test_configured_service_has_client(self, configured_ai_service):
-        """The client attribute should be set when credentials are provided."""
         assert configured_ai_service.client is not None

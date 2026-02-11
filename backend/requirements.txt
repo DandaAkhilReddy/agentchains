@@ -11,12 +11,11 @@ asyncpg==0.30.0
 alembic==1.14.1
 pgvector==0.3.6
 
-# Azure AI Services
-azure-ai-documentintelligence==1.0.0
-azure-storage-blob==12.24.1
-azure-ai-translation-text==1.0.1
-azure-cognitiveservices-speech==1.42.0
+# AI (OpenAI)
 openai==1.58.1
+
+# PDF extraction
+pdfplumber==0.11.4
 
 # Auth
 firebase-admin==6.6.0

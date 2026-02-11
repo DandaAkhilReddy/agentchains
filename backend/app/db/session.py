@@ -6,6 +6,12 @@ from app.config import settings
 
 _url = settings.database_url or "postgresql+asyncpg://test:test@localhost:5432/test"
 
+# Render provides postgres:// URLs; asyncpg needs postgresql+asyncpg://
+if _url.startswith("postgres://"):
+    _url = _url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif _url.startswith("postgresql://") and "+asyncpg" not in _url:
+    _url = _url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
 engine = create_async_engine(
     _url,
     echo=settings.environment == "development",

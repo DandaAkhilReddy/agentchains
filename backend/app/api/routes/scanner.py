@@ -44,7 +44,7 @@ async def upload_document(
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File size exceeds 10MB limit")
 
-    # Upload to Azure Blob
+    # Upload to local storage
     blob_service = BlobService()
     if not blob_service.is_configured:
         raise HTTPException(status_code=503, detail="Document scanning is temporarily unavailable (storage not configured)")
@@ -74,13 +74,13 @@ async def upload_document(
         scanner = ScannerService()
         fields = []
 
-        # Strategy 1: GPT-4o Vision (images) / GPT-4o text analysis (PDFs)
+        # Strategy 1: GPT-4o Vision (images) / GPT-4o text analysis (PDFs via pdfplumber)
         try:
             fields = await scanner.analyze_with_ai(content, file.content_type)
         except Exception as e:
             logger.warning(f"Strategy 1 (AI vision) failed: {e}")
 
-        # Strategy 2: Azure Doc Intel OCR → GPT-4o text analysis (fallback for images)
+        # Strategy 2: pdfplumber text → GPT-4o text analysis (fallback for images)
         if not fields and scanner.ai_client:
             try:
                 ocr_text = await scanner._extract_text(content, file.content_type)
@@ -89,10 +89,12 @@ async def upload_document(
             except Exception as e:
                 logger.warning(f"Strategy 2 (AI text) failed: {e}")
 
-        # Strategy 3: Azure Doc Intel → regex patterns (final fallback)
+        # Strategy 3: pdfplumber text → regex patterns (final fallback)
         if not fields:
             try:
-                fields = await scanner.analyze_from_bytes(content, file.content_type, country=user.country)
+                extracted_text = await scanner._extract_text(content, file.content_type)
+                if extracted_text.strip():
+                    fields = scanner._extract_fields(extracted_text, country=user.country)
             except Exception as e:
                 logger.warning(f"Strategy 3 (regex) failed: {e}")
 

@@ -9,15 +9,12 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+pgvector-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
-[![Azure](https://img.shields.io/badge/100%25_Azure-0078D4?style=for-the-badge&logo=microsoftazure&logoColor=white)](https://azure.microsoft.com)
-[![Tests](https://img.shields.io/badge/Tests-627_Passing-brightgreen?style=for-the-badge&logo=testcafe&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-717_Passing-brightgreen?style=for-the-badge&logo=testcafe&logoColor=white)](#testing)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
 **Scan loan documents with AI | Optimize repayment across multiple loans | Save lakhs in interest**
 
-[Live Demo](https://app-loan-analyzer-web.azurewebsites.net) | [API Swagger](https://app-loan-analyzer-api.azurewebsites.net/docs) | [CTO Review: 8.2/10](docs/CTO_REVIEW.md)
-
-[Getting Started](#quick-start) | [Features](#features) | [Architecture](#architecture) | [API Docs](#api-endpoints) | [CI/CD](#cicd-pipeline) | [Contributing](#contributing)
+[Getting Started](#quick-start) | [Features](#features) | [Architecture](#architecture) | [API Docs](#api-endpoints) | [Contributing](#contributing)
 
 ---
 
@@ -34,7 +31,7 @@
 </td>
 <td>
 
-**AI Document Scanner** with GPT-4o Vision + Azure Doc Intelligence — auto-detects INR/USD currency and creates loans instantly
+**AI Document Scanner** with GPT-4o Vision + pdfplumber — auto-detects INR/USD currency and creates loans instantly
 
 </td>
 <td>
@@ -61,7 +58,7 @@
 
 **Document Scanner**
 
-GPT-4o Vision + Azure OCR — auto-detect currency (INR/USD), cross-field validation
+GPT-4o Vision + pdfplumber — auto-detect currency (INR/USD), cross-field validation
 </td>
 <td width="25%" align="center">
 
@@ -99,7 +96,7 @@ Auto-detect INR/USD from scanned documents — switches country context automati
 
 **Trilingual**
 
-English, Hindi, Telugu — UI + AI output + TTS
+English, Hindi, Telugu — UI + AI output
 </td>
 </tr>
 <tr>
@@ -212,16 +209,13 @@ Result: Pay personal loan first (12% effective), even though
 
 ## AI Document Scanner
 
-The scanner uses a **3-strategy cascade** for maximum extraction accuracy:
+The scanner uses a **2-strategy cascade** for maximum extraction accuracy:
 
 ```
-Strategy 1: GPT-4o Vision (images) / GPT-4o text analysis (PDFs)
+Strategy 1: GPT-4o Vision (images) / GPT-4o text analysis (PDFs via pdfplumber)
      │
      ▼ (if fails)
-Strategy 2: Azure OCR → GPT-4o text analysis
-     │
-     ▼ (if fails)
-Strategy 3: Azure Document Intelligence → regex pattern matching
+Strategy 2: pdfplumber text extraction → regex pattern matching
 ```
 
 ### Key Scanner Features
@@ -262,13 +256,13 @@ Strategy 3: Azure Document Intelligence → regex pattern matching
 └────────────────────────┬────────────────────────────────────┘
                          │ HTTPS + Firebase Auth Token
 ┌────────────────────────▼────────────────────────────────────┐
-│              Python FastAPI (async) — App Service B1         │
+│                   Python FastAPI (async)                      │
 │                                                              │
 │  ┌─── API Layer ──────────────────────────────────────────┐  │
 │  │ /auth /loans /optimizer /scanner /emi /ai /admin /reviews│  │
 │  └────────────────────────┬───────────────────────────────┘  │
 │  ┌─── Service Layer ──────▼───────────────────────────────┐  │
-│  │ AuthSvc · ScannerSvc · AISvc · TranslatorSvc · TTSSvc  │  │
+│  │ AuthSvc · ScannerSvc · AISvc · TranslatorSvc           │  │
 │  │ UsageTracker (cost estimation + logging)                │  │
 │  └────────────────────────┬───────────────────────────────┘  │
 │  ┌─── Core Engine ────────▼───────────────────────────────┐  │
@@ -278,16 +272,16 @@ Strategy 3: Azure Document Intelligence → regex pattern matching
 └───────┬──────────────┬────────────────────┬─────────────────┘
         │              │                    │
 ┌───────▼──────┐ ┌─────▼────────────┐ ┌────▼──────────────────┐
-│ Azure Blob   │ │ PostgreSQL 16    │ │ Azure AI Services     │
+│ Local File   │ │ PostgreSQL 16    │ │ OpenAI API            │
 │ Storage      │ │ + pgvector       │ │                       │
-│              │ │                  │ │ • Document Intelligence│
-│ Raw docs     │ │ • users          │ │   (Layout model)      │
-│ Hot→Cool→    │ │ • loans          │ │ • OpenAI GPT-4o-mini  │
-│ Archive      │ │ • scan_jobs      │ │   (Vision + Text)     │
-│              │ │ • repayment_plans│ │ • Translator (free)   │
-│              │ │ • doc_embeddings │ │ • Neural TTS (free)   │
-│              │ │ • consent_records│ │   Neerja / Swara /    │
-│              │ │ • audit_logs     │ │   Shruti              │
+│              │ │                  │ │ • GPT-4o-mini         │
+│ ./uploads/   │ │ • users          │ │   (Vision + Text)     │
+│              │ │ • loans          │ │ • text-embedding-3-   │
+│              │ │ • scan_jobs      │ │   small (RAG)         │
+│              │ │ • repayment_plans│ │ • Translation via     │
+│              │ │ • doc_embeddings │ │   chat completions    │
+│              │ │ • consent_records│ │                       │
+│              │ │ • audit_logs     │ │                       │
 │              │ │ • reviews        │ │                       │
 │              │ │ • api_usage_logs │ │                       │
 └──────────────┘ └──────────────────┘ └───────────────────────┘
@@ -305,12 +299,11 @@ Strategy 3: Azure Document Intelligence → regex pattern matching
 | Database | SQLAlchemy (async) + AsyncPG | 2.0.36 |
 | Migrations | Alembic | 1.14.1 |
 | Vector DB | pgvector | 0.3.6 |
-| OCR | Azure Document Intelligence | 1.0.0 |
-| AI/LLM | OpenAI SDK (Azure OpenAI) | 1.58.1 |
+| PDF Extraction | pdfplumber | 0.11.4 |
+| AI/LLM | OpenAI SDK | 1.58.1 |
 | Auth | Firebase Admin | 6.6.0 |
-| Blob Storage | Azure Storage Blob | 12.24.1 |
-| Translator | Azure AI Translation | 1.0.1 |
-| TTS | Azure Cognitive Services Speech | 1.42.0 |
+| File Storage | Local filesystem (pathlib) | built-in |
+| Translation | OpenAI chat completions | — |
 | Config | Pydantic Settings | 2.7.1 |
 | Testing | Pytest + Pytest-AsyncIO | 8.3.4 |
 
@@ -466,7 +459,7 @@ Strategy 3: Azure Document Intelligence → regex pattern matching
 | `POST` | `/api/ai/explain-loan` | Required | Plain-language loan explanation |
 | `POST` | `/api/ai/explain-strategy` | Required | Strategy recommendation explanation |
 | `POST` | `/api/ai/ask` | Required | RAG-powered Q&A (loans, RBI rules, tax) |
-| `POST` | `/api/ai/tts` | Required | Text-to-Speech (EN/HI/TE voices) |
+| `POST` | `/api/ai/tts` | Required | Text-to-Speech (browser Web Speech API) |
 
 ### Reviews & Feedback
 
@@ -493,9 +486,10 @@ Strategy 3: Azure Document Intelligence → regex pattern matching
 
 ### Prerequisites
 
-- **Node.js** 18+ and **npm**
 - **Python** 3.11+
+- **Node.js** 20+ and **npm**
 - **Docker** (for PostgreSQL + pgvector)
+- **OpenAI API key** (for AI features — EMI calculator works without it)
 
 ### 1. Clone the repo
 
@@ -508,7 +502,7 @@ cd Claude_Loan_Management_Indian
 
 ```bash
 # Create a .env file with your Postgres password
-echo "POSTGRES_PASSWORD=your_secure_password" > .env
+echo "POSTGRES_PASSWORD=localdev123" > .env
 
 # Start PostgreSQL 16 + pgvector
 docker compose up -d
@@ -527,9 +521,9 @@ source .venv/bin/activate  # Linux/Mac
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure environment (copy and fill in your Azure keys)
+# Configure environment
 cp .env.example .env
-# Edit .env with your credentials
+# Edit .env — add your OPENAI_API_KEY (required for AI features)
 
 # Run database migrations
 alembic upgrade head
@@ -548,7 +542,7 @@ npm install
 
 # Configure environment
 cp .env.example .env
-# Edit .env with your Firebase config
+# Default config points to http://localhost:8000 with auth bypass enabled
 
 # Start the dev server
 npm run dev
@@ -556,16 +550,14 @@ npm run dev
 
 Open **http://localhost:5173** and you're ready to go!
 
+> **Note:** Set `VITE_BYPASS_AUTH=true` in `frontend/.env` to skip Firebase authentication during local development.
+
 ---
 
 ## Project Structure
 
 ```
 Indian_Loan_Analyzer_Claude/
-│
-├── .github/
-│   └── workflows/
-│       └── deploy.yml            # CI/CD: test → build → deploy to Azure
 │
 ├── backend/
 │   ├── app/
@@ -584,9 +576,9 @@ Indian_Loan_Analyzer_Claude/
 │   │   │   ├── session.py          # Async engine + session factory
 │   │   │   └── repositories/      # user, loan, scan, plan, embedding, review, usage repos
 │   │   ├── schemas/               # Pydantic v2 request/response models
-│   │   ├── services/              # Azure AI, auth, blob, translator, TTS, usage tracker
+│   │   ├── services/              # OpenAI AI, auth, file storage, translator, usage tracker
 │   │   └── config.py              # Environment config (pydantic-settings)
-│   ├── tests/                     # 487+ tests across 30 test files
+│   ├── tests/                     # 717+ tests across 30 test files
 │   ├── alembic/                   # Database migrations
 │   ├── Dockerfile                 # Python 3.11-slim + uvicorn
 │   ├── .env.example               # Template for backend env vars
@@ -611,19 +603,46 @@ Indian_Loan_Analyzer_Claude/
 │   ├── package.json
 │   └── vite.config.ts             # Code-splitting + manual chunks
 │
-├── infra/
-│   └── azure-deploy.sh            # Azure resource provisioning script
-│
 ├── scripts/
-│   └── smoke-test.sh              # Post-deployment health checks
+│   └── smoke-test.sh              # Post-start health checks
 │
 ├── docs/
 │   └── CTO_REVIEW.md              # Architecture review (8.2/10)
 │
 ├── docker-compose.yml             # Local dev: PostgreSQL 16 + pgvector
-├── docker-compose.prod.yml        # Production: full stack with nginx
 └── README.md
 ```
+
+---
+
+## Environment Variables
+
+### Backend (`backend/.env`)
+
+| Variable | Required | Description |
+|:---------|:---------|:------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string (`postgresql+asyncpg://user:pass@host:5432/db`) |
+| `OPENAI_API_KEY` | For AI features | OpenAI API key (`sk-...`) |
+| `OPENAI_MODEL` | No | Model name (default: `gpt-4o-mini`) |
+| `OPENAI_EMBEDDING_MODEL` | No | Embedding model (default: `text-embedding-3-small`) |
+| `UPLOAD_DIR` | No | File upload directory (default: `./uploads`) |
+| `FIREBASE_PROJECT_ID` | For auth | Firebase project ID for token verification |
+| `FIREBASE_SERVICE_ACCOUNT_BASE64` | For auth | Base64-encoded service account JSON |
+| `ENVIRONMENT` | No | `development` or `production` (default: `development`) |
+| `LOG_LEVEL` | No | Logging level (default: `INFO`) |
+| `CORS_ORIGINS` | No | Comma-separated allowed origins (default: `http://localhost:5173`) |
+
+### Frontend (`frontend/.env`)
+
+| Variable | Required | Description |
+|:---------|:---------|:------------|
+| `VITE_API_BASE_URL` | No | Backend API URL (default: `http://localhost:8000`) |
+| `VITE_BYPASS_AUTH` | No | Set to `true` to skip Firebase auth in development |
+| `VITE_FIREBASE_API_KEY` | For auth | Firebase Web API key |
+| `VITE_FIREBASE_AUTH_DOMAIN` | For auth | Firebase auth domain |
+| `VITE_FIREBASE_PROJECT_ID` | For auth | Firebase project ID |
+
+> **Note:** Frontend env vars are baked into the build at compile time via Vite. They are NOT secret.
 
 ---
 
@@ -631,26 +650,22 @@ Indian_Loan_Analyzer_Claude/
 
 ### Admin Dashboard (`/admin` — restricted to admin emails)
 
-The admin dashboard provides a single-page overview of the entire platform:
-
-- **Metric Cards** — Total users (+ new this week), total loans by type, documents scanned (+ success rate), estimated API cost (30 days)
-- **Usage by Service** — Table showing call counts, token usage, and cost per Azure service (OpenAI, Doc Intelligence, Blob Storage, Translator, TTS)
-- **Daily Costs** — 14-day breakdown of API spending
+- **Metric Cards** — Total users, total loans by type, documents scanned, estimated API cost (30 days)
+- **Usage by Service** — Table showing call counts, token usage, and cost per service
 - **User Management** — Full user list with email, join date, and loan count
 - **Review Moderation** — Approve/reject testimonials, respond to feedback
 - **Feature Requests** — Track status: New → Acknowledged → Planned → Done
 
 ### API Usage Tracking
 
-Every Azure AI service call is automatically logged with cost estimates:
+Every OpenAI API call is automatically logged with cost estimates:
 
 | Service | Cost Model | Tracking |
 |:--------|:-----------|:---------|
 | OpenAI GPT-4o-mini | $0.15/1M input + $0.60/1M output tokens | Per-call token counts |
 | OpenAI Embeddings | $0.02/1M tokens | Per-call token counts |
-| Document Intelligence | ~$0.0015/page | Per-page logging |
-| Blob Storage | ~$0.001/operation | Per-upload logging |
-| Translator / TTS | Free tier | Call count only |
+| File Storage | Local filesystem | Per-upload logging |
+| Translation | OpenAI chat completions | Call count only |
 
 ---
 
@@ -685,14 +700,6 @@ Compact:   ₹1L  ₹1Cr  ₹5K            (Lakh, Crore, Thousand)
 - **Floating rate loans**: 0% prepayment penalty (RBI circular 2014)
 - **Fixed rate loans**: Bank-specific foreclosure charges (typically 2-4%)
 
-### Indian TTS Voices
-
-| Language | Voice | Region |
-|:---------|:------|:-------|
-| English | `en-IN-NeerjaNeural` | Central India |
-| Hindi | `hi-IN-SwaraNeural` | Central India |
-| Telugu | `te-IN-ShrutiNeural` | Central India |
-
 ---
 
 ## Production Readiness
@@ -704,7 +711,7 @@ Compact:   ₹1L  ₹1Cr  ₹5K            (Lakh, Crore, Thousand)
 | Security & Auth | 9/10 | 25% |
 | Financial Math Accuracy | **10/10** | 20% |
 | Database Design | 9/10 | 15% |
-| Azure Integration | 9/10 | 15% |
+| Service Integration | 9/10 | 15% |
 | Frontend Architecture | 8/10 | 10% |
 | Infrastructure & DevOps | 7/10 | 10% |
 | Code Quality & Patterns | 8/10 | 5% |
@@ -715,34 +722,13 @@ Compact:   ₹1L  ₹1Cr  ₹5K            (Lakh, Crore, Thousand)
 
 | Metric | Value |
 |:-------|:------|
-| Backend tests | **487** passing across 30 files |
+| Backend tests | **717** passing across 30 files |
 | Frontend tests | **163** passing across 12 files |
 | Critical-path JS | **94 KB** gzipped (target: <170 KB) |
 | EMI verified against | SBI, HDFC bank calculators |
 | Decimal precision | 28 digits, ROUND_HALF_UP to paisa |
-| Scanner strategies | 3-cascade (GPT-4o Vision → OCR+AI → Regex) |
+| Scanner strategies | 2-cascade (GPT-4o Vision → pdfplumber + Regex) |
 | Supported currencies | INR, USD (auto-detected) |
-
----
-
-## Azure Cost Estimate
-
-100% Azure deployment at **~$138/month** for 10K users:
-
-| Service | Config | Cost/Month |
-|:--------|:-------|:-----------|
-| Static Web Apps | Free tier (9 Indian CDN POPs) | $0 |
-| App Service | B1 Linux, Central India (Pune) | ~$13 |
-| PostgreSQL Flexible | B1ms, 1 vCore, 2GB, 32GB storage | ~$20 |
-| Blob Storage | Standard LRS, 10GB | ~$1 |
-| OpenAI GPT-4o-mini | ~500K tokens/month | ~$85 |
-| Document Intelligence | Layout model, ~5K pages/month | ~$8 |
-| Translator | Free tier (2M chars/month) | $0 |
-| Neural TTS | Free tier (500K chars/month) | $0 |
-| Miscellaneous | DNS, egress, logging | ~$11 |
-| **Total** | | **~$138** |
-
-> Budget headroom: **$862/month** remaining from $1,000 limit. Scales to 50K users at ~$555/month.
 
 ---
 
@@ -754,94 +740,7 @@ This application includes infrastructure for India's **Digital Personal Data Pro
 - **Right to Erasure** — `DELETE /api/user/delete-account` cascades all user data
 - **Data Export** — `POST /api/user/export-data` returns full JSON dump
 - **Audit Trail** — All operations logged in `audit_logs` table
-- **Data Residency** — All processing in Central India (Pune) Azure region
 - **Purpose Limitation** — Consent specifies exact usage purpose
-
----
-
-## Environment Variables
-
-### Backend (`backend/.env`)
-
-| Variable | Required | Description |
-|:---------|:---------|:------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string (`postgresql+asyncpg://user:pass@host:5432/db?ssl=require` for Azure) |
-| `FIREBASE_PROJECT_ID` | Yes | Firebase project ID for token verification |
-| `AZURE_OPENAI_ENDPOINT` | For AI features | Azure OpenAI endpoint URL |
-| `AZURE_OPENAI_KEY` | For AI features | Azure OpenAI API key |
-| `AZURE_OPENAI_DEPLOYMENT` | For AI features | Deployment name (default: `gpt-4o-mini`) |
-| `AZURE_DOC_INTEL_ENDPOINT` | For scanner | Azure Document Intelligence endpoint |
-| `AZURE_DOC_INTEL_KEY` | For scanner | Azure Document Intelligence key |
-| `AZURE_STORAGE_CONNECTION_STRING` | For scanner | Azure Blob Storage connection string |
-| `AZURE_STORAGE_CONTAINER` | For scanner | Blob container name (default: `loan-documents`) |
-| `AZURE_TRANSLATOR_KEY` | For translation | Azure Translator key |
-| `AZURE_TRANSLATOR_REGION` | For translation | Azure region (default: `centralindia`) |
-| `AZURE_TTS_KEY` | For TTS | Azure Speech Services key |
-| `AZURE_TTS_REGION` | For TTS | Azure region (default: `centralindia`) |
-| `ENVIRONMENT` | No | `development` or `production` (default: `development`) |
-| `LOG_LEVEL` | No | Logging level (default: `INFO`) |
-| `CORS_ORIGINS` | No | Comma-separated allowed origins |
-
-### Frontend (`frontend/.env`)
-
-| Variable | Required | Description |
-|:---------|:---------|:------------|
-| `VITE_API_BASE_URL` | No | Backend API URL (empty string = same-origin proxy in production) |
-| `VITE_FIREBASE_API_KEY` | Yes | Firebase Web API key |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Yes | Firebase auth domain (`project.firebaseapp.com`) |
-| `VITE_FIREBASE_PROJECT_ID` | Yes | Firebase project ID |
-| `VITE_FIREBASE_STORAGE_BUCKET` | No | Firebase storage bucket |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | No | Firebase messaging sender ID |
-| `VITE_FIREBASE_APP_ID` | No | Firebase app ID |
-
-> **Note:** Frontend env vars are baked into the build at compile time via Vite. They are NOT secret — they are embedded in the JS bundle.
-
----
-
-## CI/CD Pipeline
-
-Automated via **GitHub Actions** (`.github/workflows/deploy.yml`). Triggers on every push to `main`.
-
-```
-push to main
-     │
-     ├── test-backend ────── pip install → pytest (487 tests)
-     │
-     ├── test-frontend ───── npm install → vitest (163 tests)
-     │
-     └── build-and-deploy ── (runs after both test jobs pass)
-              │
-              ├── Login to Azure (service principal)
-              ├── Login to ACR (loanalyzeracr.azurecr.io)
-              ├── Build + push backend Docker image
-              ├── Build + push frontend Docker image (with VITE_FIREBASE_* build args)
-              ├── Deploy backend to App Service (app-loan-analyzer-api)
-              ├── Deploy frontend to App Service (app-loan-analyzer-web)
-              ├── Smoke test backend (/api/health → 200)
-              └── Smoke test frontend (/ → 200)
-```
-
-### Required GitHub Secrets
-
-| Secret | Description |
-|:-------|:------------|
-| `AZURE_CREDENTIALS` | Service principal JSON (`az ad sp create-for-rbac --role Contributor`) |
-| `VITE_FIREBASE_API_KEY` | Firebase Web API key |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase auth domain |
-| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID |
-| `VITE_FIREBASE_STORAGE_BUCKET` | Firebase storage bucket |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase messaging sender ID |
-| `VITE_FIREBASE_APP_ID` | Firebase app ID |
-
-### Azure Resources
-
-| Resource | Name | Purpose |
-|:---------|:-----|:--------|
-| Resource Group | `rg-loan-analyzer` | All resources |
-| Container Registry | `loanalyzeracr.azurecr.io` | Docker images (managed identity pull) |
-| App Service (backend) | `app-loan-analyzer-api` | FastAPI on port 8000 |
-| App Service (frontend) | `app-loan-analyzer-web` | nginx serving React build |
-| PostgreSQL Flexible | `loan-analyzer-db.postgres.database.azure.com` | Database (`loan_analyzer`) |
 
 ---
 
@@ -855,16 +754,16 @@ pip install -r requirements.txt
 pytest -v --tb=short
 ```
 
-**487+ tests** across 30 files covering:
+**717+ tests** across 30 files covering:
 
 - `test_financial_math.py` — EMI calculation, amortization, reverse EMI, edge cases
 - `test_strategies.py` — All 4 repayment strategies with freed-EMI rollover
 - `test_indian_rules.py` — Tax deductions (80C, 24b, 80E, 80EEA), RBI prepayment rules
 - `test_optimization.py` — Multi-loan optimizer integration
-- `test_scanner_service.py` — Scanner extraction, currency detection, dual-pattern matching, bank normalization
-- `test_*_routes.py` — API endpoint request/response validation (auth, loans, EMI, scanner, optimizer, AI)
-- `test_*_integration.py` — End-to-end integration tests (auth, loans, EMI, scanner, optimizer)
-- `test_*_service.py` — Azure AI (with usage tracking), auth, blob, translator, TTS service mocks
+- `test_scanner_service.py` — Scanner extraction, currency detection, dual-pattern matching
+- `test_*_routes.py` — API endpoint request/response validation
+- `test_*_integration.py` — End-to-end integration tests
+- `test_*_service.py` — AI, auth, blob, translator, TTS service mocks
 - `test_schemas.py` — Pydantic model validation
 - `test_country_rules.py`, `test_usa_rules.py` — Multi-country tax rules
 
@@ -876,27 +775,7 @@ npm install
 npm test
 ```
 
-**163+ tests** across 12 files covering:
-
-- `format.test.ts` — Indian number formatting (INR ₹1,00,000), compact display (₹1L, ₹1Cr)
-- `emi-math.test.ts` — Client-side EMI calculations
-- `i18n.test.ts` — Translation keys for EN, HI, TE locales
-- `validators.test.ts` — Input validation rules
-- `useAuth.test.ts` — Auth hook: login, signup, logout, token verification (16 tests)
-- `api.test.ts` — Axios interceptors: token attach, 401/429/500 handling (21 tests)
-- `LoginPage.test.tsx` — Form rendering, view switching, validation, error messages (28 tests)
-- `ProtectedRoute.test.tsx` — Spinner, redirect, children rendering (5 tests)
-- `ErrorBoundary.test.tsx` — Error catching, retry, custom fallback (8 tests)
-- `firebase.test.ts` — Config validation, re-exports (13 tests)
-- `authStore.test.ts` — Zustand state management (6 tests)
-- `stores.test.ts` — All Zustand stores (12 tests)
-
-### Production Build Check
-
-```bash
-cd frontend
-npm run build    # Zero TypeScript errors required
-```
+**163+ tests** across 12 files.
 
 ---
 
@@ -905,34 +784,19 @@ npm run build    # Zero TypeScript errors required
 ### Local Development (recommended)
 
 1. **Start the database** — `docker compose up -d` (PostgreSQL 16 + pgvector on port 5432)
-2. **Start the backend** — `cd backend && uvicorn app.main:app --reload --port 8000` (hot-reload)
-3. **Start the frontend** — `cd frontend && npm run dev` (Vite dev server on port 5173, proxies API calls)
-
-The frontend Vite dev server runs on `http://localhost:5173`. Set `VITE_API_BASE_URL=http://localhost:8000` in `frontend/.env` for local development.
-
-### Production (Docker Compose)
-
-```bash
-# Fill in environment variables
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-
-# Build and run all services
-docker compose -f docker-compose.prod.yml up --build
-```
+2. **Start the backend** — `cd backend && uvicorn app.main:app --reload --port 8000`
+3. **Start the frontend** — `cd frontend && npm run dev` (Vite dev server on port 5173)
 
 ### Key Development Patterns
 
-- **State management**: Zustand stores (`authStore`, `languageStore`, `countryStore`, `uiStore`) — no Redux boilerplate
-- **Server state**: TanStack Query with 5-minute stale time, 2 retries, no refetch-on-focus
-- **API client**: Axios with auto-attached Firebase token (request interceptor) and global error handling (response interceptor)
+- **State management**: Zustand stores — no Redux boilerplate
+- **Server state**: TanStack Query with 5-minute stale time, 2 retries
+- **API client**: Axios with auto-attached Firebase token and global error handling
 - **Routing**: React Router v7 with lazy-loaded pages for code-splitting
-- **i18n**: i18next with JSON locale files — add new languages by creating `locales/xx.json` and registering in `lib/i18n.ts`
-- **Financial math**: All monetary calculations use Python `Decimal` with 28-digit precision, `ROUND_HALF_UP` to the paisa
-- **Auth flow**: Firebase client SDK (frontend) → `getIdToken()` → Bearer header → `firebase_admin.auth.verify_id_token()` (backend)
-- **Admin auth**: Hardcoded admin email list checked via `get_admin_user` FastAPI dependency (both backend and frontend)
-- **Usage tracking**: Fire-and-forget logging — every AI/Doc Intel/Blob call records tokens and estimated cost to `api_usage_logs`
-- **Currency detection**: Auto-detect INR/USD from scanned documents, switch country context, use appropriate pattern sets
+- **i18n**: i18next with JSON locale files — add languages by creating `locales/xx.json`
+- **Financial math**: All monetary calculations use Python `Decimal` with 28-digit precision
+- **Auth flow**: Firebase client SDK → `getIdToken()` → Bearer header → server verification
+- **Currency detection**: Auto-detect INR/USD from scanned documents, switch country context
 
 ---
 
@@ -956,9 +820,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 <div align="center">
 
-**Built with [Claude Code](https://claude.ai/claude-code) using 50 AI agents organized as a software company**
-
-*10 teams x 5 agents (1 leader + 4 developers) — Phase 0 scaffolding, Phase 1 parallel development, Phase 2 integration, Phase 3 QA + CTO review*
+**Built with [Claude Code](https://claude.ai/claude-code)**
 
 ---
 

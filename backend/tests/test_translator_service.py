@@ -1,4 +1,4 @@
-"""Tests for app.services.translator_service — Azure Translator EN to HI/TE."""
+"""Tests for app.services.translator_service — OpenAI-based translation."""
 
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
@@ -13,8 +13,7 @@ from unittest.mock import patch, AsyncMock, MagicMock
 def unconfigured_translator():
     """TranslatorService with empty key => not configured."""
     with patch("app.services.translator_service.settings") as mock_settings:
-        mock_settings.azure_translator_key = ""
-        mock_settings.azure_translator_region = "centralindia"
+        mock_settings.openai_api_key = ""
         from app.services.translator_service import TranslatorService
 
         svc = TranslatorService()
@@ -26,8 +25,8 @@ def unconfigured_translator():
 def configured_translator():
     """TranslatorService with a fake key => configured."""
     with patch("app.services.translator_service.settings") as mock_settings:
-        mock_settings.azure_translator_key = "fake-key"
-        mock_settings.azure_translator_region = "centralindia"
+        mock_settings.openai_api_key = "sk-fake-key"
+        mock_settings.openai_model = "gpt-4o-mini"
         from app.services.translator_service import TranslatorService
 
         svc = TranslatorService()
@@ -36,20 +35,21 @@ def configured_translator():
 
 
 # ---------------------------------------------------------------------------
-# Helper: build a mock httpx.AsyncClient context manager
+# Helper: mock OpenAI chat completion response
 # ---------------------------------------------------------------------------
 
 
-def _make_httpx_mock(json_response):
-    """Return a patched httpx.AsyncClient that yields a mock with .post()."""
-    mock_client = AsyncMock()
+def _mock_chat_response(text: str):
+    """Create a mock OpenAI ChatCompletion response."""
+    mock_message = MagicMock()
+    mock_message.content = text
+
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
+
     mock_response = MagicMock()
-    mock_response.json.return_value = json_response
-    mock_response.raise_for_status = MagicMock()
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-    mock_client.post = AsyncMock(return_value=mock_response)
-    return mock_client
+    mock_response.choices = [mock_choice]
+    return mock_response
 
 
 # ---------------------------------------------------------------------------
@@ -78,76 +78,61 @@ class TestTranslate:
     @pytest.mark.asyncio
     async def test_en_to_hi_success(self, configured_translator):
         """EN->HI: mock API returns Hindi text."""
-        mock_client = _make_httpx_mock(
-            [{"translations": [{"text": "\u0928\u092e\u0938\u094d\u0924\u0947"}]}]
+        configured_translator.client.chat.completions.create = AsyncMock(
+            return_value=_mock_chat_response("\u0928\u092e\u0938\u094d\u0924\u0947")
         )
-        with patch(
-            "app.services.translator_service.httpx.AsyncClient",
-            return_value=mock_client,
-        ):
-            result = await configured_translator.translate("Hello", target_language="hi")
-            assert result == "\u0928\u092e\u0938\u094d\u0924\u0947"
+        result = await configured_translator.translate("Hello", target_language="hi")
+        assert result == "\u0928\u092e\u0938\u094d\u0924\u0947"
 
     @pytest.mark.asyncio
     async def test_en_to_te_success(self, configured_translator):
         """EN->TE: mock API returns Telugu text."""
-        mock_client = _make_httpx_mock(
-            [{"translations": [{"text": "\u0c38\u0c4d\u0c35\u0c3e\u0c17\u0c24\u0c02"}]}]
+        configured_translator.client.chat.completions.create = AsyncMock(
+            return_value=_mock_chat_response("\u0c38\u0c4d\u0c35\u0c3e\u0c17\u0c24\u0c02")
         )
-        with patch(
-            "app.services.translator_service.httpx.AsyncClient",
-            return_value=mock_client,
-        ):
-            result = await configured_translator.translate(
-                "Welcome", target_language="te"
-            )
-            assert result == "\u0c38\u0c4d\u0c35\u0c3e\u0c17\u0c24\u0c02"
+        result = await configured_translator.translate(
+            "Welcome", target_language="te"
+        )
+        assert result == "\u0c38\u0c4d\u0c35\u0c3e\u0c17\u0c24\u0c02"
 
     @pytest.mark.asyncio
     async def test_same_language_returns_original(self, configured_translator):
         """When target == source, return text immediately (no API call)."""
-        with patch(
-            "app.services.translator_service.httpx.AsyncClient"
-        ) as MockHttpx:
-            result = await configured_translator.translate(
-                "Hello", target_language="en", source_language="en"
-            )
-            assert result == "Hello"
-            MockHttpx.assert_not_called()
+        configured_translator.client.chat.completions.create = AsyncMock()
+
+        result = await configured_translator.translate(
+            "Hello", target_language="en", source_language="en"
+        )
+        assert result == "Hello"
+        configured_translator.client.chat.completions.create.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_not_configured_returns_original(self, unconfigured_translator):
-        """When azure_translator_key is empty, returns original text."""
+        """When openai_api_key is empty, returns original text."""
         result = await unconfigured_translator.translate("Hello", target_language="hi")
         assert result == "Hello"
 
     @pytest.mark.asyncio
     async def test_unsupported_language_returns_original(self, configured_translator):
         """'fr' is not in SUPPORTED_LANGUAGES, so returns original text."""
-        with patch(
-            "app.services.translator_service.httpx.AsyncClient"
-        ) as MockHttpx:
-            result = await configured_translator.translate(
-                "Hello", target_language="fr"
-            )
-            assert result == "Hello"
-            MockHttpx.assert_not_called()
+        configured_translator.client.chat.completions.create = AsyncMock()
+
+        result = await configured_translator.translate(
+            "Hello", target_language="fr"
+        )
+        assert result == "Hello"
+        configured_translator.client.chat.completions.create.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_api_error_returns_original(self, configured_translator):
-        """When httpx raises an exception, returns original text."""
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post = AsyncMock(side_effect=Exception("Connection timeout"))
-        with patch(
-            "app.services.translator_service.httpx.AsyncClient",
-            return_value=mock_client,
-        ):
-            result = await configured_translator.translate(
-                "Hello", target_language="hi"
-            )
-            assert result == "Hello"
+        """When OpenAI raises an exception, returns original text."""
+        configured_translator.client.chat.completions.create = AsyncMock(
+            side_effect=Exception("Connection timeout")
+        )
+        result = await configured_translator.translate(
+            "Hello", target_language="hi"
+        )
+        assert result == "Hello"
 
 
 # ---------------------------------------------------------------------------
@@ -161,26 +146,22 @@ class TestDetectLanguage:
     @pytest.mark.asyncio
     async def test_detect_hindi(self, configured_translator):
         """Detect Hindi text."""
-        mock_client = _make_httpx_mock([{"language": "hi"}])
-        with patch(
-            "app.services.translator_service.httpx.AsyncClient",
-            return_value=mock_client,
-        ):
-            result = await configured_translator.detect_language(
-                "\u0928\u092e\u0938\u094d\u0924\u0947"
-            )
-            assert result == "hi"
+        configured_translator.client.chat.completions.create = AsyncMock(
+            return_value=_mock_chat_response("hi")
+        )
+        result = await configured_translator.detect_language(
+            "\u0928\u092e\u0938\u094d\u0924\u0947"
+        )
+        assert result == "hi"
 
     @pytest.mark.asyncio
     async def test_detect_english(self, configured_translator):
         """Detect English text."""
-        mock_client = _make_httpx_mock([{"language": "en"}])
-        with patch(
-            "app.services.translator_service.httpx.AsyncClient",
-            return_value=mock_client,
-        ):
-            result = await configured_translator.detect_language("Hello world")
-            assert result == "en"
+        configured_translator.client.chat.completions.create = AsyncMock(
+            return_value=_mock_chat_response("en")
+        )
+        result = await configured_translator.detect_language("Hello world")
+        assert result == "en"
 
     @pytest.mark.asyncio
     async def test_not_configured_returns_en(self, unconfigured_translator):
@@ -192,14 +173,9 @@ class TestDetectLanguage:
 
     @pytest.mark.asyncio
     async def test_api_error_returns_en(self, configured_translator):
-        """When httpx raises, defaults to 'en'."""
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post = AsyncMock(side_effect=Exception("Service unavailable"))
-        with patch(
-            "app.services.translator_service.httpx.AsyncClient",
-            return_value=mock_client,
-        ):
-            result = await configured_translator.detect_language("some text")
-            assert result == "en"
+        """When OpenAI raises, defaults to 'en'."""
+        configured_translator.client.chat.completions.create = AsyncMock(
+            side_effect=Exception("Service unavailable")
+        )
+        result = await configured_translator.detect_language("some text")
+        assert result == "en"

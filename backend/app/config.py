@@ -7,35 +7,22 @@ class Settings(BaseSettings):
     # Database
     database_url: str = ""  # REQUIRED — set via DATABASE_URL env var
 
-    # Azure OpenAI
-    azure_openai_endpoint: str = ""
-    azure_openai_key: str = ""
-    azure_openai_deployment: str = "gpt-4o-mini"
+    # OpenAI
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
 
-    # Azure Document Intelligence
-    azure_doc_intel_endpoint: str = ""
-    azure_doc_intel_key: str = ""
-
-    # Azure Blob Storage
-    azure_storage_connection_string: str = ""
-    azure_storage_container: str = "loan-documents"
-
-    # Azure Translator
-    azure_translator_key: str = ""
-    azure_translator_region: str = "centralindia"
-
-    # Azure TTS
-    azure_tts_key: str = ""
-    azure_tts_region: str = "centralindia"
+    # File uploads (local filesystem)
+    upload_dir: str = "./uploads"
 
     # Firebase
     firebase_project_id: str = ""
-    firebase_service_account_base64: str = ""  # base64-encoded service account JSON for Azure
+    firebase_service_account_base64: str = ""  # base64-encoded service account JSON
 
     # App
     environment: str = "development"
     log_level: str = "INFO"
-    cors_origins: str = "https://app-loan-analyzer-web.azurewebsites.net"  # comma-separated
+    cors_origins: str = "http://localhost:5173"  # comma-separated
 
     class Config:
         env_file = ".env"

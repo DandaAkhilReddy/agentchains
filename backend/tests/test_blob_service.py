@@ -1,10 +1,12 @@
-"""Tests for Azure Blob Storage service (blob_service.py).
+"""Tests for local filesystem BlobService (blob_service.py).
 
-All Azure SDK classes are pre-mocked via conftest.py sys.modules patches.
-We patch `app.config.settings` to control BlobService.__init__ behavior.
+Covers upload, generate_sas_url, delete_blob, and is_configured.
+Uses pytest tmp_path for isolated filesystem testing.
 """
 
-from unittest.mock import MagicMock, patch, call
+import uuid
+from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -13,12 +15,11 @@ import pytest
 # Helper: build a BlobService with controlled settings
 # ---------------------------------------------------------------------------
 
-def _make_service(connection_string="DefaultEndpointsProtocol=https;AccountName=test;AccountKey=abc123;EndpointSuffix=core.windows.net",
-                  container="loan-documents"):
+
+def _make_service(upload_dir: str = "./uploads"):
     """Create a BlobService instance with patched settings."""
     mock_settings = MagicMock()
-    mock_settings.azure_storage_connection_string = connection_string
-    mock_settings.azure_storage_container = container
+    mock_settings.upload_dir = upload_dir
 
     with patch("app.services.blob_service.settings", mock_settings):
         from app.services.blob_service import BlobService
@@ -26,201 +27,168 @@ def _make_service(connection_string="DefaultEndpointsProtocol=https;AccountName=
     return svc
 
 
-def _make_unconfigured_service():
-    """Create a BlobService with no connection string (disabled)."""
-    return _make_service(connection_string="")
-
-
 # ===========================================================================
 # TestInit
 # ===========================================================================
 
+
 class TestInit:
     """BlobService.__init__ behaviour."""
 
-    def test_configured_client_is_not_none(self):
-        """When a connection string is provided, client should be set."""
-        svc = _make_service()
-        assert svc.client is not None
+    def test_configured_when_upload_dir_set(self, tmp_path):
+        svc = _make_service(str(tmp_path / "uploads"))
+        assert svc.is_configured is True
 
-    def test_unconfigured_client_is_none(self):
-        """When the connection string is empty, client should be None."""
-        svc = _make_unconfigured_service()
-        assert svc.client is None
+    def test_upload_dir_is_created(self, tmp_path):
+        target = tmp_path / "new_uploads"
+        svc = _make_service(str(target))
+        assert target.exists()
+
+    def test_is_configured_returns_true_with_valid_dir(self, tmp_path):
+        svc = _make_service(str(tmp_path))
+        assert svc.is_configured is True
 
 
 # ===========================================================================
 # TestUploadFile
 # ===========================================================================
 
+
 class TestUploadFile:
     """BlobService.upload_file tests."""
 
-    async def test_upload_success_returns_url(self):
-        svc = _make_service()
-
-        # Wire up the mock chain: client -> container_client -> blob_client
-        mock_blob_client = MagicMock()
-        mock_blob_client.url = "https://test.blob.core.windows.net/loan-documents/user1/somefile.pdf"
-        mock_container_client = MagicMock()
-        mock_container_client.get_blob_client.return_value = mock_blob_client
-        svc.client.get_container_client.return_value = mock_container_client
+    @pytest.mark.asyncio
+    async def test_upload_writes_file(self, tmp_path):
+        svc = _make_service(str(tmp_path))
+        content = b"PDF_CONTENT_HERE"
 
         result = await svc.upload_file(
-            content=b"PDF_CONTENT",
+            content=content,
             filename="statement.pdf",
             content_type="application/pdf",
             user_id="user1",
         )
 
         assert isinstance(result, str)
-        assert result == mock_blob_client.url
+        written = Path(result)
+        assert written.exists()
+        assert written.read_bytes() == content
 
-    async def test_blob_name_contains_user_id(self):
-        svc = _make_service()
+    @pytest.mark.asyncio
+    async def test_upload_path_contains_user_id(self, tmp_path):
+        svc = _make_service(str(tmp_path))
 
-        mock_blob_client = MagicMock()
-        mock_blob_client.url = "https://test.blob.core.windows.net/loan-documents/user42/abc.pdf"
-        mock_container_client = MagicMock()
-        mock_container_client.get_blob_client.return_value = mock_blob_client
-        svc.client.get_container_client.return_value = mock_container_client
+        result = await svc.upload_file(
+            content=b"data",
+            filename="file.pdf",
+            content_type="application/pdf",
+            user_id="user42",
+        )
 
-        await svc.upload_file(b"data", "file.pdf", "application/pdf", "user42")
+        assert "user42" in result
 
-        # get_blob_client is called with a blob_name that starts with "user42/"
-        blob_name_arg = mock_container_client.get_blob_client.call_args[0][0]
-        assert blob_name_arg.startswith("user42/")
+    @pytest.mark.asyncio
+    async def test_upload_preserves_extension(self, tmp_path):
+        svc = _make_service(str(tmp_path))
 
-    async def test_create_container_is_called(self):
-        svc = _make_service()
+        result = await svc.upload_file(
+            content=b"img",
+            filename="photo.png",
+            content_type="image/png",
+            user_id="u",
+        )
 
-        mock_blob_client = MagicMock()
-        mock_blob_client.url = "https://example.com/loan-documents/u/f.pdf"
-        mock_container_client = MagicMock()
-        mock_container_client.get_blob_client.return_value = mock_blob_client
-        svc.client.get_container_client.return_value = mock_container_client
+        assert result.endswith(".png")
 
-        await svc.upload_file(b"data", "f.pdf", "application/pdf", "u")
+    @pytest.mark.asyncio
+    async def test_upload_no_extension_defaults_to_bin(self, tmp_path):
+        svc = _make_service(str(tmp_path))
 
-        mock_container_client.create_container.assert_called_once()
+        result = await svc.upload_file(
+            content=b"data",
+            filename="noext",
+            content_type="application/octet-stream",
+            user_id="u",
+        )
 
-    async def test_not_configured_raises_runtime_error(self):
-        svc = _make_unconfigured_service()
+        assert result.endswith(".bin")
 
-        with pytest.raises(RuntimeError, match="not configured"):
-            await svc.upload_file(b"data", "f.pdf", "application/pdf", "u")
+    @pytest.mark.asyncio
+    async def test_upload_creates_user_subdirectory(self, tmp_path):
+        svc = _make_service(str(tmp_path))
 
-    async def test_content_type_is_forwarded(self):
-        svc = _make_service()
+        await svc.upload_file(b"data", "f.pdf", "application/pdf", "newuser")
 
-        mock_blob_client = MagicMock()
-        mock_blob_client.url = "https://example.com/loan-documents/u/f.png"
-        mock_container_client = MagicMock()
-        mock_container_client.get_blob_client.return_value = mock_blob_client
-        svc.client.get_container_client.return_value = mock_container_client
+        user_dir = tmp_path / "newuser"
+        assert user_dir.exists()
+        assert user_dir.is_dir()
 
-        await svc.upload_file(b"img", "photo.png", "image/png", "u")
+    @pytest.mark.asyncio
+    async def test_upload_returns_unique_names(self, tmp_path):
+        svc = _make_service(str(tmp_path))
 
-        # upload_blob should have been called with content_type="image/png"
-        mock_blob_client.upload_blob.assert_called_once()
-        _, kwargs = mock_blob_client.upload_blob.call_args
-        assert kwargs["content_type"] == "image/png"
+        r1 = await svc.upload_file(b"a", "f.pdf", "application/pdf", "u")
+        r2 = await svc.upload_file(b"b", "f.pdf", "application/pdf", "u")
+
+        assert r1 != r2
 
 
 # ===========================================================================
 # TestGenerateSasUrl
 # ===========================================================================
 
+
 class TestGenerateSasUrl:
-    """BlobService.generate_sas_url tests."""
+    """BlobService.generate_sas_url tests — local files need no SAS."""
 
-    async def test_success_returns_url_with_token(self):
-        svc = _make_service(container="loan-documents")
+    @pytest.mark.asyncio
+    async def test_returns_path_as_is(self, tmp_path):
+        svc = _make_service(str(tmp_path))
+        path = str(tmp_path / "user1" / "file.pdf")
+        result = await svc.generate_sas_url(path)
+        assert result == path
 
-        # Provide account_name and credential on the mock client
-        svc.client.account_name = "teststorage"
-        svc.client.credential = MagicMock()
-        svc.client.credential.account_key = "fakekey123"
-
-        blob_url = "https://teststorage.blob.core.windows.net/loan-documents/user1/file.pdf"
-
-        with patch("app.services.blob_service.generate_blob_sas", return_value="sv=2023&sig=abc") as mock_sas:
-            result = await svc.generate_sas_url(blob_url, expiry_hours=2)
-
-        assert "?" in result
-        assert result.startswith(blob_url)
-        assert "sv=2023&sig=abc" in result
-
-    async def test_not_configured_returns_original_url(self):
-        svc = _make_unconfigured_service()
-        original = "https://example.com/loan-documents/user1/file.pdf"
-        result = await svc.generate_sas_url(original)
-        assert result == original
-
-    async def test_invalid_url_format_returns_original(self):
-        svc = _make_service(container="loan-documents")
-        # URL that does not contain the container name at all
-        bad_url = "https://example.com/other-container/file.pdf"
-        result = await svc.generate_sas_url(bad_url)
-        assert result == bad_url
-
-    async def test_generate_blob_sas_called_with_correct_args(self):
-        svc = _make_service(container="loan-documents")
-        svc.client.account_name = "myaccount"
-        svc.client.credential = MagicMock()
-        svc.client.credential.account_key = "mykey"
-
-        blob_url = "https://myaccount.blob.core.windows.net/loan-documents/uid/doc.pdf"
-
-        with patch("app.services.blob_service.generate_blob_sas", return_value="tok") as mock_sas:
-            await svc.generate_sas_url(blob_url, expiry_hours=3)
-
-        mock_sas.assert_called_once()
-        kwargs = mock_sas.call_args[1]
-        assert kwargs["account_name"] == "myaccount"
-        assert kwargs["container_name"] == "loan-documents"
-        assert kwargs["blob_name"] == "uid/doc.pdf"
-        assert kwargs["account_key"] == "mykey"
+    @pytest.mark.asyncio
+    async def test_expiry_param_is_ignored(self, tmp_path):
+        svc = _make_service(str(tmp_path))
+        path = str(tmp_path / "file.pdf")
+        result = await svc.generate_sas_url(path, expiry_hours=24)
+        assert result == path
 
 
 # ===========================================================================
 # TestDeleteBlob
 # ===========================================================================
 
+
 class TestDeleteBlob:
     """BlobService.delete_blob tests."""
 
-    async def test_success_returns_true(self):
-        svc = _make_service(container="loan-documents")
+    @pytest.mark.asyncio
+    async def test_delete_existing_file_returns_true(self, tmp_path):
+        svc = _make_service(str(tmp_path))
+        # Create a file to delete
+        file_path = tmp_path / "user1" / "doc.pdf"
+        file_path.parent.mkdir(parents=True)
+        file_path.write_bytes(b"content")
 
-        mock_container_client = MagicMock()
-        svc.client.get_container_client.return_value = mock_container_client
-
-        blob_url = "https://test.blob.core.windows.net/loan-documents/user1/file.pdf"
-        result = await svc.delete_blob(blob_url)
+        result = await svc.delete_blob(str(file_path))
 
         assert result is True
-        mock_container_client.delete_blob.assert_called_once_with("user1/file.pdf")
+        assert not file_path.exists()
 
-    async def test_exception_returns_false(self):
-        svc = _make_service(container="loan-documents")
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_file_returns_false(self, tmp_path):
+        svc = _make_service(str(tmp_path))
 
-        mock_container_client = MagicMock()
-        mock_container_client.delete_blob.side_effect = Exception("Boom")
-        svc.client.get_container_client.return_value = mock_container_client
-
-        blob_url = "https://test.blob.core.windows.net/loan-documents/user1/file.pdf"
-        result = await svc.delete_blob(blob_url)
+        result = await svc.delete_blob(str(tmp_path / "no_such_file.pdf"))
 
         assert result is False
 
-    async def test_not_configured_returns_false(self):
-        svc = _make_unconfigured_service()
-        result = await svc.delete_blob("https://example.com/loan-documents/user1/file.pdf")
-        assert result is False
+    @pytest.mark.asyncio
+    async def test_delete_invalid_path_returns_false(self, tmp_path):
+        svc = _make_service(str(tmp_path))
 
-    async def test_invalid_url_returns_false(self):
-        svc = _make_service(container="loan-documents")
-        # URL without the container name, so split produces < 2 parts
-        result = await svc.delete_blob("https://example.com/no-match/file.pdf")
+        result = await svc.delete_blob("")
+
         assert result is False

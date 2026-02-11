@@ -7,7 +7,7 @@ from app.db.repositories.usage_repo import UsageLogRepository
 
 logger = logging.getLogger(__name__)
 
-# Pricing estimates (USD per unit) — Azure pricing as of early 2026
+# Pricing estimates (USD per unit) — OpenAI pricing as of early 2026
 PRICING = {
     "openai": {
         "input_per_1m": 0.15,   # GPT-4o-mini input

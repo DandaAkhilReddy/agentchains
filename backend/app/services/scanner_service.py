@@ -1,22 +1,18 @@
-"""Document scanner: GPT-4o Vision (primary) + Azure Doc Intel regex (fallback).
+"""Document scanner: GPT-4o Vision (primary) + pdfplumber text + regex (fallback).
 
 Primary: Sends images directly to GPT-4o-mini Vision for structured extraction.
-Fallback: Azure Document Intelligence Layout model + regex patterns.
-PDFs: Azure Doc Intel extracts text → GPT-4o-mini analyzes text.
+Fallback: pdfplumber extracts text from PDFs → GPT-4o-mini analyzes text.
+Final fallback: regex patterns on extracted text.
 """
 
 import re
 import json
 import time
 import base64
-import asyncio
 import logging
 from dataclasses import dataclass
 
-from openai import AsyncAzureOpenAI
-from azure.ai.documentintelligence import DocumentIntelligenceClient
-from azure.ai.documentintelligence.models import AnalyzeDocumentRequest, DocumentAnalysisFeature
-from azure.core.credentials import AzureKeyCredential
+from openai import AsyncOpenAI
 
 from app.config import settings
 
@@ -211,34 +207,21 @@ def _detect_currency_from_text(text: str) -> str:
 
 
 class ScannerService:
-    """Document scanner: GPT-4o Vision (primary) + Azure Doc Intel regex (fallback)."""
+    """Document scanner: GPT-4o Vision (primary) + pdfplumber + regex (fallback)."""
 
     def __init__(self):
-        if settings.azure_doc_intel_endpoint and settings.azure_doc_intel_key:
-            self.doc_intel_client = DocumentIntelligenceClient(
-                endpoint=settings.azure_doc_intel_endpoint,
-                credential=AzureKeyCredential(settings.azure_doc_intel_key),
-            )
-        else:
-            self.doc_intel_client = None
-            logger.warning("Azure Document Intelligence not configured")
-
-        if settings.azure_openai_endpoint and settings.azure_openai_key:
-            self.ai_client = AsyncAzureOpenAI(
-                azure_endpoint=settings.azure_openai_endpoint,
-                api_key=settings.azure_openai_key,
-                api_version="2024-10-21",
-            )
+        if settings.openai_api_key:
+            self.ai_client = AsyncOpenAI(api_key=settings.openai_api_key)
         else:
             self.ai_client = None
-            logger.warning("Azure OpenAI not configured — AI extraction unavailable")
+            logger.warning("OpenAI not configured — AI extraction unavailable")
 
     # ---------- Primary: GPT-4o Vision extraction ----------
 
     async def analyze_with_ai(self, content: bytes, content_type: str) -> list[ExtractedField]:
         """Use GPT-4o Vision to extract loan fields from any document."""
         if not self.ai_client:
-            raise RuntimeError("Azure OpenAI not configured")
+            raise RuntimeError("OpenAI not configured")
 
         start_time = time.time()
 
@@ -255,7 +238,7 @@ class ScannerService:
                 ]},
             ]
         else:
-            # PDFs: extract text with Azure Doc Intel, then send text to GPT-4o
+            # PDFs: extract text with pdfplumber, then send text to GPT-4o
             text = await self._extract_text(content, content_type)
             if not text.strip():
                 logger.warning("No text extracted from PDF")
@@ -265,9 +248,9 @@ class ScannerService:
                 {"role": "user", "content": f"{EXTRACTION_USER_PROMPT}\n\nDocument text:\n{text[:4000]}"},
             ]
 
-        # response_format is NOT supported with vision (image_url) inputs on Azure OpenAI
+        # response_format is NOT supported with vision (image_url) inputs
         kwargs = {
-            "model": settings.azure_openai_deployment,
+            "model": settings.openai_model,
             "messages": messages,
             "temperature": 0.1,
             "max_tokens": 500,
@@ -339,9 +322,9 @@ class ScannerService:
         return fields
 
     async def analyze_text_with_ai(self, text: str) -> list[ExtractedField]:
-        """Send OCR-extracted text to GPT-4o for structured extraction (no vision)."""
+        """Send extracted text to GPT-4o for structured extraction (no vision)."""
         if not self.ai_client:
-            raise RuntimeError("Azure OpenAI not configured")
+            raise RuntimeError("OpenAI not configured")
 
         start_time = time.time()
         messages = [
@@ -349,7 +332,7 @@ class ScannerService:
             {"role": "user", "content": f"{EXTRACTION_USER_PROMPT}\n\nDocument text:\n{text[:4000]}"},
         ]
         response = await self.ai_client.chat.completions.create(
-            model=settings.azure_openai_deployment,
+            model=settings.openai_model,
             messages=messages,
             temperature=0.1,
             max_tokens=500,
@@ -363,63 +346,25 @@ class ScannerService:
         return fields
 
     async def _extract_text(self, content: bytes, content_type: str) -> str:
-        """Extract raw text from a document using Azure Doc Intel."""
-        if not self.doc_intel_client:
+        """Extract raw text from a PDF using pdfplumber."""
+        if content_type != "application/pdf":
             return ""
-        poller = await asyncio.to_thread(
-            self.doc_intel_client.begin_analyze_document,
-            "prebuilt-layout",
-            body=content,
-            content_type=content_type,
-        )
-        result = await asyncio.to_thread(poller.result)
-        text = result.content or ""
-        if result.tables:
-            for table in result.tables:
-                for cell in table.cells:
-                    text += f" {cell.content}"
-        return text
-
-    async def analyze_document(self, document_url: str, country: str = "IN") -> list[ExtractedField]:
-        """Analyze a document using Azure Layout model.
-
-        Args:
-            document_url: Azure Blob URL or SAS URL to the document
-            country: 'IN' or 'US' for pattern selection
-
-        Returns:
-            List of extracted fields with confidence scores
-        """
-        if not self.doc_intel_client:
-            raise RuntimeError("Azure Document Intelligence not configured")
-
-        start_time = time.time()
-
-        poller = await asyncio.to_thread(
-            self.doc_intel_client.begin_analyze_document,
-            "prebuilt-layout",
-            AnalyzeDocumentRequest(url_source=document_url),
-        )
-        result = await asyncio.to_thread(poller.result)
-
-        full_text = ""
-        if result.content:
-            full_text = result.content
-
-        table_text = ""
-        if result.tables:
-            for table in result.tables:
-                for cell in table.cells:
-                    table_text += f" {cell.content}"
-
-        combined_text = f"{full_text} {table_text}"
-
-        fields = self._extract_fields(combined_text, country)
-
-        elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.info(f"Document analysis completed in {elapsed_ms}ms, extracted {len(fields)} fields")
-
-        return fields
+        try:
+            import io
+            import pdfplumber
+            text_parts = []
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
+                for page in pdf.pages:
+                    page_text = page.extract_text() or ""
+                    text_parts.append(page_text)
+                    # Also extract table text
+                    for table in page.extract_tables():
+                        for row in table:
+                            text_parts.append(" ".join(cell or "" for cell in row))
+            return "\n".join(text_parts)
+        except Exception as e:
+            logger.error(f"pdfplumber extraction error: {e}")
+            return ""
 
     @staticmethod
     def _run_patterns(text: str, patterns: dict, bank_normalizer: dict) -> list[ExtractedField]:
@@ -480,35 +425,5 @@ class ScannerService:
         currency = _detect_currency_from_text(text)
         if currency:
             fields.append(ExtractedField("detected_currency", currency, 0.80))
-
-        return fields
-
-    async def analyze_from_bytes(self, content: bytes, content_type: str, country: str = "IN") -> list[ExtractedField]:
-        """Analyze a document from raw bytes (regex fallback)."""
-        if not self.doc_intel_client:
-            raise RuntimeError("Azure Document Intelligence not configured")
-
-        start_time = time.time()
-
-        poller = await asyncio.to_thread(
-            self.doc_intel_client.begin_analyze_document,
-            "prebuilt-layout",
-            body=content,
-            content_type=content_type,
-        )
-        result = await asyncio.to_thread(poller.result)
-
-        full_text = result.content or ""
-        table_text = ""
-        if result.tables:
-            for table in result.tables:
-                for cell in table.cells:
-                    table_text += f" {cell.content}"
-
-        combined_text = f"{full_text} {table_text}"
-        fields = self._extract_fields(combined_text, country)
-
-        elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.info(f"Byte analysis completed in {elapsed_ms}ms")
 
         return fields

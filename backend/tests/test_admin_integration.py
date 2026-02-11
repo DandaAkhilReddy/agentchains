@@ -290,7 +290,7 @@ async def test_admin_get_usage(admin_client: AsyncClient, mock_db):
                 "tokens_input": 50000,
                 "tokens_output": 25000,
             },
-            "azure_di": {
+            "doc_intel": {
                 "call_count": 150,
                 "total_cost": 4.00,
                 "tokens_input": 0,
