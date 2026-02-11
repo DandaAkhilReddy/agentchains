@@ -1,12 +1,6 @@
 """Web Search Agent — searches the web, caches results, and sells them on the marketplace."""
 import json
 
-try:
-    from google.adk.agents import Agent
-    ADK_AVAILABLE = True
-except ImportError:
-    ADK_AVAILABLE = False
-
 from agents.common.marketplace_tools import (
     register_with_marketplace,
     list_data_on_marketplace,
@@ -17,6 +11,9 @@ from agents.common.marketplace_tools import (
     get_opportunities,
     get_my_earnings,
     get_my_stats,
+    register_catalog_entry,
+    suggest_price,
+    get_demand_for_me,
 )
 
 
@@ -31,7 +28,7 @@ def web_search(query: str, num_results: int = 10) -> str:
         JSON string with search results including titles, URLs, and snippets
     """
     # Simulated search results for demo
-    # In production, this would use SerpAPI, Brave Search API, or ADK's google_search
+    # In production, this would use SerpAPI, Brave Search API, or similar
     results = []
     for i in range(min(num_results, 5)):
         results.append({
@@ -77,24 +74,36 @@ def search_and_list(query: str, price_usdc: float = 0.002) -> str:
     return json.dumps(listing, indent=2, default=str)
 
 
-if ADK_AVAILABLE:
-    root_agent = Agent(
+# --- Azure OpenAI Agent ---
+try:
+    from agents.common.azure_agent import AzureAgent
+
+    root_agent = AzureAgent(
         name="web_search_seller",
-        model="gemini-2.0-flash",
         description="I search the web, cache results, and sell them on the data marketplace.",
         instruction="""You are a web search data seller agent. Your workflow:
-1. When asked to search, use the web_search tool to get results
-2. Then use search_and_list to cache results and list them on the marketplace
-3. Set fair prices based on query complexity ($0.001-$0.01)
-4. When asked about your data, use search_marketplace to check what you've listed
-5. Report your reputation when asked using get_my_reputation
+
+SETUP (do this first when joining the marketplace):
+1. Call register_with_marketplace() to register and get your JWT token
+2. Call register_catalog_entry(namespace="web_search", topic="general") to declare your capabilities
+3. Call suggest_price(category="web_search") to get optimal pricing for your data
 
 PROACTIVE workflow (maximize earnings):
-1. Call get_trending_queries() to see what buyers want right now
-2. Call get_demand_gaps() to find unmet needs in web_search category
-3. Call get_opportunities() to find high-urgency revenue opportunities
-4. For each opportunity you can serve, search the web, produce data, and list it
-5. Monitor earnings with get_my_earnings() and helpfulness with get_my_stats()
+1. Call get_demand_for_me() to see what buyers specifically need from you
+2. Call get_trending_queries() to see what buyers want right now
+3. Call get_demand_gaps() to find unmet needs in web_search category
+4. Call get_opportunities() to find high-urgency revenue opportunities
+5. For each opportunity, search the web, produce data, and list it
+
+SELLING workflow:
+1. Use web_search to get results for a query
+2. Call suggest_price(category="web_search") to get the optimal price
+3. Use search_and_list to cache results and list them on the marketplace
+4. When asked about your data, use search_marketplace to check listings
+
+MONITORING:
+- Monitor earnings with get_my_earnings() and helpfulness with get_my_stats()
+- Check reputation with get_my_reputation()
 
 Always be helpful and transparent about the quality and freshness of your data.""",
         tools=[
@@ -109,5 +118,10 @@ Always be helpful and transparent about the quality and freshness of your data."
             get_opportunities,
             get_my_earnings,
             get_my_stats,
+            register_catalog_entry,
+            suggest_price,
+            get_demand_for_me,
         ],
     )
+except ImportError:
+    root_agent = None

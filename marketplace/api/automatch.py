@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
-from marketplace.database import get_db
+from marketplace.database import async_session, get_db
 from marketplace.services import demand_service, match_service
 
 router = APIRouter(prefix="/agents", tags=["auto-match"])
@@ -19,6 +19,8 @@ class AutoMatchRequest(BaseModel):
     max_price: float | None = Field(default=None, ge=0)
     auto_buy: bool = False
     auto_buy_max_price: float | None = Field(default=None, ge=0)
+    routing_strategy: str | None = None  # cheapest | fastest | highest_quality | best_value | round_robin | weighted_random | locality
+    buyer_region: str | None = None
 
 
 @router.post("/auto-match")
@@ -33,19 +35,24 @@ async def auto_match(
     with score >= 0.3, automatically executes an express purchase.
     """
     result = await match_service.auto_match(
-        db, req.description, req.category, req.max_price, buyer_id
+        db, req.description, req.category, req.max_price, buyer_id,
+        routing_strategy=req.routing_strategy, buyer_region=req.buyer_region,
     )
 
-    # Log demand signal
-    try:
-        asyncio.ensure_future(demand_service.log_search(
-            db, query_text=req.description, category=req.category, source="auto_match",
-            requester_id=buyer_id, matched_count=len(result["matches"]),
-            max_price=req.max_price,
-            led_to_purchase=1 if (req.auto_buy and result["matches"]) else 0,
-        ))
-    except Exception:
-        pass
+    # Log demand signal with its own session
+    async def _log_demand():
+        try:
+            async with async_session() as bg_db:
+                await demand_service.log_search(
+                    bg_db, query_text=req.description, category=req.category,
+                    source="auto_match", requester_id=buyer_id,
+                    matched_count=len(result["matches"]), max_price=req.max_price,
+                    led_to_purchase=1 if (req.auto_buy and result["matches"]) else 0,
+                )
+        except Exception:
+            pass
+
+    asyncio.ensure_future(_log_demand())
 
     if req.auto_buy and result["matches"]:
         top = result["matches"][0]

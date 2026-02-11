@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Search } from "lucide-react";
 
 interface Props {
   value: string;
@@ -25,12 +26,15 @@ export default function SearchInput({
   }, [value]);
 
   return (
-    <input
-      type="text"
-      value={local}
-      onChange={(e) => setLocal(e.target.value)}
-      placeholder={placeholder}
-      className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition-colors focus:border-emerald-500/50"
-    />
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted h-4 w-4" />
+      <input
+        type="text"
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        placeholder={placeholder}
+        className="futuristic-input w-full pl-10 pr-4 py-2 text-sm"
+      />
+    </div>
   );
 }

@@ -4,7 +4,7 @@ import json
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marketplace.database import get_db
+from marketplace.database import async_session, get_db
 from marketplace.schemas.listing import ListingListResponse, ListingResponse, SellerSummary
 from marketplace.services import demand_service, listing_service
 
@@ -70,14 +70,18 @@ async def discover(
             updated_at=listing.updated_at,
         ))
 
-    # Fire-and-forget demand logging
-    try:
-        asyncio.ensure_future(demand_service.log_search(
-            db, query_text=q or "", category=category, source="discover",
-            matched_count=total, max_price=max_price,
-        ))
-    except Exception:
-        pass
+    # Fire-and-forget demand logging with its own session
+    async def _log_demand():
+        try:
+            async with async_session() as bg_db:
+                await demand_service.log_search(
+                    bg_db, query_text=q or "", category=category, source="discover",
+                    matched_count=total, max_price=max_price,
+                )
+        except Exception:
+            pass
+
+    asyncio.ensure_future(_log_demand())
 
     return ListingListResponse(
         total=total,

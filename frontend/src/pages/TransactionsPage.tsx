@@ -41,10 +41,10 @@ function Pipeline({ status }: { status: TransactionStatus }) {
                 isFailed
                   ? "border border-red-500/30 bg-red-500/10 text-red-400"
                   : isComplete
-                    ? "bg-emerald-500 text-white"
+                    ? "bg-primary text-surface"
                     : isCurrent
-                      ? "border-2 border-blue-400 text-blue-400"
-                      : "border border-zinc-700 text-zinc-600"
+                      ? "border-2 border-primary text-primary animate-pulse"
+                      : "border border-border-subtle text-text-muted"
               }`}
               title={step.label}
             >
@@ -53,7 +53,7 @@ function Pipeline({ status }: { status: TransactionStatus }) {
             {i < PIPELINE_STEPS.length - 1 && (
               <div
                 className={`h-0.5 w-4 ${
-                  !isFailed && currentStep > i ? "bg-emerald-500" : "bg-zinc-700"
+                  !isFailed && currentStep > i ? "bg-primary" : "bg-border-subtle"
                 }`}
               />
             )}
@@ -70,7 +70,7 @@ const columns: Column<Transaction>[] = [
     header: "ID",
     render: (tx) => (
       <span className="flex items-center gap-1">
-        <span className="text-zinc-400" style={{ fontFamily: "var(--font-mono)" }}>
+        <span className="text-text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
           {truncateId(tx.id)}
         </span>
         <CopyButton value={tx.id} />
@@ -106,7 +106,7 @@ const columns: Column<Transaction>[] = [
     header: "Buyer",
     render: (tx) => (
       <span className="flex items-center gap-1">
-        <span className="text-zinc-500" style={{ fontFamily: "var(--font-mono)" }}>
+        <span className="text-text-muted" style={{ fontFamily: "var(--font-mono)" }}>
           {truncateId(tx.buyer_id)}
         </span>
         <CopyButton value={tx.buyer_id} />
@@ -127,7 +127,7 @@ const columns: Column<Transaction>[] = [
     key: "initiated",
     header: "Initiated",
     render: (tx) => (
-      <span className="text-zinc-500">{relativeTime(tx.initiated_at)}</span>
+      <span className="text-text-muted">{relativeTime(tx.initiated_at)}</span>
     ),
   },
 ];
@@ -152,10 +152,10 @@ export default function TransactionsPage() {
   if (!token) {
     return (
       <div className="flex flex-col items-center py-20">
-        <div className="w-full max-w-md space-y-4">
+        <div className="glass-card gradient-border-card p-8 w-full max-w-md space-y-4">
           <div className="text-center">
-            <h3 className="text-lg font-medium">Connect Agent</h3>
-            <p className="mt-1 text-sm text-zinc-500">
+            <h3 className="text-lg font-bold gradient-text">Connect Agent</h3>
+            <p className="mt-1 text-sm text-text-secondary">
               Paste your agent JWT to view transactions
             </p>
           </div>
@@ -164,13 +164,13 @@ export default function TransactionsPage() {
             value={inputToken}
             onChange={(e) => setInputToken(e.target.value)}
             placeholder="eyJhbGciOi..."
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none focus:border-emerald-500/50"
+            className="futuristic-input w-full px-4 py-3 text-sm"
             style={{ fontFamily: "var(--font-mono)" }}
           />
           <button
             onClick={handleConnect}
             disabled={!inputToken.trim()}
-            className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-30"
+            className="btn-primary w-full px-4 py-2.5 text-sm"
           >
             Connect
           </button>
@@ -186,7 +186,7 @@ export default function TransactionsPage() {
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white outline-none"
+          className="futuristic-select px-3 py-2 text-sm"
         >
           <option value="">All Status</option>
           <option value="initiated">Initiated</option>
@@ -199,14 +199,14 @@ export default function TransactionsPage() {
         </select>
         <button
           onClick={logout}
-          className="ml-auto rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800"
+          className="btn-ghost ml-auto px-3 py-1.5 text-sm"
         >
           Disconnect
         </button>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+        <div className="glass-card border-danger/20 bg-danger-glow px-4 py-3 text-sm text-danger">
           {(error as Error).message}
         </div>
       )}
@@ -224,14 +224,14 @@ export default function TransactionsPage() {
           <button
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
-            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 disabled:opacity-30"
+            className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30"
           >
             Prev
           </button>
           <button
             disabled={page * 20 >= data.total}
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 disabled:opacity-30"
+            className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30"
           >
             Next
           </button>

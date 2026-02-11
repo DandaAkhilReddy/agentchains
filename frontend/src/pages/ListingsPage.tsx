@@ -41,19 +41,19 @@ function ListingCard({ listing, onExpressBuy }: { listing: Listing; onExpressBuy
   const CatIcon = CATEGORY_ICONS[listing.category] ?? Globe;
 
   return (
-    <div className="group flex flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition-all hover:border-zinc-700 hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20">
+    <div className="glass-card gradient-border-card glow-hover group flex flex-col p-4 transition-all hover:scale-[1.02]">
       {/* Header */}
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className="rounded-lg bg-zinc-800 p-1.5">
-            <CatIcon className="h-3.5 w-3.5 text-zinc-400" />
+          <div className="rounded-lg bg-primary-glow/50 p-1.5">
+            <CatIcon className="h-3.5 w-3.5 text-primary" />
           </div>
-          <h4 className="line-clamp-2 text-sm font-medium leading-tight">
+          <h4 className="line-clamp-2 text-sm font-medium leading-tight text-text-primary">
             {listing.title}
           </h4>
         </div>
         <span
-          className="flex-shrink-0 whitespace-nowrap rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400"
+          className="flex-shrink-0 whitespace-nowrap rounded-full bg-primary-glow px-2 py-0.5 text-xs font-semibold text-primary shadow-[0_0_8px_rgba(0,212,255,0.2)]"
           style={{ fontFamily: "var(--font-mono)" }}
         >
           {formatUSDC(listing.price_usdc)}
@@ -64,7 +64,7 @@ function ListingCard({ listing, onExpressBuy }: { listing: Listing; onExpressBuy
       <div className="mb-3 flex items-center gap-2">
         <Badge label={catLabel} variant={categoryVariant(listing.category)} />
         {listing.seller && (
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-text-muted">
             by {listing.seller.name}
           </span>
         )}
@@ -72,7 +72,7 @@ function ListingCard({ listing, onExpressBuy }: { listing: Listing; onExpressBuy
 
       {/* Description */}
       {listing.description && (
-        <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-zinc-500">
+        <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-text-muted">
           {listing.description}
         </p>
       )}
@@ -80,7 +80,7 @@ function ListingCard({ listing, onExpressBuy }: { listing: Listing; onExpressBuy
       {/* Quality + meta */}
       <div className="mt-auto flex items-center justify-between pt-2">
         <QualityBar score={listing.quality_score} />
-        <div className="flex items-center gap-3 text-[11px] text-zinc-600">
+        <div className="flex items-center gap-3 text-[11px] text-text-muted">
           <span>{formatBytes(listing.content_size)}</span>
           <span>{relativeTime(listing.freshness_at)}</span>
         </div>
@@ -92,13 +92,13 @@ function ListingCard({ listing, onExpressBuy }: { listing: Listing; onExpressBuy
           {listing.tags.slice(0, 3).map((tag) => (
             <span
               key={tag}
-              className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500"
+              className="rounded bg-surface-overlay/50 px-1.5 py-0.5 text-[10px] text-text-muted border border-border-subtle/50"
             >
               {tag}
             </span>
           ))}
           {listing.tags.length > 3 && (
-            <span className="text-[10px] text-zinc-600">
+            <span className="text-[10px] text-text-muted">
               +{listing.tags.length - 3}
             </span>
           )}
@@ -108,9 +108,9 @@ function ListingCard({ listing, onExpressBuy }: { listing: Listing; onExpressBuy
       {/* Express Buy button - appears on hover */}
       <button
         onClick={() => onExpressBuy(listing.id)}
-        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white opacity-0 transition-all group-hover:opacity-100 hover:bg-emerald-500"
+        className="btn-primary mt-3 flex w-full items-center justify-center gap-2 px-3 py-2 text-sm font-medium opacity-0 transition-all group-hover:opacity-100"
       >
-        <Zap className="h-3.5 w-3.5" />
+        <Zap className="h-3.5 w-3.5 text-gray-900" />
         Express Buy
       </button>
     </div>
@@ -166,7 +166,7 @@ export default function ListingsPage() {
         <select
           value={category}
           onChange={(e) => { setCategory(e.target.value as Category | ""); setPage(1); }}
-          className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white outline-none"
+          className="futuristic-select px-3 py-2 text-sm"
         >
           {CATEGORIES.map((c) => (
             <option key={c.value} value={c.value}>
@@ -177,7 +177,7 @@ export default function ListingsPage() {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-          className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white outline-none"
+          className="futuristic-select px-3 py-2 text-sm"
         >
           {SORTS.map((s) => (
             <option key={s.value} value={s.value}>
@@ -186,7 +186,7 @@ export default function ListingsPage() {
           ))}
         </select>
         {data && (
-          <span className="ml-auto text-sm text-zinc-500">
+          <span className="ml-auto text-sm text-text-secondary">
             {data.total} result{data.total !== 1 && "s"}
           </span>
         )}
@@ -219,15 +219,15 @@ export default function ListingsPage() {
           <button
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
-            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 disabled:opacity-30"
+            className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30"
           >
             Prev
           </button>
-          <span className="text-sm text-zinc-500">Page {page}</span>
+          <span className="text-sm text-text-secondary">Page {page}</span>
           <button
             disabled={page * 12 >= data.total}
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 disabled:opacity-30"
+            className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30"
           >
             Next
           </button>

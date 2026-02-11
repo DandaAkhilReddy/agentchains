@@ -13,17 +13,17 @@ interface Props {
 
 export default function StatCard({ label, value, subtitle, icon: Icon, trend, trendValue }: Props) {
   const TrendIcon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus;
-  const trendColor = trend === "up" ? "text-emerald-400" : trend === "down" ? "text-red-400" : "text-zinc-500";
+  const trendColor = trend === "up" ? "text-success" : trend === "down" ? "text-danger" : "text-text-muted";
 
   return (
-    <div className="group rounded-xl border border-zinc-800 bg-zinc-900 p-5 transition-all hover:border-zinc-700">
+    <div className="glass-card gradient-border-card glow-hover p-5">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+        <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
           {label}
         </p>
         {Icon && (
-          <div className="rounded-lg bg-zinc-800 p-2 transition-colors group-hover:bg-zinc-700">
-            <Icon className="h-4 w-4 text-zinc-400" />
+          <div className="rounded-lg bg-primary-glow p-2">
+            <Icon className="h-4 w-4 text-primary" />
           </div>
         )}
       </div>
@@ -39,7 +39,7 @@ export default function StatCard({ label, value, subtitle, icon: Icon, trend, tr
         )}
       </div>
       {subtitle && (
-        <p className="mt-1 text-xs text-zinc-500">{subtitle}</p>
+        <p className="mt-1 text-xs text-text-muted">{subtitle}</p>
       )}
     </div>
   );

@@ -25,6 +25,8 @@ async def auto_match(
     category: str | None = None,
     max_price: float | None = None,
     buyer_id: str | None = None,
+    routing_strategy: str | None = None,
+    buyer_region: str | None = None,
 ) -> dict:
     """Find the best listing for a buyer's described need.
 
@@ -88,10 +90,17 @@ async def auto_match(
 
     scored.sort(key=lambda x: x["match_score"], reverse=True)
 
+    # Apply smart routing if a strategy is specified
+    top_matches = scored[:5]
+    if routing_strategy and top_matches:
+        from marketplace.services.router_service import smart_route
+        top_matches = smart_route(top_matches, routing_strategy, buyer_region)
+
     return {
         "query": description,
         "category_filter": category,
-        "matches": scored[:5],
+        "routing_strategy": routing_strategy,
+        "matches": top_matches,
         "total_candidates": len(listings),
     }
 

@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+__pycache__
+*.pyc
+data/
+server.log
+frontend/node_modules/
+frontend/dist/
+frontend/.netlify/
+.venv
+venv
+.pytest_cache
+scripts/
+*.md
+!requirements.txt

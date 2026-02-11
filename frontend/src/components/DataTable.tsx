@@ -37,14 +37,14 @@ export default function DataTable<T>({
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-zinc-800">
+    <div className="glass-card overflow-hidden border border-border-subtle">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-zinc-800 bg-zinc-900/50">
+          <tr className="border-b border-border-subtle bg-surface-overlay/30">
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500 ${col.className ?? ""}`}
+                className={`px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-text-muted ${col.className ?? ""}`}
               >
                 {col.header}
               </th>
@@ -55,7 +55,7 @@ export default function DataTable<T>({
           {data.map((row) => (
             <tr
               key={keyFn(row)}
-              className="border-b border-zinc-800/50 transition-colors hover:bg-zinc-900/30"
+              className="border-b border-border-subtle/30 hover:bg-[rgba(0,212,255,0.06)] transition-colors duration-200"
             >
               {columns.map((col) => (
                 <td key={col.key} className={`px-4 py-3 ${col.className ?? ""}`}>

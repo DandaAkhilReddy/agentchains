@@ -36,6 +36,18 @@ async def create_listing(
     await db.commit()
     await db.refresh(listing)
 
+    # Generate zero-knowledge proofs for pre-purchase verification
+    try:
+        from marketplace.services.zkp_service import generate_proofs
+        await generate_proofs(
+            db, listing.id, content_bytes, req.category,
+            len(content_bytes), listing.freshness_at,
+            float(req.quality_score) if req.quality_score else 0.5,
+        )
+        await db.commit()
+    except Exception:
+        pass  # Don't fail listing creation if ZKP generation fails
+
     # Cache the new listing
     listing_cache.put(f"listing:{listing.id}", listing)
 
@@ -204,14 +216,7 @@ async def discover(
     return listings, total
 
 
-def get_listing_content(content_hash: str) -> bytes | None:
-    """Retrieve the raw content for a listing from HashFS. Uses cache for hot content."""
-    cached = content_cache.get(f"content:{content_hash}")
-    if cached is not None:
-        return cached
-
-    storage = get_storage()
-    data = storage.get(content_hash)
-    if data is not None:
-        content_cache.put(f"content:{content_hash}", data)
-    return data
+async def get_listing_content(content_hash: str) -> bytes | None:
+    """Retrieve the raw content via CDN (hot → warm → cold)."""
+    from marketplace.services.cdn_service import get_content as cdn_get_content
+    return await cdn_get_content(content_hash)

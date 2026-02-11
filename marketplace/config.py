@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings
-from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -7,11 +6,15 @@ class Settings(BaseSettings):
     marketplace_host: str = "0.0.0.0"
     marketplace_port: int = 8000
 
-    # Database
+    # Database (sqlite for local dev, postgresql+asyncpg for Azure)
     database_url: str = "sqlite+aiosqlite:///./data/marketplace.db"
 
-    # Content storage
+    # Content storage — local HashFS path (used when azure_storage_connection_string is empty)
     content_store_path: str = "./data/content_store"
+
+    # Azure Blob Storage (when set, overrides local HashFS)
+    azure_storage_connection_string: str = ""
+    azure_storage_container: str = "content-store"
 
     # Auth
     jwt_secret_key: str = "dev-secret-change-in-production"
@@ -23,8 +26,22 @@ class Settings(BaseSettings):
     x402_facilitator_url: str = "https://x402.org/facilitator"
     x402_network: str = "base-sepolia"
 
-    # Google ADK
-    google_api_key: str = ""
+    # Azure OpenAI (for agents)
+    azure_openai_endpoint: str = ""
+    azure_openai_api_key: str = ""
+    azure_openai_deployment: str = "gpt-4o"
+    azure_openai_api_version: str = "2024-12-01-preview"
+
+    # CORS
+    cors_origins: str = "*"  # Comma-separated origins, or "*" for all
+
+    # MCP Server
+    mcp_enabled: bool = True
+    mcp_rate_limit_per_minute: int = 60
+
+    # CDN
+    cdn_hot_cache_max_bytes: int = 256 * 1024 * 1024  # 256MB
+    cdn_decay_interval_seconds: int = 60
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

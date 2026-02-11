@@ -1,15 +1,44 @@
 @import "tailwindcss";
 
 @theme {
-  --color-surface: #09090b;
-  --color-surface-raised: #18181b;
-  --color-surface-overlay: #27272a;
-  --color-border-subtle: #3f3f46;
-  --color-text-primary: #fafafa;
-  --color-text-secondary: #a1a1aa;
-  --color-text-muted: #71717a;
-  --color-accent: #10b981;
-  --color-accent-hover: #34d399;
+  /* Background Surfaces */
+  --color-surface: #0a0a0f;
+  --color-surface-raised: #0d1117;
+  --color-surface-overlay: #151921;
+
+  /* Borders */
+  --color-border-subtle: #1e293b;
+  --color-border-glow: #1e3a5f;
+
+  /* Text */
+  --color-text-primary: #e2e8f0;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #475569;
+
+  /* Primary (Cyan) */
+  --color-primary: #00d4ff;
+  --color-primary-hover: #38bdf8;
+  --color-primary-glow: rgba(0, 212, 255, 0.15);
+
+  /* Secondary (Purple) */
+  --color-secondary: #8b5cf6;
+  --color-secondary-hover: #a78bfa;
+  --color-secondary-glow: rgba(139, 92, 246, 0.15);
+
+  /* Success */
+  --color-success: #10b981;
+  --color-success-hover: #34d399;
+  --color-success-glow: rgba(16, 185, 129, 0.15);
+
+  /* Warning */
+  --color-warning: #f59e0b;
+  --color-warning-glow: rgba(245, 158, 11, 0.15);
+
+  /* Danger */
+  --color-danger: #ef4444;
+  --color-danger-glow: rgba(239, 68, 68, 0.15);
+
+  /* Fonts */
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -36,11 +65,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: var(--color-border-subtle);
   border-radius: 3px;
 }
 
-/* Animation keyframes */
+/* ===== KEYFRAME ANIMATIONS ===== */
+
 @keyframes slide-in {
   from { opacity: 0; transform: translateX(100%); }
   to { opacity: 1; transform: translateX(0); }
@@ -60,8 +90,186 @@ body {
   from { width: 0%; }
 }
 
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px currentColor, 0 0 8px currentColor; opacity: 1; }
+  50% { box-shadow: 0 0 8px currentColor, 0 0 16px currentColor; opacity: 0.7; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* ===== ANIMATION UTILITIES ===== */
+
 .animate-slide-in { animation: slide-in 0.3s ease-out; }
 .animate-fade-in { animation: fade-in 0.4s ease-out; }
 .animate-scale-in { animation: scale-in 0.3s ease-out; }
 .animate-grow-bar { animation: grow-bar 0.8s ease-out; }
 .animate-in { animation: slide-in 0.3s ease-out; }
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 212, 255, 0.04) 50%, transparent 100%);
+  background-size: 200% 100%;
+}
+
+/* ===== GLASS CARD ===== */
+
+.glass-card {
+  background: rgba(13, 17, 23, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border-glow);
+  border-radius: 16px;
+}
+
+/* ===== GRADIENT BORDER CARD ===== */
+
+.gradient-border-card {
+  position: relative;
+}
+
+.gradient-border-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 17px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.3), rgba(139, 92, 246, 0.3), rgba(16, 185, 129, 0.1));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.gradient-border-card:hover::before {
+  opacity: 1;
+}
+
+/* ===== GLOW HOVER ===== */
+
+.glow-hover {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.glow-hover:hover {
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.1), 0 0 40px rgba(0, 212, 255, 0.05);
+  border-color: rgba(0, 212, 255, 0.3);
+}
+
+/* ===== GRADIENT TEXT ===== */
+
+.gradient-text {
+  background: linear-gradient(135deg, #00d4ff, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-success {
+  background: linear-gradient(135deg, #10b981, #00d4ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ===== FUTURISTIC INPUT ===== */
+
+.futuristic-input {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  color: var(--color-text-primary);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.futuristic-input:focus {
+  border-color: rgba(0, 212, 255, 0.25);
+  box-shadow: 0 0 0 3px var(--color-primary-glow), 0 0 20px rgba(0, 212, 255, 0.05);
+}
+
+.futuristic-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* ===== FUTURISTIC SELECT ===== */
+
+.futuristic-select {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  color: var(--color-text-primary);
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.futuristic-select:focus {
+  border-color: rgba(0, 212, 255, 0.25);
+}
+
+/* ===== BUTTONS ===== */
+
+.btn-primary {
+  background: linear-gradient(135deg, #00d4ff, #0ea5e9);
+  color: #0a0a0f;
+  font-weight: 600;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 0 30px rgba(0, 212, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.3;
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-ghost:hover {
+  border-color: rgba(0, 212, 255, 0.25);
+  color: var(--color-text-primary);
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.08);
+}
+
+.btn-ghost:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ===== PULSE DOT ===== */
+
+.pulse-dot {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* ===== DOT GRID BACKGROUND ===== */
+
+.dot-grid-bg {
+  background-image: radial-gradient(circle, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}

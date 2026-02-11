@@ -43,9 +43,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const ICONS = { success: CheckCircle, error: AlertCircle, info: Info };
   const COLORS: Record<ToastVariant, string> = {
-    success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
-    error: "border-red-500/30 bg-red-500/10 text-red-400",
-    info: "border-blue-500/30 bg-blue-500/10 text-blue-400",
+    success: "border-success/30 bg-success-glow text-success",
+    error: "border-danger/30 bg-danger-glow text-danger",
+    info: "border-[rgba(0,212,255,0.3)] bg-primary-glow text-primary",
   };
 
   return (
@@ -57,7 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           return (
             <div
               key={t.id}
-              className={`flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg backdrop-blur-sm animate-in ${COLORS[t.variant]}`}
+              className={`flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg backdrop-blur-xl animate-in ${COLORS[t.variant]}`}
             >
               <Icon size={16} />
               <span className="text-sm">{t.message}</span>

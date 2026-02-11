@@ -4,13 +4,13 @@ interface Props {
 
 export default function Skeleton({ className = "" }: Props) {
   return (
-    <div className={`animate-pulse rounded-lg bg-zinc-800/50 ${className}`} />
+    <div className={`rounded-lg bg-surface-overlay/30 animate-shimmer ${className}`} />
   );
 }
 
 export function SkeletonCard() {
   return (
-    <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+    <div className="glass-card border border-border-subtle space-y-3 p-5">
       <Skeleton className="h-4 w-2/3" />
       <Skeleton className="h-3 w-1/3" />
       <Skeleton className="h-8 w-full" />
@@ -24,12 +24,12 @@ export function SkeletonCard() {
 
 export function SkeletonTable({ rows = 5 }: { rows?: number }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-800">
-      <div className="bg-zinc-900/50 p-4">
+    <div className="glass-card overflow-hidden border border-border-subtle">
+      <div className="bg-surface-overlay/30 p-4">
         <Skeleton className="h-3 w-full" />
       </div>
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex gap-4 border-t border-zinc-800/50 p-4">
+        <div key={i} className="flex gap-4 border-t border-border-subtle/30 p-4">
           <Skeleton className="h-3 w-1/4" />
           <Skeleton className="h-3 w-1/4" />
           <Skeleton className="h-3 w-1/6" />

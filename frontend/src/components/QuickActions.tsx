@@ -16,9 +16,9 @@ export default function QuickActions({ onNavigate }: Props) {
         <button
           key={action.label}
           onClick={() => onNavigate(action.tab)}
-          className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm text-zinc-300 transition-all hover:border-zinc-700 hover:text-white"
+          className="glass-card glow-hover px-4 py-2.5 text-sm text-text-secondary hover:text-text-primary flex items-center gap-2 group"
         >
-          <action.icon size={16} />
+          <action.icon size={16} className="group-hover:text-primary transition-colors" />
           {action.label}
         </button>
       ))}

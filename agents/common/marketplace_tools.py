@@ -1,7 +1,9 @@
 """Shared tool functions that ADK agents use to interact with the marketplace API."""
+import os
+
 import httpx
 
-MARKETPLACE_URL = "http://localhost:8000/api/v1"
+MARKETPLACE_URL = os.getenv("MARKETPLACE_URL", "http://localhost:8000/api/v1")
 
 # Agent state (populated after registration)
 _agent_state: dict = {}
@@ -361,4 +363,241 @@ def get_my_stats() -> dict:
         timeout=30,
     )
     response.raise_for_status()
+    return response.json()
+
+
+# ── Catalog Tools ──
+
+
+def register_catalog_entry(
+    namespace: str,
+    topic: str,
+    description: str = "",
+    price_range_min: float = 0.001,
+    price_range_max: float = 0.01,
+) -> dict:
+    """Register a catalog entry declaring what data this agent can produce.
+
+    Other agents can discover your capabilities by searching the catalog.
+
+    Args:
+        namespace: Category namespace like "web_search", "code_analysis", etc.
+        topic: Specific topic within the namespace (e.g., "python", "react")
+        description: What kind of data you produce
+        price_range_min: Minimum price in USDC
+        price_range_max: Maximum price in USDC
+
+    Returns:
+        Dict with catalog entry id, namespace, topic, status
+    """
+    response = httpx.post(
+        f"{MARKETPLACE_URL}/catalog",
+        json={
+            "namespace": namespace,
+            "topic": topic,
+            "description": description,
+            "price_range_min": price_range_min,
+            "price_range_max": price_range_max,
+        },
+        headers=_headers(),
+        timeout=30,
+    )
+    return response.json()
+
+
+def search_catalog(
+    q: str = "",
+    namespace: str | None = None,
+    min_quality: float | None = None,
+) -> dict:
+    """Search the data catalog to discover what sellers can produce.
+
+    The catalog shows registered capabilities — what data sellers
+    are willing and able to produce, along with price ranges and quality.
+
+    Args:
+        q: Search text for catalog topics and descriptions
+        namespace: Filter by namespace (e.g., "web_search")
+        min_quality: Minimum quality score (0.0 to 1.0)
+
+    Returns:
+        Dict with catalog entries, total count, and pagination info
+    """
+    params: dict = {}
+    if q:
+        params["q"] = q
+    if namespace:
+        params["namespace"] = namespace
+    if min_quality is not None:
+        params["min_quality"] = min_quality
+
+    response = httpx.get(
+        f"{MARKETPLACE_URL}/catalog/search",
+        params=params,
+        timeout=30,
+    )
+    return response.json()
+
+
+def subscribe_catalog(
+    namespace_pattern: str,
+    topic_pattern: str = "*",
+    max_price: float | None = None,
+    min_quality: float | None = None,
+) -> dict:
+    """Subscribe to catalog updates matching a pattern.
+
+    Get notified when new sellers register capabilities in your
+    area of interest.
+
+    Args:
+        namespace_pattern: Glob pattern like "web_search.*" or "*"
+        topic_pattern: Glob pattern for topics (default "*" = all)
+        max_price: Only notify if price is below this
+        min_quality: Only notify if quality is above this
+
+    Returns:
+        Dict with subscription id and status
+    """
+    body: dict = {
+        "namespace_pattern": namespace_pattern,
+        "topic_pattern": topic_pattern,
+    }
+    if max_price is not None:
+        body["max_price"] = max_price
+    if min_quality is not None:
+        body["min_quality"] = min_quality
+
+    response = httpx.post(
+        f"{MARKETPLACE_URL}/catalog/subscribe",
+        json=body,
+        headers=_headers(),
+        timeout=30,
+    )
+    return response.json()
+
+
+# ── ZKP Tools ──
+
+
+def verify_zkp(
+    listing_id: str,
+    keywords: list[str] | None = None,
+    schema_has_fields: list[str] | None = None,
+    min_size: int | None = None,
+    min_quality: float | None = None,
+) -> dict:
+    """Verify a listing's content claims using Zero-Knowledge Proofs.
+
+    Check content properties WITHOUT seeing the actual data. Useful
+    for verifying quality before purchasing.
+
+    Args:
+        listing_id: The listing to verify
+        keywords: Check if these keywords are probably in the content
+        schema_has_fields: Check if JSON content has these field names
+        min_size: Check if content is at least this many bytes
+        min_quality: Check if quality score meets minimum
+
+    Returns:
+        Dict with verified (bool), individual check results, and proof types
+    """
+    body: dict = {}
+    if keywords:
+        body["keywords"] = keywords
+    if schema_has_fields:
+        body["schema_has_fields"] = schema_has_fields
+    if min_size is not None:
+        body["min_size"] = min_size
+    if min_quality is not None:
+        body["min_quality"] = min_quality
+
+    response = httpx.post(
+        f"{MARKETPLACE_URL}/zkp/{listing_id}/verify",
+        json=body,
+        headers=_headers(),
+        timeout=30,
+    )
+    return response.json()
+
+
+def bloom_check(listing_id: str, word: str) -> dict:
+    """Quick check if a word is probably in a listing's content.
+
+    Uses a Bloom filter — fast probabilistic check. If it says "yes",
+    the word is probably there. If "no", it's definitely not there.
+
+    Args:
+        listing_id: The listing to check
+        word: The keyword to look for
+
+    Returns:
+        Dict with probably_present (bool) and note
+    """
+    response = httpx.get(
+        f"{MARKETPLACE_URL}/zkp/{listing_id}/bloom-check",
+        params={"word": word},
+        timeout=30,
+    )
+    return response.json()
+
+
+# ── Seller Tools ──
+
+
+def suggest_price(category: str, quality_score: float = 0.8) -> dict:
+    """Get an optimal price suggestion for a listing you're about to create.
+
+    The marketplace analyzes competing listings, demand velocity, and
+    your quality score to recommend the best price.
+
+    Args:
+        category: The category (web_search, code_analysis, etc.)
+        quality_score: Your self-assessed quality (0.0 to 1.0)
+
+    Returns:
+        Dict with suggested_price, median_price, competitors count, demand info
+    """
+    response = httpx.post(
+        f"{MARKETPLACE_URL}/seller/price-suggest",
+        json={"category": category, "quality_score": quality_score},
+        headers=_headers(),
+        timeout=30,
+    )
+    return response.json()
+
+
+def get_demand_for_me() -> dict:
+    """Get unmet demand that matches this agent's catalog capabilities.
+
+    Cross-references what buyers are searching for with what you've
+    registered in the catalog. Shows revenue opportunities specific to you.
+
+    Returns:
+        Dict with matches (demand signals you can fill) and count
+    """
+    response = httpx.get(
+        f"{MARKETPLACE_URL}/seller/demand-for-me",
+        headers=_headers(),
+        timeout=30,
+    )
+    return response.json()
+
+
+# ── Routing Tools ──
+
+
+def fetch_routing_strategies() -> dict:
+    """Get available routing strategies for multi-seller scenarios.
+
+    When multiple sellers have similar data, the marketplace can route
+    buyers to the best seller using different strategies.
+
+    Returns:
+        Dict with strategies list, default strategy, and descriptions
+    """
+    response = httpx.get(
+        f"{MARKETPLACE_URL}/route/strategies",
+        timeout=30,
+    )
     return response.json()

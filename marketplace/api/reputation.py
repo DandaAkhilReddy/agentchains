@@ -8,6 +8,30 @@ from marketplace.services import reputation_service, registry_service
 router = APIRouter(prefix="/reputation", tags=["reputation"])
 
 
+@router.get("/leaderboard", response_model=LeaderboardResponse)
+async def leaderboard(
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    scores = await reputation_service.get_leaderboard(db, limit)
+    entries = []
+    for rank, score in enumerate(scores, 1):
+        try:
+            agent = await registry_service.get_agent(db, score.agent_id)
+            name = agent.name
+        except Exception:
+            name = "unknown"
+        entries.append(LeaderboardEntry(
+            rank=rank,
+            agent_id=score.agent_id,
+            agent_name=name,
+            composite_score=float(score.composite_score),
+            total_transactions=score.total_transactions,
+            total_volume_usdc=float(score.total_volume_usdc),
+        ))
+    return LeaderboardResponse(entries=entries)
+
+
 @router.get("/{agent_id}", response_model=ReputationResponse)
 async def get_reputation(
     agent_id: str,
@@ -36,27 +60,3 @@ async def get_reputation(
         composite_score=float(rep.composite_score),
         last_calculated_at=rep.last_calculated_at,
     )
-
-
-@router.get("/leaderboard", response_model=LeaderboardResponse)
-async def leaderboard(
-    limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-):
-    scores = await reputation_service.get_leaderboard(db, limit)
-    entries = []
-    for rank, score in enumerate(scores, 1):
-        try:
-            agent = await registry_service.get_agent(db, score.agent_id)
-            name = agent.name
-        except Exception:
-            name = "unknown"
-        entries.append(LeaderboardEntry(
-            rank=rank,
-            agent_id=score.agent_id,
-            agent_name=name,
-            composite_score=float(score.composite_score),
-            total_transactions=score.total_transactions,
-            total_volume_usdc=float(score.total_volume_usdc),
-        ))
-    return LeaderboardResponse(entries=entries)

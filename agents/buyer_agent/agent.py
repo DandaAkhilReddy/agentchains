@@ -1,12 +1,6 @@
 """Buyer Agent — discovers and purchases data from the marketplace on behalf of users."""
 import json
 
-try:
-    from google.adk.agents import Agent
-    ADK_AVAILABLE = True
-except ImportError:
-    ADK_AVAILABLE = False
-
 from agents.common.marketplace_tools import (
     auto_match_need,
     express_purchase,
@@ -16,6 +10,9 @@ from agents.common.marketplace_tools import (
     verify_delivered_content,
     get_my_reputation,
     get_trending_queries,
+    search_catalog,
+    verify_zkp,
+    bloom_check,
 )
 
 
@@ -82,40 +79,39 @@ def browse_marketplace(category: str | None = None, sort_by: str = "freshness") 
     return json.dumps(results, indent=2, default=str)
 
 
-if ADK_AVAILABLE:
-    root_agent = Agent(
+# --- Azure OpenAI Agent ---
+try:
+    from agents.common.azure_agent import AzureAgent
+
+    root_agent = AzureAgent(
         name="data_buyer",
-        model="gemini-2.0-flash",
         description="I discover and purchase cached data from the marketplace, saving computation costs.",
         instruction="""You are a data buyer agent. Your primary goal is to save money by
 buying cached computation results instead of computing from scratch.
 
-PREFERRED workflow (fastest, use auto_match_need):
-1. When a user asks for information, use auto_match_need with auto_buy=True
-2. The marketplace automatically finds the best match and purchases it in <100ms
-3. Report the savings and delivery time to the user
+SETUP (do this first):
+1. Call register_with_marketplace() to register and get your JWT token
 
-Alternative workflow (manual):
-1. Search the marketplace using search_marketplace
-2. Compare listings by price, freshness, quality score, and seller reputation
-3. Use express_purchase for instant content delivery (single request)
-4. Or use find_and_buy for the traditional multi-step flow
-5. Always report the cost savings compared to fresh computation
+DISCOVERY workflow (find what you need):
+1. Call search_catalog() to discover what sellers can produce (capabilities)
+2. Call search_marketplace() to find specific available listings
+3. Use get_trending_queries() to see popular data and anticipate needs
 
-Smart purchasing with trending data:
-- Use get_trending_queries() to see what other buyers are searching for right now
-- If trending queries align with your needs, act quickly — popular data may be
-  available at lower prices from multiple sellers competing for those queries
-- Trending data also helps you anticipate upcoming needs and pre-purchase data
-  before demand drives prices up
+VERIFICATION workflow (check before buying):
+1. Call bloom_check(listing_id, "keyword") to quickly check if a listing contains specific keywords
+2. Call verify_zkp(listing_id, keywords=["python"], min_size=100) for thorough pre-purchase verification
+3. This lets you verify content quality WITHOUT seeing the data — zero-knowledge proof
+
+PURCHASE workflow (fastest path):
+1. FASTEST: Use auto_match_need with auto_buy=True — finds best match and buys in <100ms
+2. FAST: Use express_purchase(listing_id) — instant content delivery (single request)
+3. MANUAL: Use find_and_buy for the traditional search -> evaluate -> purchase flow
 
 Remember:
-- Fresh web search costs ~$0.01
-- Fresh code analysis costs ~$0.02
-- Fresh document summary costs ~$0.01
-- Cached results are typically 30-60% cheaper
-- express_purchase delivers content in <100ms (vs ~500ms for traditional flow)
-- auto_match_need with auto_buy=True is the fastest end-to-end path""",
+- Fresh web search costs ~$0.01, cached is 30-60% cheaper
+- express_purchase delivers content in <100ms
+- Always verify with bloom_check or verify_zkp before purchasing expensive data
+- Report cost savings to the user after each purchase""",
         tools=[
             auto_match_need,
             express_purchase,
@@ -127,5 +123,10 @@ Remember:
             verify_delivered_content,
             get_my_reputation,
             get_trending_queries,
+            search_catalog,
+            verify_zkp,
+            bloom_check,
         ],
     )
+except ImportError:
+    root_agent = None

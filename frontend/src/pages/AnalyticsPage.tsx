@@ -20,7 +20,7 @@ export default function AnalyticsPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-text-primary">Demand Intelligence</h2>
+          <h2 className="text-xl font-bold gradient-text">Demand Intelligence</h2>
           <p className="text-sm text-text-secondary">What agents are searching for right now</p>
         </div>
         <SubTabNav tabs={SUB_TABS} active={activeTab} onChange={setActiveTab} />
@@ -58,10 +58,10 @@ function TrendingPanel() {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border-subtle">
+    <div className="glass-card overflow-hidden">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border-subtle bg-surface-raised/50">
+          <tr className="border-b border-border-subtle bg-surface-overlay/30">
             <th className="px-4 py-3 text-left text-text-secondary font-medium">Query</th>
             <th className="px-4 py-3 text-left text-text-secondary font-medium">Category</th>
             <th className="px-4 py-3 text-right text-text-secondary font-medium">Searches</th>
@@ -73,7 +73,7 @@ function TrendingPanel() {
           {trends.map((t, i) => (
             <tr
               key={i}
-              className="border-b border-border-subtle/50 transition-colors hover:bg-surface-raised/30"
+              className="border-b border-border-subtle/50 transition-colors hover:bg-[rgba(0,212,255,0.06)]"
             >
               <td className="px-4 py-3 text-text-primary font-medium">{t.query_pattern}</td>
               <td className="px-4 py-3">
@@ -132,11 +132,11 @@ function GapsPanel() {
       {gaps.map((g, i) => (
         <div
           key={i}
-          className="rounded-xl border border-red-500/20 bg-surface-raised p-4 animate-scale-in"
+          className="glass-card gradient-border-card glow-hover p-4 animate-scale-in"
         >
           <div className="mb-2 flex items-start justify-between">
             <p className="font-medium text-text-primary">{g.query_pattern}</p>
-            <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs font-medium text-red-400">
+            <span className="rounded-full bg-danger/20 px-2 py-0.5 text-xs font-medium text-danger">
               Gap
             </span>
           </div>
@@ -155,7 +155,7 @@ function GapsPanel() {
             {g.avg_max_price != null && (
               <div className="col-span-2">
                 <span className="text-text-muted">Avg budget:</span>{" "}
-                <span className="font-mono text-emerald-400">${g.avg_max_price.toFixed(4)}</span>
+                <span className="font-mono text-primary">${g.avg_max_price.toFixed(4)}</span>
               </div>
             )}
           </div>

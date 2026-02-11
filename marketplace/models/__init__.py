@@ -7,6 +7,9 @@ from marketplace.models.search_log import SearchLog
 from marketplace.models.demand_signal import DemandSignal
 from marketplace.models.opportunity import OpportunitySignal
 from marketplace.models.agent_stats import AgentStats
+from marketplace.models.zkproof import ZKProof
+from marketplace.models.catalog import DataCatalogEntry, CatalogSubscription
+from marketplace.models.seller_webhook import SellerWebhook
 
 __all__ = [
     "RegisteredAgent",
@@ -18,4 +21,8 @@ __all__ = [
     "DemandSignal",
     "OpportunitySignal",
     "AgentStats",
+    "ZKProof",
+    "DataCatalogEntry",
+    "CatalogSubscription",
+    "SellerWebhook",
 ]

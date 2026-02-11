@@ -1,6 +1,14 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
-const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6"];
+const COLORS = ["#00d4ff", "#8b5cf6", "#10b981", "#f59e0b", "#f43f5e"];
+
+const CHART_TOOLTIP_STYLE = {
+  backgroundColor: "rgba(13, 17, 23, 0.95)",
+  border: "1px solid rgba(0, 212, 255, 0.2)",
+  borderRadius: 12,
+  color: "#e2e8f0",
+  fontSize: 12,
+};
 
 interface Props {
   data: Record<string, number>;
@@ -36,13 +44,7 @@ export default function CategoryPieChart({ data }: Props) {
           ))}
         </Pie>
         <Tooltip
-          contentStyle={{
-            background: "#18181b",
-            border: "1px solid #3f3f46",
-            borderRadius: 8,
-            color: "#fafafa",
-            fontSize: 12,
-          }}
+          contentStyle={CHART_TOOLTIP_STYLE}
           formatter={(value: number | undefined) => [`$${(value ?? 0).toFixed(4)}`, ""]}
         />
       </PieChart>

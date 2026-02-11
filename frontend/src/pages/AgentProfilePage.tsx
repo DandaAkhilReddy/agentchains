@@ -36,7 +36,7 @@ export default function AgentProfilePage({ agentId, onBack }: Props) {
       <div className="flex flex-col items-center justify-center py-16 text-text-muted">
         <Bot className="mb-3 h-10 w-10 opacity-40" />
         <p>Agent not found</p>
-        <button onClick={onBack} className="mt-4 text-emerald-400 hover:underline">
+        <button onClick={onBack} className="mt-4 text-primary hover:underline">
           Go back
         </button>
       </div>
@@ -54,7 +54,7 @@ export default function AgentProfilePage({ agentId, onBack }: Props) {
           >
             &larr; Back
           </button>
-          <h2 className="text-xl font-semibold text-text-primary">{profile.agent_name}</h2>
+          <h2 className="text-xl font-bold gradient-text">{profile.agent_name}</h2>
           <div className="mt-1 flex items-center gap-2">
             {profile.primary_specialization && (
               <Badge label={profile.primary_specialization} variant="purple" />
@@ -72,7 +72,7 @@ export default function AgentProfilePage({ agentId, onBack }: Props) {
           </div>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold text-emerald-400">
+          <p className="text-3xl font-bold gradient-text-success">
             {(profile.helpfulness_score * 100).toFixed(1)}%
           </p>
           <p className="text-sm text-text-secondary">Helpfulness Score</p>
@@ -82,22 +82,22 @@ export default function AgentProfilePage({ agentId, onBack }: Props) {
       {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatBox
-          icon={<Users className="h-4 w-4 text-blue-400" />}
+          icon={<Users className="h-4 w-4 text-[#00d4ff]" />}
           label="Unique Buyers Served"
           value={profile.unique_buyers_served}
         />
         <StatBox
-          icon={<Package className="h-4 w-4 text-emerald-400" />}
+          icon={<Package className="h-4 w-4 text-[#10b981]" />}
           label="Listings Created"
           value={profile.total_listings_created}
         />
         <StatBox
-          icon={<ShoppingCart className="h-4 w-4 text-yellow-400" />}
+          icon={<ShoppingCart className="h-4 w-4 text-[#eab308]" />}
           label="Cache Hits (Reuse)"
           value={profile.total_cache_hits}
         />
         <StatBox
-          icon={<Target className="h-4 w-4 text-purple-400" />}
+          icon={<Target className="h-4 w-4 text-[#8b5cf6]" />}
           label="Gaps Filled"
           value={profile.demand_gaps_filled}
         />
@@ -105,24 +105,24 @@ export default function AgentProfilePage({ agentId, onBack }: Props) {
 
       {/* Financial Overview */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="rounded-xl border border-border-subtle bg-surface-raised p-4">
-          <p className="text-sm text-text-secondary">Total Earned</p>
-          <p className="text-2xl font-bold font-mono text-emerald-400">
+        <div className="glass-card gradient-border-card p-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-text-secondary">Total Earned</p>
+          <p className="text-2xl font-bold font-mono text-success">
             ${profile.total_earned_usdc.toFixed(4)}
           </p>
         </div>
-        <div className="rounded-xl border border-border-subtle bg-surface-raised p-4">
-          <p className="text-sm text-text-secondary">Total Spent</p>
-          <p className="text-2xl font-bold font-mono text-red-400">
+        <div className="glass-card gradient-border-card p-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-text-secondary">Total Spent</p>
+          <p className="text-2xl font-bold font-mono text-danger">
             ${profile.total_spent_usdc.toFixed(4)}
           </p>
         </div>
-        <div className="rounded-xl border border-border-subtle bg-surface-raised p-4">
-          <p className="text-sm text-text-secondary">Net Revenue</p>
+        <div className="glass-card gradient-border-card p-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-text-secondary">Net Revenue</p>
           <p className={`text-2xl font-bold font-mono ${
             profile.total_earned_usdc - profile.total_spent_usdc >= 0
-              ? "text-emerald-400"
-              : "text-red-400"
+              ? "text-success"
+              : "text-danger"
           }`}>
             ${(profile.total_earned_usdc - profile.total_spent_usdc).toFixed(4)}
           </p>
@@ -131,20 +131,20 @@ export default function AgentProfilePage({ agentId, onBack }: Props) {
 
       {/* Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-border-subtle bg-surface-raised p-4">
-          <h3 className="mb-3 text-sm font-medium text-text-secondary">Earnings Timeline</h3>
+        <div className="glass-card gradient-border-card p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">Earnings Timeline</h3>
           <EarningsChart data={earnings?.earnings_timeline ?? []} />
         </div>
-        <div className="rounded-xl border border-border-subtle bg-surface-raised p-4">
-          <h3 className="mb-3 text-sm font-medium text-text-secondary">Revenue by Category</h3>
+        <div className="glass-card gradient-border-card p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">Revenue by Category</h3>
           <CategoryPieChart data={earnings?.earnings_by_category ?? {}} />
         </div>
       </div>
 
       {/* Categories */}
       {profile.categories.length > 0 && (
-        <div className="rounded-xl border border-border-subtle bg-surface-raised p-4">
-          <h3 className="mb-3 text-sm font-medium text-text-secondary">Categories</h3>
+        <div className="glass-card gradient-border-card p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">Categories</h3>
           <div className="flex flex-wrap gap-2">
             {profile.categories.map((cat) => (
               <Badge key={cat} label={cat} variant={cat === profile.primary_specialization ? "green" : "blue"} />
@@ -166,7 +166,7 @@ function StatBox({
   value: number;
 }) {
   return (
-    <div className="rounded-xl border border-border-subtle bg-surface-raised p-4 animate-scale-in">
+    <div className="glass-card gradient-border-card glow-hover p-4 animate-scale-in">
       <div className="mb-1 flex items-center gap-2">
         {icon}
         <span className="text-xs text-text-secondary">{label}</span>

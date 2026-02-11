@@ -19,6 +19,14 @@ import {
   Cell,
 } from "recharts";
 
+const CHART_TOOLTIP_STYLE = {
+  backgroundColor: "rgba(13, 17, 23, 0.95)",
+  border: "1px solid rgba(0, 212, 255, 0.2)",
+  borderRadius: 12,
+  color: "#e2e8f0",
+  fontSize: 12,
+};
+
 const RANK_COLORS = ["#f59e0b", "#94a3b8", "#cd7f32"];
 const RANK_LABELS = ["Gold", "Silver", "Bronze"];
 
@@ -32,7 +40,7 @@ const BOARD_TABS = [
 function MedalBadge({ rank }: { rank: number }) {
   if (rank > 3) {
     return (
-      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-zinc-500">
+      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-text-secondary">
         {rank}
       </span>
     );
@@ -62,20 +70,20 @@ const columns: Column<LeaderboardEntry>[] = [
   {
     key: "name",
     header: "Agent",
-    render: (e) => <span className="font-medium">{e.agent_name}</span>,
+    render: (e) => <span className="font-medium text-text-primary">{e.agent_name}</span>,
   },
   {
     key: "score",
     header: "Score",
     render: (e) => (
       <div className="flex items-center gap-2">
-        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-zinc-800">
+        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-overlay">
           <div
-            className="h-full rounded-full bg-emerald-500 animate-grow-bar"
+            className="h-full rounded-full bg-[#00d4ff] animate-grow-bar"
             style={{ width: `${Math.round(e.composite_score * 100)}%` }}
           />
         </div>
-        <span className="text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+        <span className="text-sm text-text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
           {scoreToPercent(e.composite_score)}
         </span>
       </div>
@@ -85,7 +93,7 @@ const columns: Column<LeaderboardEntry>[] = [
     key: "txns",
     header: "Transactions",
     render: (e) => (
-      <span className="text-zinc-400">
+      <span className="text-text-secondary">
         <AnimatedCounter value={e.total_transactions} />
       </span>
     ),
@@ -127,20 +135,20 @@ export default function ReputationPage() {
     {
       key: "name",
       header: "Agent",
-      render: (e: any) => <span className="font-medium">{e.agent_name}</span>,
+      render: (e: any) => <span className="font-medium text-text-primary">{e.agent_name}</span>,
     },
     {
       key: "primary_score",
       header: secondaryLabel,
       render: (e: any) => (
         <div className="flex items-center gap-2">
-          <div className="h-1.5 w-20 overflow-hidden rounded-full bg-zinc-800">
+          <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-overlay">
             <div
-              className="h-full rounded-full bg-emerald-500 animate-grow-bar"
+              className="h-full rounded-full bg-[#00d4ff] animate-grow-bar"
               style={{ width: `${Math.min(Math.round(e.primary_score * 100), 100)}%` }}
             />
           </div>
-          <span className="text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+          <span className="text-sm text-text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
             {typeof e.primary_score === "number" && e.primary_score <= 1
               ? scoreToPercent(e.primary_score)
               : String(e.primary_score)}
@@ -152,7 +160,7 @@ export default function ReputationPage() {
       key: "txns",
       header: "Transactions",
       render: (e: any) => (
-        <span className="text-zinc-400">
+        <span className="text-text-secondary">
           <AnimatedCounter value={e.total_transactions} />
         </span>
       ),
@@ -177,13 +185,13 @@ export default function ReputationPage() {
           value={lookupId}
           onChange={(e) => setLookupId(e.target.value)}
           placeholder="Agent ID to look up..."
-          className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:border-emerald-500/50"
+          className="futuristic-input flex-1 px-3 py-2 text-sm"
           style={{ fontFamily: "var(--font-mono)" }}
         />
         <button
           onClick={() => setActiveId(lookupId.trim() || null)}
           disabled={!lookupId.trim()}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-30"
+          className="btn-primary px-4 py-2.5 text-sm disabled:opacity-30"
         >
           Look up
         </button>
@@ -191,7 +199,7 @@ export default function ReputationPage() {
 
       {/* Agent detail card */}
       {activeId && (
-        <div className="animate-scale-in rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+        <div className="glass-card gradient-border-card animate-scale-in p-5">
           {repLoading ? (
             <div className="flex justify-center py-4">
               <Spinner />
@@ -200,19 +208,19 @@ export default function ReputationPage() {
             <div>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold">{agentRep.agent_name}</h3>
+                  <h3 className="text-lg font-semibold text-text-primary">{agentRep.agent_name}</h3>
                   <div className="flex items-center gap-1">
-                    <p className="text-xs text-zinc-500" style={{ fontFamily: "var(--font-mono)" }}>
+                    <p className="text-xs text-text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
                       {agentRep.agent_id}
                     </p>
                     <CopyButton value={agentRep.agent_id} />
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-mono)" }}>
+                  <p className="text-2xl font-bold gradient-text-success" style={{ fontFamily: "var(--font-mono)" }}>
                     {scoreToPercent(agentRep.composite_score)}
                   </p>
-                  <p className="text-xs text-zinc-500">Composite Score</p>
+                  <p className="text-xs text-text-secondary">Composite Score</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -223,7 +231,7 @@ export default function ReputationPage() {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">Agent not found</p>
+            <p className="text-sm text-text-secondary">Agent not found</p>
           )}
         </div>
       )}
@@ -236,8 +244,8 @@ export default function ReputationPage() {
       />
 
       {/* Multi-leaderboard table */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-        <h3 className="mb-3 text-sm font-medium text-zinc-400">
+      <div className="glass-card gradient-border-card p-4">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">
           {BOARD_TABS.find((t) => t.id === boardType)?.label ?? "Leaderboard"}
         </h3>
         <DataTable
@@ -252,7 +260,7 @@ export default function ReputationPage() {
       {/* Main content: table + chart */}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <h3 className="mb-3 text-sm font-medium text-zinc-400">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">
             Leaderboard
           </h3>
           <DataTable
@@ -265,12 +273,12 @@ export default function ReputationPage() {
         </div>
 
         <div>
-          <h3 className="mb-3 text-sm font-medium text-zinc-400">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">
             Top 10 Scores
           </h3>
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="glass-card gradient-border-card p-4">
             {chartData.length === 0 ? (
-              <p className="py-8 text-center text-sm text-zinc-600">
+              <p className="py-8 text-center text-sm text-text-muted">
                 No data yet
               </p>
             ) : (
@@ -285,24 +293,19 @@ export default function ReputationPage() {
                     type="category"
                     dataKey="name"
                     width={90}
-                    tick={{ fill: "#a1a1aa", fontSize: 11 }}
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <Tooltip
-                    contentStyle={{
-                      background: "#18181b",
-                      border: "1px solid #3f3f46",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
+                    contentStyle={CHART_TOOLTIP_STYLE}
                     formatter={(value) => [`${value}%`, "Score"]}
                   />
                   <Bar dataKey="score" radius={[0, 4, 4, 0]}>
                     {chartData.map((_, i) => (
                       <Cell
                         key={i}
-                        fill={i < 3 ? "#10b981" : "#6ee7b7"}
+                        fill={i < 3 ? "#00d4ff" : "#00d4ff"}
                         fillOpacity={1 - i * 0.06}
                       />
                     ))}
@@ -319,9 +322,9 @@ export default function ReputationPage() {
 
 function RepStat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg bg-zinc-800/50 p-3">
-      <p className="text-xs text-zinc-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold" style={{ fontFamily: "var(--font-mono)" }}>
+    <div className="rounded-lg bg-surface-overlay/50 border border-border-subtle p-3">
+      <p className="text-xs text-text-secondary">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-text-primary" style={{ fontFamily: "var(--font-mono)" }}>
         {typeof value === "number" ? <AnimatedCounter value={value} /> : value}
       </p>
     </div>

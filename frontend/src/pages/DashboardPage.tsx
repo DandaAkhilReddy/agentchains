@@ -16,16 +16,24 @@ import {
   Cell,
 } from "recharts";
 
+const CHART_TOOLTIP_STYLE = {
+  backgroundColor: "rgba(13, 17, 23, 0.95)",
+  border: "1px solid rgba(0, 212, 255, 0.2)",
+  borderRadius: 12,
+  color: "#e2e8f0",
+  fontSize: 12,
+};
+
 const EVENT_CONFIG: Record<string, { icon: typeof Bot; color: string }> = {
   listing_created: { icon: Package, color: "text-blue-400" },
-  express_purchase: { icon: Zap, color: "text-emerald-400" },
+  express_purchase: { icon: Zap, color: "text-primary" },
   transaction_initiated: { icon: ShoppingCart, color: "text-yellow-400" },
-  payment_confirmed: { icon: CheckCircle, color: "text-emerald-400" },
+  payment_confirmed: { icon: CheckCircle, color: "text-primary" },
   content_delivered: { icon: Package, color: "text-cyan-400" },
-  transaction_completed: { icon: CheckCircle, color: "text-emerald-500" },
+  transaction_completed: { icon: CheckCircle, color: "text-success" },
   demand_spike: { icon: TrendingUp, color: "text-orange-400" },
   opportunity_created: { icon: Sparkles, color: "text-yellow-400" },
-  gap_filled: { icon: Target, color: "text-emerald-400" },
+  gap_filled: { icon: Target, color: "text-primary" },
   leaderboard_change: { icon: Crown, color: "text-purple-400" },
 };
 
@@ -77,40 +85,40 @@ export default function DashboardPage({ onNavigate }: Props) {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Live feed */}
         <div className="lg:col-span-2">
-          <h3 className="mb-3 text-sm font-medium text-zinc-400">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">
             Live Activity
           </h3>
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="glass-card gradient-border-card glow-hover p-4">
             {events.length === 0 ? (
-              <div className="flex flex-col items-center py-12 text-zinc-600">
-                <div className="mb-2 h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+              <div className="flex flex-col items-center py-12 text-text-muted">
+                <div className="mb-2 h-2 w-2 rounded-full bg-[#00d4ff] pulse-dot" />
                 <p className="text-sm">Waiting for marketplace activity...</p>
               </div>
             ) : (
               <div className="max-h-80 space-y-1 overflow-y-auto">
                 {events.map((evt, i) => {
-                  const config = EVENT_CONFIG[evt.type] ?? { icon: Activity, color: "text-zinc-400" };
+                  const config = EVENT_CONFIG[evt.type] ?? { icon: Activity, color: "text-text-secondary" };
                   const Icon = config.icon;
                   return (
                     <div
                       key={`${evt.timestamp}-${i}`}
-                      className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-zinc-800/50 animate-slide-in"
+                      className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-[rgba(0,212,255,0.06)] animate-slide-in"
                     >
                       <div className={`mt-0.5 ${config.color}`}>
                         <Icon className="h-4 w-4" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm text-zinc-300">
-                          <span className="font-medium text-white">
+                        <p className="text-sm text-text-secondary">
+                          <span className="font-medium text-text-primary">
                             {evt.type.replace(/_/g, " ")}
                           </span>
                           {evt.data?.delivery_ms != null && (
-                            <span className="ml-2 text-xs text-emerald-400">
+                            <span className="ml-2 text-xs text-primary">
                               {String(evt.data.delivery_ms)}ms
                             </span>
                           )}
                         </p>
-                        <p className="text-xs text-zinc-600">
+                        <p className="text-xs text-text-muted">
                           {relativeTime(evt.timestamp)}
                         </p>
                       </div>
@@ -124,12 +132,12 @@ export default function DashboardPage({ onNavigate }: Props) {
 
         {/* Top agents chart */}
         <div>
-          <h3 className="mb-3 text-sm font-medium text-zinc-400">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">
             Top Agents
           </h3>
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="glass-card gradient-border-card glow-hover p-4">
             {topAgents.length === 0 ? (
-              <p className="py-8 text-center text-sm text-zinc-600">
+              <p className="py-8 text-center text-sm text-text-muted">
                 No reputation data yet
               </p>
             ) : (
@@ -144,24 +152,19 @@ export default function DashboardPage({ onNavigate }: Props) {
                     type="category"
                     dataKey="name"
                     width={80}
-                    tick={{ fill: "#a1a1aa", fontSize: 11 }}
+                    tick={{ fill: "#475569", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <Tooltip
-                    contentStyle={{
-                      background: "#18181b",
-                      border: "1px solid #3f3f46",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
+                    contentStyle={CHART_TOOLTIP_STYLE}
                     formatter={(value) => [`${value}%`, "Score"]}
                   />
                   <Bar dataKey="score" radius={[0, 4, 4, 0]}>
                     {topAgents.map((_, i) => (
                       <Cell
                         key={i}
-                        fill={i === 0 ? "#10b981" : i === 1 ? "#34d399" : "#6ee7b7"}
+                        fill={i === 0 ? "#00d4ff" : i === 1 ? "#38bdf8" : "#7dd3fc"}
                       />
                     ))}
                   </Bar>

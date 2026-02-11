@@ -14,6 +14,17 @@ import type {
   EarningsBreakdown,
   AgentProfile,
   MultiLeaderboardResponse,
+  CDNStats,
+  ZKProofListResponse,
+  ZKVerifyResult,
+  BloomCheckResult,
+  CatalogSearchResponse,
+  CatalogEntry,
+  CatalogSubscription,
+  RoutingStrategyInfo,
+  PriceSuggestion,
+  DemandMatch,
+  MCPHealth,
 } from "../types/api";
 
 const BASE = "/api/v1";
@@ -147,3 +158,66 @@ export const fetchAgentProfile = (agentId: string) =>
 
 export const fetchMultiLeaderboard = (boardType: string, limit?: number) =>
   get<MultiLeaderboardResponse>(`/analytics/leaderboard/${boardType}`, { limit });
+
+// ── CDN ──
+
+export const fetchCDNStats = () => get<CDNStats>("/health/cdn");
+
+// ── ZKP ──
+
+export const fetchZKProofs = (listingId: string) =>
+  get<ZKProofListResponse>(`/zkp/${listingId}/proofs`);
+
+export const verifyZKP = (
+  token: string,
+  listingId: string,
+  params: { keywords?: string[]; schema_has_fields?: string[]; min_size?: number; min_quality?: number },
+) => authPost<ZKVerifyResult>(`/zkp/${listingId}/verify`, token, params);
+
+export const bloomCheck = (listingId: string, word: string) =>
+  get<BloomCheckResult>(`/zkp/${listingId}/bloom-check`, { word });
+
+// ── Catalog ──
+
+export const searchCatalog = (params?: {
+  q?: string;
+  namespace?: string;
+  min_quality?: number;
+  max_price?: number;
+  page?: number;
+  page_size?: number;
+}) => get<CatalogSearchResponse>("/catalog/search", params as Record<string, string | number | undefined>);
+
+export const getAgentCatalog = (agentId: string) =>
+  get<{ entries: CatalogEntry[]; count: number }>(`/catalog/agent/${agentId}`);
+
+export const registerCatalog = (
+  token: string,
+  body: { namespace: string; topic: string; description?: string; price_range_min?: number; price_range_max?: number },
+) => authPost<CatalogEntry>("/catalog", token, body);
+
+export const subscribeCatalog = (
+  token: string,
+  body: { namespace_pattern: string; topic_pattern?: string; max_price?: number; min_quality?: number },
+) => authPost<CatalogSubscription>("/catalog/subscribe", token, body);
+
+// ── Routing ──
+
+export const fetchRoutingStrategies = () => get<RoutingStrategyInfo>("/route/strategies");
+
+// ── Seller API ──
+
+export const suggestPrice = (
+  token: string,
+  body: { category: string; quality_score?: number },
+) => authPost<PriceSuggestion>("/seller/price-suggest", token, body);
+
+export const fetchDemandForMe = (token: string) =>
+  authGet<{ matches: DemandMatch[]; count: number }>("/seller/demand-for-me", token);
+
+// ── MCP ──
+
+export const fetchMCPHealth = () => {
+  const url = new URL("/mcp/health", window.location.origin);
+  return fetch(url.toString()).then(r => r.json()) as Promise<MCPHealth>;
+};

@@ -290,3 +290,142 @@ export interface MultiLeaderboardResponse {
   board_type: string;
   entries: MultiLeaderboardEntry[];
 }
+
+// ── CDN Stats ──
+
+export interface CDNStats {
+  overview: {
+    total_requests: number;
+    tier1_hits: number;
+    tier2_hits: number;
+    tier3_hits: number;
+    total_misses: number;
+  };
+  hot_cache: {
+    tier: string;
+    entries: number;
+    bytes_used: number;
+    bytes_max: number;
+    utilization_pct: number;
+    hits: number;
+    misses: number;
+    promotions: number;
+    evictions: number;
+    hit_rate: number;
+  };
+  warm_cache: CacheStats;
+}
+
+// ── ZKP (Zero-Knowledge Proofs) ──
+
+export interface ZKProof {
+  id: string;
+  proof_type: "merkle_root" | "schema" | "bloom_filter" | "metadata";
+  commitment: string;
+  public_inputs: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ZKProofListResponse {
+  listing_id: string;
+  proofs: ZKProof[];
+  count: number;
+}
+
+export interface ZKVerifyResult {
+  listing_id: string;
+  verified: boolean;
+  checks: Record<string, { passed: boolean; details?: Record<string, unknown> }>;
+  proof_types_available: string[];
+}
+
+export interface BloomCheckResult {
+  listing_id: string;
+  word: string;
+  probably_present: boolean;
+  note: string;
+}
+
+// ── Data Catalog ──
+
+export interface CatalogEntry {
+  id: string;
+  agent_id: string;
+  namespace: string;
+  topic: string;
+  description: string;
+  schema_json: Record<string, unknown>;
+  price_range: [number, number];
+  quality_avg: number;
+  active_listings_count: number;
+  status: string;
+  created_at: string;
+}
+
+export interface CatalogSearchResponse {
+  entries: CatalogEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface CatalogSubscription {
+  id: string;
+  namespace_pattern: string;
+  topic_pattern: string;
+  notify_via: string;
+  status: string;
+}
+
+// ── Routing ──
+
+export type RoutingStrategy =
+  | "cheapest"
+  | "fastest"
+  | "highest_quality"
+  | "best_value"
+  | "round_robin"
+  | "weighted_random"
+  | "locality";
+
+export interface RoutingStrategyInfo {
+  strategies: RoutingStrategy[];
+  default: string;
+  descriptions: Record<string, string>;
+}
+
+// ── Seller API ──
+
+export interface PriceSuggestion {
+  suggested_price: number;
+  category: string;
+  quality_score: number;
+  competitors: number;
+  median_price: number;
+  price_range: [number, number];
+  demand_searches: number;
+  strategy: string;
+}
+
+export interface DemandMatch {
+  demand_id: string;
+  query_pattern: string;
+  category: string;
+  velocity: number;
+  total_searches: number;
+  avg_max_price: number;
+  fulfillment_rate: number;
+  opportunity: string;
+}
+
+// ── MCP ──
+
+export interface MCPHealth {
+  status: string;
+  protocol_version: string;
+  server: string;
+  version: string;
+  active_sessions: number;
+  tools_count: number;
+  resources_count: number;
+}
