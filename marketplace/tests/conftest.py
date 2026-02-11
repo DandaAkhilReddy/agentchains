@@ -44,7 +44,35 @@ def _set_sqlite_pragma(dbapi_conn, connection_record):
 
 @pytest.fixture(autouse=True)
 async def _setup_db():
-    """Create all tables before each test, drop after."""
+    """Create all tables before each test, drop after. Also clear global state."""
+    # Clear all singleton caches before test
+    from marketplace.services.cache_service import listing_cache, content_cache, agent_cache
+    listing_cache.clear()
+    content_cache.clear()
+    agent_cache.clear()
+
+    # Clear rate limiter buckets
+    from marketplace.core.rate_limiter import rate_limiter
+    rate_limiter._buckets.clear()
+
+    # Clear CDN hot cache and stats
+    from marketplace.services import cdn_service
+    cdn_service._hot_cache._store.clear()
+    cdn_service._hot_cache._freq.clear()
+    cdn_service._hot_cache._access_count.clear()
+    cdn_service._hot_cache._current_bytes = 0
+    cdn_service._hot_cache.hits = 0
+    cdn_service._hot_cache.misses = 0
+    cdn_service._hot_cache.promotions = 0
+    cdn_service._hot_cache.evictions = 0
+    cdn_service._cdn_stats.update({
+        "tier1_hits": 0,
+        "tier2_hits": 0,
+        "tier3_hits": 0,
+        "total_misses": 0,
+        "total_requests": 0,
+    })
+
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -151,25 +179,191 @@ def make_token_account(db: AsyncSession):
 
 @pytest.fixture
 def make_listing(db: AsyncSession):
-    """Factory fixture: create a DataListing."""
+    """Factory fixture: create a DataListing with content stored in storage."""
     from marketplace.models.listing import DataListing
+    from marketplace.services.storage_service import get_storage
 
-    async def _make(seller_id: str, price_usdc: float = 1.0, content_hash: str = None):
-        content_hash = content_hash or f"sha256:{_new_id().replace('-', '')[:64]}"
+    async def _make(seller_id: str, price_usdc: float = 1.0, content_hash: str = None, **kwargs):
+        # Generate or use provided content
+        content = kwargs.get("content", f"Test content for listing {_new_id()[:6]}")
+        if isinstance(content, str):
+            content = content.encode("utf-8")
+
+        # Store content in storage and get hash
+        storage = get_storage()
+        stored_hash = storage.put(content)
+        # Use caller-provided content_hash only if explicitly set, else use the stored hash
+        final_hash = content_hash if content_hash is not None else stored_hash
+
         listing = DataListing(
             id=_new_id(),
             seller_id=seller_id,
-            title=f"Test Listing {_new_id()[:6]}",
-            category="web_search",
-            content_hash=content_hash,
-            content_size=1024,
+            title=kwargs.get("title", f"Test Listing {_new_id()[:6]}"),
+            category=kwargs.get("category", "web_search"),
+            content_hash=final_hash,
+            content_size=kwargs.get("content_size", len(content)),
             price_usdc=Decimal(str(price_usdc)),
             price_axn=Decimal(str(price_usdc / 0.001)),
-            status="active",
+            quality_score=Decimal(str(kwargs.get("quality_score", 0.85))),
+            status=kwargs.get("status", "active"),
         )
         db.add(listing)
         await db.commit()
         await db.refresh(listing)
         return listing
+
+    return _make
+
+
+# ---------------------------------------------------------------------------
+# Extended factory fixtures (Wave 0)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def make_transaction(db: AsyncSession):
+    """Factory fixture: create a Transaction."""
+    from marketplace.models.transaction import Transaction
+
+    async def _make(buyer_id: str, seller_id: str, listing_id: str,
+                    amount_usdc: float = 1.0, status: str = "completed"):
+        from datetime import datetime, timezone
+        tx = Transaction(
+            id=_new_id(),
+            listing_id=listing_id,
+            buyer_id=buyer_id,
+            seller_id=seller_id,
+            amount_usdc=Decimal(str(amount_usdc)),
+            status=status,
+            content_hash=f"sha256:{_new_id().replace('-', '')[:64]}",
+        )
+        if status == "completed":
+            tx.completed_at = datetime.now(timezone.utc)
+        db.add(tx)
+        await db.commit()
+        await db.refresh(tx)
+        return tx
+
+    return _make
+
+
+@pytest.fixture
+def make_creator(db: AsyncSession):
+    """Factory fixture: register a Creator and return (creator, jwt_token)."""
+    from marketplace.core.creator_auth import hash_password, create_creator_token
+    from marketplace.models.creator import Creator
+
+    async def _make(email: str = None, password: str = "testpass123",
+                    display_name: str = "Test Creator"):
+        email = email or f"creator-{_new_id()[:8]}@test.com"
+        creator = Creator(
+            id=_new_id(),
+            email=email,
+            password_hash=hash_password(password),
+            display_name=display_name,
+            status="active",
+        )
+        db.add(creator)
+        await db.commit()
+        await db.refresh(creator)
+        token = create_creator_token(creator.id, creator.email)
+        return creator, token
+
+    return _make
+
+
+@pytest.fixture
+def make_catalog_entry(db: AsyncSession):
+    """Factory fixture: create a DataCatalogEntry."""
+    from marketplace.models.catalog import DataCatalogEntry
+
+    async def _make(agent_id: str, namespace: str = "web_search",
+                    topic: str = "test-topic", **kwargs):
+        entry = DataCatalogEntry(
+            id=_new_id(),
+            agent_id=agent_id,
+            namespace=namespace,
+            topic=topic,
+            description=kwargs.get("description", "Test catalog entry"),
+            price_range_min=Decimal(str(kwargs.get("price_range_min", 0.001))),
+            price_range_max=Decimal(str(kwargs.get("price_range_max", 0.01))),
+            quality_avg=Decimal(str(kwargs.get("quality_avg", 0.8))),
+            status=kwargs.get("status", "active"),
+        )
+        db.add(entry)
+        await db.commit()
+        await db.refresh(entry)
+        return entry
+
+    return _make
+
+
+@pytest.fixture
+def make_catalog_subscription(db: AsyncSession):
+    """Factory fixture: create a CatalogSubscription."""
+    from marketplace.models.catalog import CatalogSubscription
+
+    async def _make(subscriber_id: str, namespace_pattern: str = "web_search.*", **kwargs):
+        sub = CatalogSubscription(
+            id=_new_id(),
+            subscriber_id=subscriber_id,
+            namespace_pattern=namespace_pattern,
+            topic_pattern=kwargs.get("topic_pattern", "*"),
+            max_price=Decimal(str(kwargs["max_price"])) if kwargs.get("max_price") else None,
+            min_quality=Decimal(str(kwargs["min_quality"])) if kwargs.get("min_quality") else None,
+            status=kwargs.get("status", "active"),
+        )
+        db.add(sub)
+        await db.commit()
+        await db.refresh(sub)
+        return sub
+
+    return _make
+
+
+@pytest.fixture
+def make_search_log(db: AsyncSession):
+    """Factory fixture: create a SearchLog."""
+    from marketplace.models.search_log import SearchLog
+
+    async def _make(query_text: str = "python tutorial",
+                    category: str = "web_search", **kwargs):
+        log = SearchLog(
+            id=_new_id(),
+            query_text=query_text,
+            category=category,
+            source=kwargs.get("source", "discover"),
+            requester_id=kwargs.get("requester_id"),
+            matched_count=kwargs.get("matched_count", 0),
+            led_to_purchase=kwargs.get("led_to_purchase", 0),
+        )
+        db.add(log)
+        await db.commit()
+        await db.refresh(log)
+        return log
+
+    return _make
+
+
+@pytest.fixture
+def make_demand_signal(db: AsyncSession):
+    """Factory fixture: create a DemandSignal."""
+    from marketplace.models.demand_signal import DemandSignal
+
+    async def _make(query_pattern: str = "python tutorial",
+                    category: str = "web_search", **kwargs):
+        signal = DemandSignal(
+            id=_new_id(),
+            query_pattern=query_pattern,
+            category=category,
+            search_count=kwargs.get("search_count", 10),
+            unique_requesters=kwargs.get("unique_requesters", 5),
+            velocity=Decimal(str(kwargs.get("velocity", 2.0))),
+            fulfillment_rate=Decimal(str(kwargs.get("fulfillment_rate", 0.5))),
+            is_gap=kwargs.get("is_gap", 0),
+        )
+        db.add(signal)
+        await db.commit()
+        await db.refresh(signal)
+        return signal
 
     return _make

@@ -57,7 +57,6 @@ async def get_demand_for_seller(db: AsyncSession, seller_id: str) -> list[dict]:
     # Get recent demand signals
     demand_result = await db.execute(
         select(DemandSignal)
-        .where(DemandSignal.status == "active")
         .order_by(DemandSignal.velocity.desc())
         .limit(50)
     )
@@ -79,7 +78,7 @@ async def get_demand_for_seller(db: AsyncSession, seller_id: str) -> list[dict]:
                 "query_pattern": demand.query_pattern,
                 "category": demand.category,
                 "velocity": float(demand.velocity or 0),
-                "total_searches": int(demand.total_searches or 0),
+                "total_searches": int(demand.search_count or 0),
                 "avg_max_price": float(demand.avg_max_price or 0),
                 "fulfillment_rate": float(demand.fulfillment_rate or 0),
                 "opportunity": "high" if float(demand.velocity or 0) > 5 else "medium",
@@ -125,8 +124,8 @@ async def suggest_price(
 
     # Demand adjustment: high-demand categories get a premium
     demand_result = await db.execute(
-        select(func.sum(DemandSignal.total_searches))
-        .where(DemandSignal.category == category, DemandSignal.status == "active")
+        select(func.sum(DemandSignal.search_count))
+        .where(DemandSignal.category == category)
     )
     total_demand = (demand_result.scalar() or 0)
     if total_demand > 100:
