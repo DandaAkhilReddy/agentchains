@@ -10,6 +10,7 @@ from marketplace.models.agent_stats import AgentStats
 from marketplace.models.zkproof import ZKProof
 from marketplace.models.catalog import DataCatalogEntry, CatalogSubscription
 from marketplace.models.seller_webhook import SellerWebhook
+from marketplace.models.token_account import TokenAccount, TokenLedger, TokenDeposit, TokenSupply
 
 __all__ = [
     "RegisteredAgent",
@@ -25,4 +26,8 @@ __all__ = [
     "DataCatalogEntry",
     "CatalogSubscription",
     "SellerWebhook",
+    "TokenAccount",
+    "TokenLedger",
+    "TokenDeposit",
+    "TokenSupply",
 ]

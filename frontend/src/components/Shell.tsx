@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Hexagon } from "lucide-react";
+import TokenBalance from "./TokenBalance";
 
 export default function Shell({ children }: { children: ReactNode }) {
   return (
@@ -17,6 +18,9 @@ export default function Shell({ children }: { children: ReactNode }) {
           <span className="ml-3 rounded-full border border-[rgba(0,212,255,0.2)] bg-primary-glow px-2 py-0.5 text-[10px] font-medium text-primary">
             v0.2
           </span>
+          <div className="ml-auto">
+            <TokenBalance />
+          </div>
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
       </header>

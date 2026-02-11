@@ -29,3 +29,14 @@ export function formatBytes(bytes: number): string {
 export function scoreToPercent(score: number): string {
   return `${Math.round(score * 100)}%`;
 }
+
+export function formatAXN(amount: number): string {
+  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(2)}M AXN`;
+  if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}K AXN`;
+  return `${amount.toFixed(2)} AXN`;
+}
+
+export function axnToUSD(amount: number, pegRate = 0.001): string {
+  const usd = amount * pegRate;
+  return `$${usd.toFixed(2)}`;
+}

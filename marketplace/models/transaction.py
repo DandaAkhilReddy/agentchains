@@ -25,8 +25,11 @@ class Transaction(Base):
     #                (or: failed, disputed, refunded)
     status = Column(String(30), nullable=False, default="initiated")
 
+    payment_method = Column(String(20), default="token")  # token | fiat | simulated
     payment_tx_hash = Column(String(66))  # Blockchain tx hash (0x + 64 hex)
     payment_network = Column(String(30), default="base-sepolia")
+    amount_axn = Column(Numeric(18, 6), nullable=True)  # AXN token amount
+    token_ledger_id = Column(String(36), nullable=True)  # FK to token_ledger entry
     content_hash = Column(String(71), nullable=False)  # Expected hash
     delivered_hash = Column(String(71))  # Actual hash of delivered content
     verification_status = Column(String(20), default="pending")  # pending | verified | failed | skipped

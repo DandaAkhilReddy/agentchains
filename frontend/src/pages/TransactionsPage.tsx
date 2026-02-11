@@ -4,7 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import DataTable, { type Column } from "../components/DataTable";
 import Badge, { statusVariant } from "../components/Badge";
 import CopyButton from "../components/CopyButton";
-import { truncateId, formatUSDC, relativeTime } from "../lib/format";
+import { truncateId, formatUSDC, formatAXN, relativeTime } from "../lib/format";
 import type { Transaction, TransactionStatus } from "../types/api";
 
 const PIPELINE_STEPS: { key: TransactionStatus; label: string }[] = [
@@ -86,10 +86,37 @@ const columns: Column<Transaction>[] = [
     key: "amount",
     header: "Amount",
     render: (tx) => (
-      <span style={{ fontFamily: "var(--font-mono)" }}>
-        {formatUSDC(tx.amount_usdc)}
-      </span>
+      <div className="flex flex-col">
+        {tx.amount_axn ? (
+          <>
+            <span className="text-sm font-semibold text-primary" style={{ fontFamily: "var(--font-mono)" }}>
+              {formatAXN(tx.amount_axn)}
+            </span>
+            <span className="text-[10px] text-text-muted" style={{ fontFamily: "var(--font-mono)" }}>
+              {formatUSDC(tx.amount_usdc)}
+            </span>
+          </>
+        ) : (
+          <span style={{ fontFamily: "var(--font-mono)" }}>
+            {formatUSDC(tx.amount_usdc)}
+          </span>
+        )}
+      </div>
     ),
+  },
+  {
+    key: "payment_method",
+    header: "Payment",
+    render: (tx) => {
+      const method = tx.payment_method ?? "simulated";
+      const cfg: Record<string, { label: string; variant: "cyan" | "green" | "gray" }> = {
+        token: { label: "AXN", variant: "cyan" },
+        fiat: { label: "Fiat", variant: "green" },
+        simulated: { label: "Simulated", variant: "gray" },
+      };
+      const { label, variant } = cfg[method] ?? cfg.simulated;
+      return <Badge label={label} variant={variant} />;
+    },
   },
   {
     key: "status",

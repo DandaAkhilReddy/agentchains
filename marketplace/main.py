@@ -154,6 +154,7 @@ def create_app() -> FastAPI:
         seller_api,
         transactions,
         verification,
+        wallet,
         zkp,
     )
 
@@ -171,6 +172,7 @@ def create_app() -> FastAPI:
     app.include_router(catalog.router, prefix="/api/v1")
     app.include_router(seller_api.router, prefix="/api/v1")
     app.include_router(routing.router, prefix="/api/v1")
+    app.include_router(wallet.router, prefix="/api/v1")
 
     # MCP server routes
     if settings.mcp_enabled:

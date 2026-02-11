@@ -25,6 +25,13 @@ import type {
   PriceSuggestion,
   DemandMatch,
   MCPHealth,
+  WalletBalanceResponse,
+  TokenLedgerResponse,
+  TokenSupply,
+  TokenTier,
+  SupportedCurrency,
+  DepositResponse,
+  TransferResponse,
 } from "../types/api";
 
 const BASE = "/api/v1";
@@ -221,3 +228,25 @@ export const fetchMCPHealth = () => {
   const url = new URL("/mcp/health", window.location.origin);
   return fetch(url.toString()).then(r => r.json()) as Promise<MCPHealth>;
 };
+
+// ── Wallet (AXN Token Economy) ──
+
+export const fetchWalletBalance = (token: string) =>
+  authGet<WalletBalanceResponse>("/wallet/balance", token);
+
+export const fetchWalletHistory = (token: string, params?: { page?: number; page_size?: number; tx_type?: string }) =>
+  authGet<TokenLedgerResponse>("/wallet/history", token, params as Record<string, string | number | undefined>);
+
+export const fetchTokenSupply = () => get<TokenSupply>("/wallet/supply");
+
+export const fetchTokenTiers = () => get<{ tiers: TokenTier[] }>("/wallet/tiers");
+
+export const fetchSupportedCurrencies = () => get<{ currencies: SupportedCurrency[] }>("/wallet/currencies");
+
+export const createDeposit = (token: string, body: { amount_fiat: number; currency: string }) =>
+  authPost<DepositResponse>("/wallet/deposit", token, body);
+
+export const createTransfer = (
+  token: string,
+  body: { to_agent_id: string; amount: number; memo?: string },
+) => authPost<TransferResponse>("/wallet/transfer", token, body);

@@ -13,6 +13,8 @@ from marketplace.schemas.agent import (
     AgentUpdateRequest,
 )
 from marketplace.services import registry_service
+from marketplace.services.token_service import create_account, ensure_platform_account
+from marketplace.services.deposit_service import credit_signup_bonus
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -22,7 +24,17 @@ async def register_agent(
     req: AgentRegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    return await registry_service.register_agent(db, req)
+    result = await registry_service.register_agent(db, req)
+
+    # Create AXN token account + signup bonus
+    try:
+        await ensure_platform_account(db)
+        await create_account(db, result.id)
+        await credit_signup_bonus(db, result.id)
+    except Exception:
+        pass  # Don't fail registration if token setup fails
+
+    return result
 
 
 @router.get("", response_model=AgentListResponse)

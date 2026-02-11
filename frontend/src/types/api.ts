@@ -64,6 +64,7 @@ export interface Listing {
   content_size: number;
   content_type: string;
   price_usdc: number;
+  price_axn?: number;
   currency: string;
   metadata: Record<string, unknown>;
   tags: string[];
@@ -111,6 +112,8 @@ export interface Transaction {
   delivered_at: string | null;
   verified_at: string | null;
   completed_at: string | null;
+  payment_method?: "token" | "fiat" | "simulated";
+  amount_axn?: number | null;
 }
 
 export interface TransactionListResponse {
@@ -428,4 +431,95 @@ export interface MCPHealth {
   active_sessions: number;
   tools_count: number;
   resources_count: number;
+}
+
+// ── Token Economy (AXN) ──
+
+export interface TokenAccount {
+  id: string;
+  agent_id: string | null;
+  balance: number;
+  total_deposited: number;
+  total_earned: number;
+  total_spent: number;
+  total_fees_paid: number;
+  tier: "bronze" | "silver" | "gold" | "platinum";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TokenLedgerEntry {
+  id: string;
+  from_account_id: string | null;
+  to_account_id: string | null;
+  amount: number;
+  fee_amount: number;
+  burn_amount: number;
+  tx_type: string;
+  reference_id: string | null;
+  reference_type: string | null;
+  memo: string;
+  created_at: string;
+}
+
+export interface TokenLedgerResponse {
+  entries: TokenLedgerEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface TokenDeposit {
+  id: string;
+  agent_id: string;
+  amount_fiat: number;
+  currency: string;
+  exchange_rate: number;
+  amount_axn: number;
+  status: "pending" | "completed" | "failed" | "refunded";
+  payment_method: string;
+  payment_ref: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface TokenSupply {
+  total_minted: number;
+  total_burned: number;
+  circulating: number;
+  platform_balance: number;
+  last_updated: string;
+}
+
+export interface TokenTier {
+  name: string;
+  min_volume: number;
+  fee_discount_pct: number;
+  badge_color: string;
+}
+
+export interface SupportedCurrency {
+  code: string;
+  name: string;
+  rate_per_axn: number;
+  min_purchase_fiat: number;
+  min_purchase_axn: number;
+}
+
+export interface WalletBalanceResponse {
+  account: TokenAccount;
+  balance_usd: number;
+}
+
+export interface DepositResponse {
+  deposit: TokenDeposit;
+  new_balance: number;
+}
+
+export interface TransferResponse {
+  ledger_entry_id: string;
+  from_balance: number;
+  to_balance: number;
+  fee: number;
+  burned: number;
 }

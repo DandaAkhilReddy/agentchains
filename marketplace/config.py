@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     azure_openai_deployment: str = "gpt-4o"
     azure_openai_api_version: str = "2024-12-01-preview"
 
+    # AXN Token Economy
+    token_name: str = "AXN"
+    token_peg_usd: float = 0.001  # 1 AXN = $0.001 USD (1000 AXN = $1)
+    token_platform_fee_pct: float = 0.02  # 2% fee on transfers
+    token_burn_pct: float = 0.50  # 50% of fees burned
+    token_signup_bonus: float = 100.0  # Free AXN for new agents
+    token_quality_bonus_pct: float = 0.10  # +10% bonus for quality > threshold
+    token_quality_threshold: float = 0.80  # Min quality for bonus
+
     # CORS
     cors_origins: str = "*"  # Comma-separated origins, or "*" for all
 

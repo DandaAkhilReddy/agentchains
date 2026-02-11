@@ -18,7 +18,7 @@ from marketplace.services.cdn_service import get_content as cdn_get_content
 from marketplace.services.listing_service import get_listing
 
 
-async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str) -> JSONResponse:
+async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_method: str = "token") -> JSONResponse:
     """Execute full buy flow in one call, optimized for cached content."""
     start = time.monotonic()
 
@@ -45,7 +45,21 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str) -> JSONR
     if content_bytes is None:
         raise HTTPException(status_code=404, detail="Content not found in storage")
 
-    # 5. Create completed transaction record (collapsed state machine)
+    # 5. Token payment
+    token_result = None
+    amount_axn = None
+    if payment_method == "token":
+        try:
+            from marketplace.services.token_service import debit_for_purchase
+            listing_quality = float(listing.quality_score or 0)
+            token_result = await debit_for_purchase(
+                db, buyer_id, seller_id, price_usdc, listing_quality, None  # tx_id set after commit
+            )
+            amount_axn = token_result["amount_axn"]
+        except Exception as e:
+            raise HTTPException(status_code=402, detail=f"Insufficient AXN balance: {e}")
+
+    # 6. Create completed transaction record (collapsed state machine)
     now = datetime.now(timezone.utc)
     tx = Transaction(
         listing_id=lid,
@@ -57,6 +71,9 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str) -> JSONR
         delivered_hash=content_hash,
         verification_status="verified",
         payment_tx_hash=f"express_{int(now.timestamp() * 1000)}",
+        payment_method=payment_method,
+        amount_axn=amount_axn,
+        token_ledger_id=token_result["ledger_id"] if token_result else None,
         initiated_at=now,
         paid_at=now,
         delivered_at=now,
@@ -65,7 +82,7 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str) -> JSONR
     )
     db.add(tx)
 
-    # 6. Increment access count via SQL UPDATE (avoids merge/detached issues)
+    # 7. Increment access count via SQL UPDATE (avoids merge/detached issues)
     await db.execute(
         update(DataListing)
         .where(DataListing.id == lid)
@@ -77,7 +94,7 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str) -> JSONR
 
     elapsed_ms = (time.monotonic() - start) * 1000
 
-    # 7. Broadcast WebSocket event (fire-and-forget)
+    # 8. Broadcast WebSocket event (fire-and-forget)
     try:
         from marketplace.main import broadcast_event
         import asyncio
@@ -91,6 +108,9 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str) -> JSONR
                     "title": listing_title,
                     "buyer_id": buyer_id,
                     "price_usdc": price_usdc,
+                    "amount_axn": amount_axn,
+                    "payment_method": payment_method,
+                    "buyer_balance": token_result["buyer_balance"] if token_result else None,
                     "delivery_ms": round(elapsed_ms, 1),
                     "cache_hit": was_cache_hit,
                 },
@@ -106,6 +126,9 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str) -> JSONR
             "content": content_bytes.decode("utf-8"),
             "content_hash": content_hash,
             "price_usdc": price_usdc,
+            "amount_axn": amount_axn,
+            "payment_method": payment_method,
+            "buyer_balance": token_result["buyer_balance"] if token_result else None,
             "seller_id": seller_id,
             "delivery_ms": round(elapsed_ms, 1),
             "cache_hit": was_cache_hit,
