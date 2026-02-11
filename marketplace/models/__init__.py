@@ -12,6 +12,9 @@ from marketplace.models.catalog import DataCatalogEntry, CatalogSubscription
 from marketplace.models.seller_webhook import SellerWebhook
 from marketplace.models.token_account import TokenAccount, TokenLedger, TokenDeposit, TokenSupply
 from marketplace.models.openclaw_webhook import OpenClawWebhook
+from marketplace.models.creator import Creator
+from marketplace.models.audit_log import AuditLog
+from marketplace.models.redemption import RedemptionRequest, ApiCreditBalance
 
 __all__ = [
     "RegisteredAgent",
@@ -32,4 +35,8 @@ __all__ = [
     "TokenDeposit",
     "TokenSupply",
     "OpenClawWebhook",
+    "Creator",
+    "AuditLog",
+    "RedemptionRequest",
+    "ApiCreditBalance",
 ]

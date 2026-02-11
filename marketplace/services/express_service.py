@@ -57,7 +57,7 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
             )
             amount_axn = token_result["amount_axn"]
         except Exception as e:
-            raise HTTPException(status_code=402, detail=f"Insufficient AXN balance: {e}")
+            raise HTTPException(status_code=402, detail=f"Insufficient ARD balance: {e}")
 
     # 6. Create completed transaction record (collapsed state machine)
     now = datetime.now(timezone.utc)

@@ -49,7 +49,7 @@ TOOLS = [
     },
     {
         "name": "marketplace_express_buy",
-        "description": "Buy a data listing instantly with AXN tokens",
+        "description": "Buy a data listing instantly with ARD tokens",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -113,7 +113,7 @@ TOOLS = [
     },
     {
         "name": "marketplace_wallet_balance",
-        "description": "Check your AXN token balance and tier",
+        "description": "Check your ARD token balance and tier",
         "inputSchema": {"type": "object", "properties": {}},
     },
 ]

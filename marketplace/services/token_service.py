@@ -1,6 +1,6 @@
-"""AXN Token Economy — Off-chain double-entry ledger for instant token transfers.
+"""ARD Token Economy — Off-chain double-entry ledger for instant token transfers.
 
-This is the core engine of the AXN token economy.  Every token movement
+This is the core engine of the ARD token economy.  Every token movement
 (deposit, purchase, sale, fee, burn, bonus, refund, withdrawal) is recorded
 as an immutable row in ``token_ledger`` with matching balance updates on the
 source and destination ``token_accounts``.
@@ -31,6 +31,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
+from marketplace.core.hashing import compute_ledger_hash
 from marketplace.models.token_account import (
     TokenAccount,
     TokenLedger,
@@ -94,13 +95,119 @@ async def _get_account_by_agent(
 ) -> TokenAccount | None:
     """Fetch account by agent_id.  Pass agent_id=None for the platform account."""
     if agent_id is None:
-        stmt = select(TokenAccount).where(TokenAccount.agent_id.is_(None))
+        stmt = select(TokenAccount).where(
+            TokenAccount.agent_id.is_(None),
+            TokenAccount.creator_id.is_(None),
+        )
     else:
         stmt = select(TokenAccount).where(TokenAccount.agent_id == agent_id)
     if lock and not _is_sqlite:
         stmt = stmt.with_for_update()
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def _get_account_by_creator(
+    db: AsyncSession, creator_id: str, *, lock: bool = False
+) -> TokenAccount | None:
+    """Fetch token account by creator_id."""
+    stmt = select(TokenAccount).where(TokenAccount.creator_id == creator_id)
+    if lock and not _is_sqlite:
+        stmt = stmt.with_for_update()
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+# ---------------------------------------------------------------------------
+# Creator royalty helpers (private)
+# ---------------------------------------------------------------------------
+
+async def _get_creator_for_agent(db: AsyncSession, agent_id: str) -> str | None:
+    """Look up the creator_id that owns the given agent.  Returns None if unclaimed."""
+    from marketplace.models.agent import RegisteredAgent
+    result = await db.execute(
+        select(RegisteredAgent.creator_id).where(RegisteredAgent.id == agent_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _process_creator_royalty(
+    db: AsyncSession,
+    agent_id: str,
+    net_amount: Decimal,
+    reference_id: str | None,
+) -> TokenLedger | None:
+    """Auto-transfer agent earnings to the owning creator's account.
+
+    This is a fee-free internal transfer (tx_type='creator_royalty').
+    Called after every agent credit to auto-flow earnings upstream.
+    Returns the royalty ledger entry, or None if the agent has no creator.
+    """
+    if settings.creator_royalty_pct <= 0:
+        return None
+
+    creator_id = await _get_creator_for_agent(db, agent_id)
+    if creator_id is None:
+        return None
+
+    creator_acct = await _get_account_by_creator(db, creator_id, lock=True)
+    agent_acct = await _get_account_by_agent(db, agent_id, lock=True)
+    if creator_acct is None or agent_acct is None:
+        return None
+
+    royalty = _to_decimal(net_amount * _to_decimal(settings.creator_royalty_pct))
+    if royalty <= 0:
+        return None
+
+    # Debit agent, credit creator (no platform fee)
+    agent_balance = Decimal(str(agent_acct.balance))
+    if agent_balance < royalty:
+        royalty = agent_balance  # Don't overdraw — transfer what's available
+    if royalty <= 0:
+        return None
+
+    agent_acct.balance = Decimal(str(agent_acct.balance)) - royalty
+    agent_acct.updated_at = _utcnow()
+
+    creator_acct.balance = Decimal(str(creator_acct.balance)) + royalty
+    creator_acct.total_earned = Decimal(str(creator_acct.total_earned)) + royalty
+    creator_acct.updated_at = _utcnow()
+
+    # Hash chain
+    latest = await db.execute(
+        select(TokenLedger.entry_hash).order_by(TokenLedger.created_at.desc()).limit(1)
+    )
+    prev_hash = latest.scalar_one_or_none()
+    created_at = _utcnow()
+    entry_hash = compute_ledger_hash(
+        prev_hash, agent_acct.id, creator_acct.id,
+        royalty, Decimal("0"), Decimal("0"), "creator_royalty", created_at.isoformat(),
+    )
+
+    ledger = TokenLedger(
+        id=_new_id(),
+        from_account_id=agent_acct.id,
+        to_account_id=creator_acct.id,
+        amount=royalty,
+        fee_amount=Decimal("0"),
+        burn_amount=Decimal("0"),
+        tx_type="creator_royalty",
+        reference_id=reference_id,
+        reference_type="creator_royalty",
+        idempotency_key=f"royalty-{reference_id}" if reference_id else None,
+        memo=f"Creator royalty ({settings.creator_royalty_pct:.0%}) from agent {agent_id}",
+        created_at=created_at,
+        prev_hash=prev_hash,
+        entry_hash=entry_hash,
+    )
+    db.add(ledger)
+    await db.flush()
+
+    logger.info(
+        "Creator royalty: %s ARD from agent %s → creator %s (ref=%s)",
+        royalty, agent_id, creator_id, reference_id,
+    )
+    return ledger
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +358,7 @@ async def transfer(
     if sender_balance < amount_d:
         raise ValueError(
             f"Insufficient balance: agent {from_agent_id} has "
-            f"{sender_balance} AXN, needs {amount_d} AXN"
+            f"{sender_balance} ARD, needs {amount_d} ARD"
         )
 
     # --- Fee & burn calculation -----------------------------------------------
@@ -286,7 +393,18 @@ async def transfer(
     )
     supply_row.last_updated = _utcnow()
 
-    # --- Create ledger entry --------------------------------------------------
+    # --- Create ledger entry with hash chain ------------------------------------
+    latest = await db.execute(
+        select(TokenLedger.entry_hash).order_by(TokenLedger.created_at.desc()).limit(1)
+    )
+    prev_hash = latest.scalar_one_or_none()
+
+    created_at = _utcnow()
+    entry_hash = compute_ledger_hash(
+        prev_hash, sender.id, receiver.id,
+        amount_d, fee_d, burn_d, tx_type, created_at.isoformat(),
+    )
+
     ledger = TokenLedger(
         id=_new_id(),
         from_account_id=sender.id,
@@ -299,9 +417,21 @@ async def transfer(
         reference_type=reference_type,
         idempotency_key=idempotency_key,
         memo=memo,
-        created_at=_utcnow(),
+        created_at=created_at,
+        prev_hash=prev_hash,
+        entry_hash=entry_hash,
     )
     db.add(ledger)
+
+    # Process creator royalty before commit (within same transaction)
+    royalty_ledger = None
+    if to_agent_id is not None and tx_type in ("purchase", "sale"):
+        try:
+            royalty_ledger = await _process_creator_royalty(
+                db, to_agent_id, receiver_credit, ledger.id,
+            )
+        except Exception as exc:
+            logger.warning("Creator royalty failed (non-fatal): %s", exc)
 
     await db.commit()
     await db.refresh(ledger)
@@ -317,12 +447,13 @@ async def transfer(
             "fee": float(fee_d),
             "burn": float(burn_d),
             "tx_type": tx_type,
+            "creator_royalty": float(royalty_ledger.amount) if royalty_ledger else 0,
         }))
     except Exception:
         pass
 
     logger.info(
-        "Transfer %s: %s AXN from %s -> %s (fee=%s, burn=%s) [%s]",
+        "Transfer %s: %s ARD from %s -> %s (fee=%s, burn=%s) [%s]",
         ledger.id,
         amount_d,
         from_agent_id,
@@ -382,8 +513,20 @@ async def deposit(
     supply_row.circulating = Decimal(str(supply_row.circulating)) + amount_d
     supply_row.last_updated = _utcnow()
 
-    # Ledger entry — from_account_id is NULL (mint)
+    # Ledger entry — from_account_id is NULL (mint), with hash chain
     idempotency = f"deposit-{deposit_id}" if deposit_id else None
+
+    latest = await db.execute(
+        select(TokenLedger.entry_hash).order_by(TokenLedger.created_at.desc()).limit(1)
+    )
+    prev_hash = latest.scalar_one_or_none()
+
+    created_at = _utcnow()
+    entry_hash = compute_ledger_hash(
+        prev_hash, None, target.id,
+        amount_d, Decimal("0"), Decimal("0"), "deposit", created_at.isoformat(),
+    )
+
     ledger = TokenLedger(
         id=_new_id(),
         from_account_id=None,
@@ -396,7 +539,9 @@ async def deposit(
         reference_type="deposit",
         idempotency_key=idempotency,
         memo=memo,
-        created_at=_utcnow(),
+        created_at=created_at,
+        prev_hash=prev_hash,
+        entry_hash=entry_hash,
     )
     db.add(ledger)
 
@@ -415,7 +560,7 @@ async def deposit(
         pass
 
     logger.info(
-        "Deposit %s: +%s AXN to agent %s (%s)",
+        "Deposit %s: +%s ARD to agent %s (%s)",
         ledger.id,
         amount_d,
         agent_id,
@@ -432,7 +577,7 @@ async def debit_for_purchase(
     listing_quality: float,
     tx_id: str,
 ) -> dict:
-    """Execute the full purchase flow: USD -> AXN conversion, transfer, quality bonus.
+    """Execute the full purchase flow: USD -> ARD conversion, transfer, quality bonus.
 
     Args:
         buyer_id:  Agent ID of the buyer.
@@ -445,7 +590,7 @@ async def debit_for_purchase(
         dict with keys: ledger_id, amount_axn, fee_axn, burn_axn,
         quality_bonus_axn, buyer_balance, seller_balance.
     """
-    # Convert USD to AXN
+    # Convert USD to ARD
     peg = _to_decimal(settings.token_peg_usd)
     if peg <= 0:
         raise ValueError("token_peg_usd must be positive")
@@ -487,7 +632,7 @@ async def debit_for_purchase(
             )
             quality_bonus_axn = bonus
             logger.info(
-                "Quality bonus: +%s AXN to seller %s (quality=%.2f)",
+                "Quality bonus: +%s ARD to seller %s (quality=%.2f)",
                 bonus,
                 seller_id,
                 listing_quality,
@@ -509,7 +654,7 @@ async def debit_for_purchase(
 
 
 async def get_supply(db: AsyncSession) -> dict:
-    """Return global AXN token supply statistics."""
+    """Return global ARD token supply statistics."""
     result = await db.execute(select(TokenSupply).where(TokenSupply.id == 1))
     supply = result.scalar_one_or_none()
     if supply is None:
@@ -595,10 +740,10 @@ async def recalculate_tier(db: AsyncSession, agent_id: str) -> str:
     """Recalculate and persist the tier for an agent based on lifetime volume.
 
     Tier thresholds (total_earned + total_spent):
-        - platinum: >= 1,000,000 AXN
-        - gold:     >= 100,000 AXN
-        - silver:   >= 10,000 AXN
-        - bronze:   < 10,000 AXN
+        - platinum: >= 1,000,000 ARD
+        - gold:     >= 100,000 ARD
+        - silver:   >= 10,000 ARD
+        - bronze:   < 10,000 ARD
 
     Returns:
         The new tier string.
@@ -620,10 +765,89 @@ async def recalculate_tier(db: AsyncSession, agent_id: str) -> str:
         account.updated_at = _utcnow()
         await db.commit()
         logger.info(
-            "Tier change for agent %s: %s -> %s (volume=%s AXN)",
+            "Tier change for agent %s: %s -> %s (volume=%s ARD)",
             agent_id,
             old_tier,
             new_tier,
             volume,
         )
     return new_tier
+
+
+async def verify_ledger_chain(db: AsyncSession) -> dict:
+    """Walk the full ledger and verify every SHA-256 hash link.
+
+    Returns:
+        dict with keys: valid (bool), total_entries (int), errors (list).
+    """
+    stmt = select(TokenLedger).order_by(TokenLedger.created_at.asc())
+    result = await db.execute(stmt)
+    entries = result.scalars().all()
+
+    errors: list[dict] = []
+    prev_hash: str | None = None
+
+    for entry in entries:
+        if entry.entry_hash is None:
+            continue  # Legacy entries before hash chain was enabled
+
+        # Normalize timestamp: SQLite may strip timezone, so ensure +00:00
+        ts = ""
+        if entry.created_at:
+            dt = entry.created_at
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            ts = dt.isoformat()
+
+        expected = compute_ledger_hash(
+            prev_hash,
+            entry.from_account_id,
+            entry.to_account_id,
+            Decimal(str(entry.amount)),
+            Decimal(str(entry.fee_amount)),
+            Decimal(str(entry.burn_amount)),
+            entry.tx_type,
+            ts,
+        )
+
+        if entry.entry_hash != expected:
+            errors.append({
+                "ledger_id": entry.id,
+                "expected_hash": expected,
+                "actual_hash": entry.entry_hash,
+                "created_at": entry.created_at.isoformat() if entry.created_at else None,
+            })
+
+        if entry.prev_hash != prev_hash:
+            errors.append({
+                "ledger_id": entry.id,
+                "error": "prev_hash mismatch",
+                "expected_prev": prev_hash,
+                "actual_prev": entry.prev_hash,
+            })
+
+        prev_hash = entry.entry_hash
+
+    return {
+        "valid": len(errors) == 0,
+        "total_entries": len(entries),
+        "errors": errors[:20],  # Cap error output
+    }
+
+
+async def get_creator_balance(db: AsyncSession, creator_id: str) -> dict:
+    """Return the balance summary for a creator account."""
+    account = await _get_account_by_creator(db, creator_id)
+    if account is None:
+        raise ValueError(f"No token account for creator {creator_id}")
+
+    balance = Decimal(str(account.balance))
+    return {
+        "balance": float(balance),
+        "tier": account.tier,
+        "total_earned": float(account.total_earned),
+        "total_spent": float(account.total_spent),
+        "total_deposited": float(account.total_deposited),
+        "total_fees_paid": float(account.total_fees_paid),
+        "usd_equivalent": float(balance * _to_decimal(settings.token_peg_usd)),
+    }

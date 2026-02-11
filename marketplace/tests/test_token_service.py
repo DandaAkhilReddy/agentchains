@@ -1,4 +1,4 @@
-"""Unit tests for the AXN token service — core transfer engine.
+"""Unit tests for the ARD token service — core transfer engine.
 
 Tests use in-memory SQLite via conftest fixtures.
 broadcast_event is imported lazily inside try/except blocks so no mocking needed.
@@ -77,7 +77,7 @@ async def test_transfer_normal(db: AsyncSession, make_agent, make_token_account,
 
 
 async def test_transfer_fee_calculation(db: AsyncSession, make_agent, make_token_account, seed_platform):
-    """100 AXN transfer: fee=2, burn=1, seller gets 98."""
+    """100 ARD transfer: fee=2, burn=1, seller gets 98."""
     a, _ = await make_agent("sender")
     b, _ = await make_agent("receiver")
     await make_token_account(a.id, 500)
@@ -251,7 +251,7 @@ async def test_debit_for_purchase_no_bonus_below_threshold(db: AsyncSession, mak
 async def test_debit_for_purchase_insufficient(db: AsyncSession, make_agent, make_token_account, seed_platform):
     buyer, _ = await make_agent("broke_buyer")
     seller, _ = await make_agent("deb_seller")
-    await make_token_account(buyer.id, 1)  # only 1 AXN
+    await make_token_account(buyer.id, 1)  # only 1 ARD
     await make_token_account(seller.id, 0)
 
     with pytest.raises(ValueError, match="Insufficient"):

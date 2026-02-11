@@ -2,11 +2,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
 from marketplace.core.auth import get_current_agent_id
 from marketplace.database import get_db
+from marketplace.models.token_account import TokenLedger
 from marketplace.services.token_service import (
     create_account,
     get_balance,
@@ -98,7 +100,7 @@ async def wallet_balance(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
-    """Return the authenticated agent's AXN balance and tier info."""
+    """Return the authenticated agent's ARD balance and tier info."""
     data = await get_balance(db, agent_id)
     return BalanceResponse(**data, token_name=settings.token_name)
 
@@ -121,7 +123,7 @@ async def wallet_deposit(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
-    """Create a fiat deposit request that will be converted to AXN."""
+    """Create a fiat deposit request that will be converted to ARD."""
     try:
         deposit = await create_deposit(db, agent_id, req.amount_fiat, req.currency)
     except ValueError as exc:
@@ -144,7 +146,7 @@ async def wallet_confirm_deposit(
 async def wallet_supply(
     db: AsyncSession = Depends(get_db),
 ):
-    """Public endpoint: return AXN token supply statistics."""
+    """Public endpoint: return ARD token supply statistics."""
     data = await get_supply(db)
     return SupplyResponse(
         total_minted=data["total_minted"],
@@ -160,7 +162,7 @@ async def wallet_transfer(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
-    """Transfer AXN tokens to another agent."""
+    """Transfer ARD tokens to another agent."""
     try:
         entry = await transfer(
             db,
@@ -185,7 +187,7 @@ async def wallet_transfer(
 
 @router.get("/tiers", response_model=TiersResponse)
 async def wallet_tiers():
-    """Public endpoint: return AXN tier definitions and discount rates."""
+    """Public endpoint: return ARD tier definitions and discount rates."""
     return TiersResponse(tiers=[
         TierInfo(name="bronze", min_axn=0, max_axn=9_999, discount_pct=0),
         TierInfo(name="silver", min_axn=10_000, max_axn=99_999, discount_pct=10),
@@ -196,6 +198,38 @@ async def wallet_tiers():
 
 @router.get("/currencies")
 async def wallet_currencies():
-    """Public endpoint: return supported fiat currencies with AXN exchange rates."""
+    """Public endpoint: return supported fiat currencies with ARD exchange rates."""
     currencies = get_supported_currencies()
     return currencies
+
+
+@router.get("/ledger/verify")
+async def verify_ledger_chain(
+    limit: int = Query(1000, ge=1, le=10000),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify integrity of the token ledger SHA-256 hash chain."""
+    from marketplace.core.hashing import compute_ledger_hash
+
+    entries = await db.execute(
+        select(TokenLedger).order_by(TokenLedger.created_at.asc()).limit(limit)
+    )
+    entries = entries.scalars().all()
+
+    prev_hash = None
+    checked = 0
+    for entry in entries:
+        if entry.entry_hash is None:
+            continue  # Skip pre-chain entries
+        expected = compute_ledger_hash(
+            prev_hash, entry.from_account_id, entry.to_account_id,
+            entry.amount, entry.fee_amount, entry.burn_amount,
+            entry.tx_type, entry.created_at.isoformat(),
+        )
+        if expected != entry.entry_hash:
+            return {"valid": False, "broken_at": entry.id, "entry_number": checked + 1,
+                    "expected": expected, "actual": entry.entry_hash}
+        prev_hash = entry.entry_hash
+        checked += 1
+
+    return {"valid": True, "entries_checked": checked}

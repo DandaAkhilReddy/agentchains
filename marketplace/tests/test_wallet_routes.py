@@ -115,7 +115,7 @@ async def test_deposit_inr(client):
     )
     assert resp.status_code == 200
     data = resp.json()
-    # 1000 INR / 0.084 rate per AXN ≈ 11904.761905 AXN
+    # 1000 INR / 0.084 rate per ARD ≈ 11904.761905 ARD
     assert data["amount_axn"] > 11000
 
 

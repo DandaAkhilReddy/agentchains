@@ -32,6 +32,13 @@ import type {
   SupportedCurrency,
   DepositResponse,
   TransferResponse,
+  Creator,
+  CreatorAuthResponse,
+  CreatorAgent,
+  CreatorDashboard,
+  CreatorWallet,
+  RedemptionRequest,
+  RedemptionMethodInfo,
 } from "../types/api";
 
 const BASE = "/api/v1";
@@ -245,7 +252,7 @@ export const fetchMCPHealth = () => {
   return fetch(url.toString()).then(r => r.json()) as Promise<MCPHealth>;
 };
 
-// ── Wallet (AXN Token Economy) ──
+// ── Wallet (ARD Token Economy) ──
 
 export const fetchWalletBalance = (token: string) =>
   authGet<WalletBalanceResponse>("/wallet/balance", token);
@@ -287,3 +294,69 @@ export const testOpenClawWebhook = (token: string, webhookId: string) =>
 
 export const fetchOpenClawStatus = (token: string) =>
   authGet<{ connected: boolean; webhooks_count: number; active_count: number; last_delivery: string | null }>("/integrations/openclaw/status", token);
+
+// ── Creator Account ──
+
+export const creatorRegister = (body: {
+  email: string;
+  password: string;
+  display_name: string;
+  phone?: string;
+  country?: string;
+}) => {
+  return fetch(`${BASE}/creators/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(async (r) => {
+    if (!r.ok) throw new Error(`API ${r.status}: ${await r.text()}`);
+    return r.json() as Promise<CreatorAuthResponse>;
+  });
+};
+
+export const creatorLogin = (body: { email: string; password: string }) => {
+  return fetch(`${BASE}/creators/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(async (r) => {
+    if (!r.ok) throw new Error(`API ${r.status}: ${await r.text()}`);
+    return r.json() as Promise<CreatorAuthResponse>;
+  });
+};
+
+export const fetchCreatorProfile = (token: string) =>
+  authGet<Creator>("/creators/me", token);
+
+export const updateCreatorProfile = (token: string, body: Record<string, unknown>) =>
+  authPost<Creator>("/creators/me", token, body);
+
+export const fetchCreatorAgents = (token: string) =>
+  authGet<CreatorAgent[]>("/creators/me/agents", token);
+
+export const claimAgent = (token: string, agentId: string) =>
+  authPost<{ agent_id: string; creator_id: string }>(`/creators/me/agents/${agentId}/claim`, token, {});
+
+export const fetchCreatorDashboard = (token: string) =>
+  authGet<CreatorDashboard>("/creators/me/dashboard", token);
+
+export const fetchCreatorWallet = (token: string) =>
+  authGet<CreatorWallet>("/creators/me/wallet", token);
+
+// ── Redemptions ──
+
+export const createRedemption = (
+  token: string,
+  body: { redemption_type: string; amount_ard: number; currency?: string },
+) => authPost<RedemptionRequest>("/redemptions", token, body);
+
+export const fetchRedemptions = (
+  token: string,
+  params?: { status?: string; page?: number; page_size?: number },
+) => authGet<{ redemptions: RedemptionRequest[]; total: number }>("/redemptions", token, params as Record<string, string | number | undefined>);
+
+export const cancelRedemption = (token: string, id: string) =>
+  authPost<{ message: string }>(`/redemptions/${id}/cancel`, token, {});
+
+export const fetchRedemptionMethods = () =>
+  get<{ methods: RedemptionMethodInfo[] }>("/redemptions/methods");

@@ -1,4 +1,4 @@
-"""AXN Token Economy — Database models for the off-chain double-entry ledger."""
+"""ARD Token Economy — Database models for the off-chain double-entry ledger."""
 
 import uuid
 from datetime import datetime, timezone
@@ -23,7 +23,7 @@ def utcnow():
 
 
 class TokenAccount(Base):
-    """Per-agent AXN balance. One row per registered agent + one platform account."""
+    """Per-agent ARD balance. One row per registered agent + one platform account."""
 
     __tablename__ = "token_accounts"
 
@@ -31,6 +31,7 @@ class TokenAccount(Base):
     agent_id = Column(
         String(36), ForeignKey("registered_agents.id"), unique=True, nullable=True
     )  # NULL = platform treasury account
+    creator_id = Column(String(36), ForeignKey("creators.id"), unique=True, nullable=True)
     balance = Column(Numeric(18, 6), nullable=False, default=0)
     total_deposited = Column(Numeric(18, 6), nullable=False, default=0)
     total_earned = Column(Numeric(18, 6), nullable=False, default=0)
@@ -43,6 +44,7 @@ class TokenAccount(Base):
     __table_args__ = (
         CheckConstraint("balance >= 0", name="ck_token_balance_nonneg"),
         Index("idx_token_acct_agent", "agent_id"),
+        Index("idx_token_acct_creator", "creator_id"),
         Index("idx_token_acct_tier", "tier"),
     )
 
@@ -70,6 +72,8 @@ class TokenLedger(Base):
     idempotency_key = Column(String(64), unique=True, nullable=True)
     memo = Column(Text, default="")
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    prev_hash = Column(String(64), nullable=True)  # SHA-256 of previous entry (NULL for genesis)
+    entry_hash = Column(String(64), nullable=True)  # SHA-256 of this entry
 
     __table_args__ = (
         Index("idx_ledger_from", "from_account_id"),
@@ -77,11 +81,12 @@ class TokenLedger(Base):
         Index("idx_ledger_type", "tx_type"),
         Index("idx_ledger_ref", "reference_id"),
         Index("idx_ledger_created", "created_at"),
+        Index("idx_ledger_entry_hash", "entry_hash"),
     )
 
 
 class TokenDeposit(Base):
-    """Fiat → AXN on-ramp. Tracks each deposit request and its status."""
+    """Fiat → ARD on-ramp. Tracks each deposit request and its status."""
 
     __tablename__ = "token_deposits"
 
@@ -89,7 +94,7 @@ class TokenDeposit(Base):
     agent_id = Column(String(36), ForeignKey("registered_agents.id"), nullable=False)
     amount_fiat = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="USD")
-    exchange_rate = Column(Numeric(12, 6), nullable=False)  # 1 AXN = X fiat
+    exchange_rate = Column(Numeric(12, 6), nullable=False)  # 1 ARD = X fiat
     amount_axn = Column(Numeric(18, 6), nullable=False)
     status = Column(
         String(20), nullable=False, default="pending"
@@ -108,7 +113,7 @@ class TokenDeposit(Base):
 
 
 class TokenSupply(Base):
-    """Singleton row tracking global AXN supply metrics."""
+    """Singleton row tracking global ARD supply metrics."""
 
     __tablename__ = "token_supply"
 

@@ -12,7 +12,7 @@ import {
   fetchSupportedCurrencies,
   createDeposit,
 } from "../lib/api";
-import { formatAXN, axnToUSD } from "../lib/format";
+import { formatARD, ardToUSD } from "../lib/format";
 import { relativeTime } from "../lib/format";
 import {
   Wallet,
@@ -65,7 +65,7 @@ const ledgerColumns: Column<TokenLedgerEntry>[] = [
     header: "Amount",
     render: (entry) => (
       <span className="text-sm font-semibold text-text-primary" style={{ fontFamily: "var(--font-mono)" }}>
-        {formatAXN(entry.amount)}
+        {formatARD(entry.amount)}
       </span>
     ),
   },
@@ -132,7 +132,7 @@ export default function WalletPage() {
   const depositMutation = useMutation({
     mutationFn: () => createDeposit(token!, { amount_fiat: parseFloat(depositAmount), currency: depositCurrency }),
     onSuccess: (data) => {
-      toast(`Deposited ${formatAXN(data.new_balance >= 0 ? parseFloat(depositAmount) / 0.001 : 0)} successfully!`, "success");
+      toast(`Deposited ${formatARD(data.new_balance >= 0 ? parseFloat(depositAmount) / 0.001 : 0)} successfully!`, "success");
       setDepositAmount("");
       queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
       queryClient.invalidateQueries({ queryKey: ["wallet-history"] });
@@ -153,7 +153,7 @@ export default function WalletPage() {
           <div className="text-center">
             <h3 className="text-lg font-bold gradient-text">Connect Wallet</h3>
             <p className="mt-1 text-sm text-text-secondary">
-              Paste your agent JWT to access your AXN wallet
+              Paste your agent JWT to access your ARD wallet
             </p>
           </div>
           <input
@@ -194,12 +194,12 @@ export default function WalletPage() {
         <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full opacity-20" style={{ background: `radial-gradient(circle, ${tierCfg.color}, transparent)` }} />
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">AXN Balance</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">ARD Balance</p>
             <p className="mt-1 text-4xl font-bold tracking-tight gradient-text" style={{ fontFamily: "var(--font-mono)" }}>
-              {formatAXN(acct?.balance ?? 0)}
+              {formatARD(acct?.balance ?? 0)}
             </p>
             <p className="mt-1 text-sm text-text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
-              ≈ {axnToUSD(acct?.balance ?? 0)}
+              ≈ {ardToUSD(acct?.balance ?? 0)}
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -218,7 +218,7 @@ export default function WalletPage() {
           <div className="mt-4">
             <div className="flex items-center justify-between text-xs text-text-muted">
               <span>Progress to {tierCfg.next}</span>
-              <span style={{ fontFamily: "var(--font-mono)" }}>{formatAXN(lifetimeVolume)} / {formatAXN(tierCfg.nextVolume)}</span>
+              <span style={{ fontFamily: "var(--font-mono)" }}>{formatARD(lifetimeVolume)} / {formatARD(tierCfg.nextVolume)}</span>
             </div>
             <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-overlay">
               <div
@@ -235,10 +235,10 @@ export default function WalletPage() {
 
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Total Deposited" value={formatAXN(acct?.total_deposited ?? 0)} icon={ArrowDownCircle} />
-        <StatCard label="Total Earned" value={formatAXN(acct?.total_earned ?? 0)} icon={TrendingUp} />
-        <StatCard label="Total Spent" value={formatAXN(acct?.total_spent ?? 0)} icon={ArrowUpCircle} />
-        <StatCard label="Fees Paid" value={formatAXN(acct?.total_fees_paid ?? 0)} icon={Coins} />
+        <StatCard label="Total Deposited" value={formatARD(acct?.total_deposited ?? 0)} icon={ArrowDownCircle} />
+        <StatCard label="Total Earned" value={formatARD(acct?.total_earned ?? 0)} icon={TrendingUp} />
+        <StatCard label="Total Spent" value={formatARD(acct?.total_spent ?? 0)} icon={ArrowUpCircle} />
+        <StatCard label="Fees Paid" value={formatARD(acct?.total_fees_paid ?? 0)} icon={Coins} />
       </div>
 
       {/* Deposit + Supply */}
@@ -247,7 +247,7 @@ export default function WalletPage() {
         <div className="glass-card gradient-border-card glow-hover p-5">
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
             <ArrowDownCircle className="h-4 w-4 text-success" />
-            Buy AXN Tokens
+            Buy ARD Tokens
           </h3>
           <div className="space-y-3">
             <div className="flex gap-2">
@@ -272,7 +272,7 @@ export default function WalletPage() {
             </div>
             {depositAmount && parseFloat(depositAmount) > 0 && (
               <p className="text-xs text-text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
-                ≈ {formatAXN(parseFloat(depositAmount) / 0.001)} at 1 AXN = $0.001
+                ≈ {formatARD(parseFloat(depositAmount) / 0.001)} at 1 ARD = $0.001
               </p>
             )}
             <button
@@ -295,25 +295,25 @@ export default function WalletPage() {
             <div className="flex items-center justify-between">
               <span className="text-xs text-text-muted">Circulating</span>
               <span className="text-sm font-semibold text-text-primary" style={{ fontFamily: "var(--font-mono)" }}>
-                {formatAXN(supply?.circulating ?? 0)}
+                {formatARD(supply?.circulating ?? 0)}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-text-muted">Total Burned</span>
               <span className="text-sm font-semibold text-[#ff6b6b]" style={{ fontFamily: "var(--font-mono)" }}>
-                {formatAXN(supply?.total_burned ?? 0)}
+                {formatARD(supply?.total_burned ?? 0)}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-text-muted">Platform Reserve</span>
               <span className="text-sm font-semibold text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
-                {formatAXN(supply?.platform_balance ?? 0)}
+                {formatARD(supply?.platform_balance ?? 0)}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-text-muted">Total Minted</span>
               <span className="text-sm font-semibold text-text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
-                {formatAXN(supply?.total_minted ?? 0)}
+                {formatARD(supply?.total_minted ?? 0)}
               </span>
             </div>
             <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-overlay">

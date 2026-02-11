@@ -1,4 +1,4 @@
-"""Unit tests for AXN token SQLAlchemy model constraints and defaults."""
+"""Unit tests for ARD token SQLAlchemy model constraints and defaults."""
 
 from decimal import Decimal
 

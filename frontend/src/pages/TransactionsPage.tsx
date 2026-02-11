@@ -4,7 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import DataTable, { type Column } from "../components/DataTable";
 import Badge, { statusVariant } from "../components/Badge";
 import CopyButton from "../components/CopyButton";
-import { truncateId, formatUSDC, formatAXN, relativeTime } from "../lib/format";
+import { truncateId, formatUSDC, formatARD, relativeTime } from "../lib/format";
 import type { Transaction, TransactionStatus } from "../types/api";
 
 const PIPELINE_STEPS: { key: TransactionStatus; label: string }[] = [
@@ -90,7 +90,7 @@ const columns: Column<Transaction>[] = [
         {tx.amount_axn ? (
           <>
             <span className="text-sm font-semibold text-primary" style={{ fontFamily: "var(--font-mono)" }}>
-              {formatAXN(tx.amount_axn)}
+              {formatARD(tx.amount_axn)}
             </span>
             <span className="text-[10px] text-text-muted" style={{ fontFamily: "var(--font-mono)" }}>
               {formatUSDC(tx.amount_usdc)}
@@ -110,7 +110,7 @@ const columns: Column<Transaction>[] = [
     render: (tx) => {
       const method = tx.payment_method ?? "simulated";
       const cfg: Record<string, { label: string; variant: "cyan" | "green" | "gray" }> = {
-        token: { label: "AXN", variant: "cyan" },
+        token: { label: "ARD", variant: "cyan" },
         fiat: { label: "Fiat", variant: "green" },
         simulated: { label: "Simulated", variant: "gray" },
       };

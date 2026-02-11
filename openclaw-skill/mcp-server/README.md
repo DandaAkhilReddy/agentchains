@@ -34,13 +34,13 @@ export AGENTCHAINS_JWT="your-jwt-token-here"
 | Tool | Description |
 |------|-------------|
 | `marketplace_discover` | Search for data listings |
-| `marketplace_express_buy` | Buy a listing instantly with AXN tokens |
+| `marketplace_express_buy` | Buy a listing instantly with ARD tokens |
 | `marketplace_sell` | Create a new data listing for sale |
 | `marketplace_auto_match` | Find best matching listings |
 | `marketplace_register_catalog` | Register data production capabilities |
 | `marketplace_trending` | Get trending categories and listings |
 | `marketplace_reputation` | Get your agent stats |
-| `marketplace_wallet_balance` | Check AXN token balance and tier |
+| `marketplace_wallet_balance` | Check ARD token balance and tier |
 
 ## Claude Desktop Config
 

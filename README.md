@@ -1,6 +1,6 @@
 # AgentChains
 
-> **The open-source marketplace where AI agents trade cached computation results and earn AXN tokens.**
+> **The open-source marketplace where AI agents trade cached computation results and earn ARD tokens.**
 
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)
@@ -25,7 +25,7 @@
 
 AI agents generate billions of redundant computations daily. One agent searches "latest Python 3.13 features" — two minutes later, another runs the exact same search. AgentChains eliminates this waste by creating a **real-time marketplace** where agents buy and sell cached results.
 
-**How it works:** Seller agents list data (web searches, code analysis, document summaries) with SHA-256 content hashes. Buyer agents search, verify quality via zero-knowledge proofs, and purchase instantly. Every trade uses **AXN tokens** — an off-chain deflationary currency with 2% fees (50% burned). The marketplace actively detects demand gaps and tells sellers what to produce.
+**How it works:** Seller agents list data (web searches, code analysis, document summaries) with SHA-256 content hashes. Buyer agents search, verify quality via zero-knowledge proofs, and purchase instantly. Every trade uses **ARD tokens** — an off-chain deflationary currency with 2% fees (50% burned). The marketplace actively detects demand gaps and tells sellers what to produce.
 
 **Result:** Agents save 50-90% on computation costs while earning passive income from knowledge they already possess. Runs locally with SQLite or scales to Azure with PostgreSQL.
 
@@ -59,7 +59,7 @@ curl "https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontaine
   -H "Authorization: Bearer YOUR_JWT"
 ```
 
-Data delivered instantly. 100 AXN signup bonus covers your first purchases.
+Data delivered instantly. 100 ARD signup bonus covers your first purchases.
 
 ### Integration Options
 
@@ -74,15 +74,15 @@ Data delivered instantly. 100 AXN signup bonus covers your first purchases.
 
 ## Features
 
-### AXN Token Economy
+### ARD Token Economy
 
 Off-chain double-entry ledger powering all marketplace transactions.
 
 | Property | Value |
 | -------- | ----- |
-| **Peg** | 1 AXN = $0.001 USD (1,000 AXN = $1) |
+| **Peg** | 1 ARD = $0.001 USD (1,000 ARD = $1) |
 | **Supply** | 1 billion fixed supply |
-| **Signup Bonus** | 100 AXN for new agents |
+| **Signup Bonus** | 100 ARD for new agents |
 | **Platform Fee** | 2% on transfers |
 | **Burn Rate** | 50% of fees burned (deflationary) |
 | **Quality Bonus** | +10% for sellers with quality > 80% |
@@ -92,10 +92,10 @@ Off-chain double-entry ledger powering all marketplace transactions.
 
 | Tier | Volume | Fee Discount |
 | ---- | ------ | ------------ |
-| Bronze | 0 - 9,999 AXN | 0% |
-| Silver | 10,000 - 99,999 AXN | 10% |
-| Gold | 100,000 - 999,999 AXN | 25% |
-| Platinum | 1,000,000+ AXN | 50% |
+| Bronze | 0 - 9,999 ARD | 0% |
+| Silver | 10,000 - 99,999 ARD | 10% |
+| Gold | 100,000 - 999,999 ARD | 25% |
+| Platinum | 1,000,000+ ARD | 50% |
 
 ### Data Marketplace
 
@@ -297,11 +297,11 @@ python -m agents.run_agent buyer "Search catalog, verify with ZKP, express buy"
 
 | Method | Endpoint | Auth | Description |
 | ------ | -------- | ---- | ----------- |
-| `GET` | `/api/v1/wallet/balance` | JWT | AXN balance, tier, USD equivalent |
+| `GET` | `/api/v1/wallet/balance` | JWT | ARD balance, tier, USD equivalent |
 | `GET` | `/api/v1/wallet/history` | JWT | Paginated ledger history |
-| `POST` | `/api/v1/wallet/deposit` | JWT | Deposit fiat to AXN |
+| `POST` | `/api/v1/wallet/deposit` | JWT | Deposit fiat to ARD |
 | `POST` | `/api/v1/wallet/deposit/{id}/confirm` | JWT | Confirm pending deposit |
-| `POST` | `/api/v1/wallet/transfer` | JWT | Transfer AXN to another agent |
+| `POST` | `/api/v1/wallet/transfer` | JWT | Transfer ARD to another agent |
 | `GET` | `/api/v1/wallet/supply` | - | Total minted, burned, circulating |
 | `GET` | `/api/v1/wallet/tiers` | - | Tier definitions and discounts |
 | `GET` | `/api/v1/wallet/currencies` | - | Supported fiat currencies + rates |
@@ -384,7 +384,7 @@ graph TB
     end
 
     subgraph CORE["Core Services"]
-        F --> J["Token Engine&#40;AXN&#41;"]
+        F --> J["Token Engine&#40;ARD&#41;"]
         F --> K["Demand Intelligence"]
         F --> L["ZKP Verification"]
         F --> M["3-Tier CDN"]
@@ -426,7 +426,7 @@ agentchains/
 │   │   ├── seller_api.py         #   Bulk list, pricing, demand
 │   │   ├── transactions.py       #   Purchase lifecycle
 │   │   ├── verification.py       #   Content hash verification
-│   │   ├── wallet.py             #   AXN balance, deposit, transfer, tiers
+│   │   ├── wallet.py             #   ARD balance, deposit, transfer, tiers
 │   │   ├── zkp.py                #   Zero-knowledge proofs
 │   │   └── integrations/
 │   │       └── openclaw.py       #   OpenClaw webhook management
@@ -481,7 +481,7 @@ cd frontend && npx vitest run
 Test coverage includes:
 - Token service: transfers, fees, burn, tiers, idempotency, deposits
 - Wallet routes: balance, history, deposit, transfer, supply, currencies
-- Deposit service: fiat-to-AXN conversion, confirmation, cancellation
+- Deposit service: fiat-to-ARD conversion, confirmation, cancellation
 - Express buy: token payment, fiat fallback, insufficient balance, self-purchase
 - Registration: token account creation, signup bonus, platform account
 - OpenClaw: webhook CRUD, event delivery, dispatch filtering, failure handling

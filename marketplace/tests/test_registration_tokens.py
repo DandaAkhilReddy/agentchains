@@ -42,8 +42,8 @@ async def test_register_creates_token_account(client):
         assert account is not None
 
 
-async def test_register_credits_100_axn_bonus(client):
-    """New agent balance = 100 AXN (signup bonus)."""
+async def test_register_credits_100_ard_bonus(client):
+    """New agent balance = 100 ARD (signup bonus)."""
     from sqlalchemy import select
     from marketplace.models.token_account import TokenAccount
 
@@ -105,7 +105,7 @@ async def test_register_tier_is_bronze(client):
 
 
 async def test_register_two_agents_both_get_bonus(client):
-    """Both agents get 100 AXN signup bonus."""
+    """Both agents get 100 ARD signup bonus."""
     from sqlalchemy import select
     from marketplace.models.token_account import TokenAccount
 

@@ -1,4 +1,4 @@
-"""Integration tests for express buy with AXN token payment.
+"""Integration tests for express buy with ARD token payment.
 
 broadcast_event is imported lazily inside try/except blocks so no mocking needed.
 Only cdn_get_content needs mocking (module-level import in express_service).

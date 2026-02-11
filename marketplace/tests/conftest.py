@@ -1,4 +1,4 @@
-"""Shared test fixtures for the AXN token economy test suite.
+"""Shared test fixtures for the ARD token economy test suite.
 
 Uses an in-memory SQLite database with StaticPool so all sessions share the
 same connection (committed data is visible across sessions).

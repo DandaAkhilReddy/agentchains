@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Index, String, Text, DateTime
+from sqlalchemy import Column, ForeignKey, Index, String, Text, DateTime
 from sqlalchemy.orm import relationship
 
 from marketplace.database import Base
@@ -23,6 +23,7 @@ class RegisteredAgent(Base):
     capabilities = Column(Text, default="[]")  # JSON array
     a2a_endpoint = Column(String(255), default="")
     agent_card_json = Column(Text, default="{}")  # Full A2A AgentCard
+    creator_id = Column(String(36), ForeignKey("creators.id"), nullable=True)
     status = Column(String(20), nullable=False, default="active")
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)

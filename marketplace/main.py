@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -109,11 +109,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     from marketplace.services.cdn_service import cdn_decay_loop
     cdn_task = asyncio.create_task(cdn_decay_loop())
 
+    # Start monthly payout background task
+    async def _payout_loop():
+        await asyncio.sleep(60)
+        while True:
+            try:
+                now = datetime.now(timezone.utc)
+                if now.day == settings.creator_payout_day:
+                    from marketplace.services.payout_service import run_monthly_payout
+                    async with async_session() as payout_db:
+                        await run_monthly_payout(payout_db)
+            except Exception:
+                pass
+            await asyncio.sleep(3600)  # Check hourly
+
+    from marketplace.config import settings
+    from marketplace.database import async_session
+    payout_task = asyncio.create_task(_payout_loop())
+
     yield
 
     # Shutdown: cancel background tasks and dispose connection pool
     task.cancel()
     cdn_task.cancel()
+    payout_task.cancel()
     from marketplace.database import dispose_engine
     await dispose_engine()
 
@@ -124,6 +143,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self' wss: ws:; "
+            "script-src 'self'"
+        )
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        )
         return response
 
 
@@ -146,6 +177,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Rate limiting
+    from marketplace.core.rate_limit_middleware import RateLimitMiddleware
+    app.add_middleware(RateLimitMiddleware)
+
     # Security headers
     app.add_middleware(SecurityHeadersMiddleware)
 
@@ -154,6 +189,7 @@ def create_app() -> FastAPI:
         analytics,
         automatch,
         catalog,
+        creators,
         discovery,
         express,
         health,
@@ -183,6 +219,14 @@ def create_app() -> FastAPI:
     app.include_router(seller_api.router, prefix="/api/v1")
     app.include_router(routing.router, prefix="/api/v1")
     app.include_router(wallet.router, prefix="/api/v1")
+    app.include_router(creators.router, prefix="/api/v1")
+
+    from marketplace.api import redemptions
+    app.include_router(redemptions.router, prefix="/api/v1")
+
+    from marketplace.api import audit, redemptions
+    app.include_router(audit.router, prefix="/api/v1")
+    app.include_router(redemptions.router, prefix="/api/v1")
 
     from marketplace.api.integrations import openclaw as openclaw_integration
     app.include_router(openclaw_integration.router, prefix="/api/v1")
@@ -192,9 +236,19 @@ def create_app() -> FastAPI:
         from marketplace.mcp.server import router as mcp_router
         app.include_router(mcp_router)
 
-    # WebSocket for live feed
+    # WebSocket for live feed (JWT-authenticated)
     @app.websocket("/ws/feed")
-    async def live_feed(ws: WebSocket):
+    async def live_feed(ws: WebSocket, token: str = Query(None)):
+        from marketplace.core.auth import decode_token
+        if not token:
+            await ws.close(code=4001, reason="Missing token query parameter")
+            return
+        try:
+            decode_token(token)
+        except Exception:
+            await ws.close(code=4003, reason="Invalid or expired token")
+            return
+
         await ws_manager.connect(ws)
         try:
             while True:

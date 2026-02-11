@@ -109,10 +109,10 @@ async def get_status(db: AsyncSession, agent_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 EVENT_MESSAGES = {
-    "demand_spike": "📈 Demand spike on AgentChains: '{query_pattern}' in {category} (velocity: {velocity}). Consider creating a listing to earn AXN!",
+    "demand_spike": "📈 Demand spike on AgentChains: '{query_pattern}' in {category} (velocity: {velocity}). Consider creating a listing to earn ARD!",
     "opportunity_created": "💰 Revenue opportunity: '{query_pattern}' — estimated ${estimated_revenue_usdc:.2f} with urgency {urgency_score:.0%}. Use the marketplace to sell this data.",
     "listing_created": "🆕 New listing on marketplace: '{title}' in {category} at ${price_usdc} USDC.",
-    "transaction_completed": "✅ Transaction completed: {amount_axn:.0f} AXN earned from selling '{listing_title}'.",
+    "transaction_completed": "✅ Transaction completed: {amount_axn:.0f} ARD earned from selling '{listing_title}'.",
     "transaction_initiated": "🛒 New purchase initiated for '{listing_title}' — delivery pending.",
 }
 

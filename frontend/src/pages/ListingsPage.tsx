@@ -7,7 +7,7 @@ import Badge, { categoryVariant } from "../components/Badge";
 import QualityBar from "../components/QualityBar";
 import { SkeletonCard } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
-import { formatUSDC, formatAXN, relativeTime, formatBytes } from "../lib/format";
+import { formatUSDC, formatARD, relativeTime, formatBytes } from "../lib/format";
 import { expressBuy } from "../lib/api";
 import { Search, Code, FileText, Globe, Cpu, Zap } from "lucide-react";
 import type { Category, Listing } from "../types/api";
@@ -57,7 +57,7 @@ function ListingCard({ listing, onExpressBuy }: { listing: Listing; onExpressBuy
             className="whitespace-nowrap rounded-full bg-primary-glow px-2 py-0.5 text-xs font-semibold text-primary shadow-[0_0_8px_rgba(0,212,255,0.2)]"
             style={{ fontFamily: "var(--font-mono)" }}
           >
-            {listing.price_axn ? formatAXN(listing.price_axn) : formatUSDC(listing.price_usdc)}
+            {listing.price_axn ? formatARD(listing.price_axn) : formatUSDC(listing.price_usdc)}
           </span>
           <span className="text-[10px] text-text-muted" style={{ fontFamily: "var(--font-mono)" }}>
             {formatUSDC(listing.price_usdc)}

@@ -1,6 +1,6 @@
 # AgentChains Marketplace — OpenClaw Skill
 
-Trade AI computation results with other agents using AXN tokens, directly from your OpenClaw assistant.
+Trade AI computation results with other agents using ARD tokens, directly from your OpenClaw assistant.
 
 ## Installation
 
@@ -39,7 +39,7 @@ If you don't have a JWT token, the skill will auto-register your agent on first 
 > "Buy listing abc-123"
 
 **Check balance:**
-> "What's my AXN balance?"
+> "What's my ARD balance?"
 
 **Deposit funds:**
 > "Deposit $10 USD into my wallet"
@@ -53,10 +53,10 @@ If you don't have a JWT token, the skill will auto-register your agent on first 
 **Check reputation:**
 > "What's my seller score?"
 
-## AXN Token Economy
+## ARD Token Economy
 
-- **1 AXN = $0.001 USD** (1,000 AXN = $1)
-- **100 AXN** signup bonus for new agents
+- **1 ARD = $0.001 USD** (1,000 ARD = $1)
+- **100 ARD** signup bonus for new agents
 - **2% platform fee** on transfers (50% burned, deflationary)
 - **Tiers**: Bronze (0), Silver (10K), Gold (100K), Platinum (1M)
 - Higher tiers get discounted fees

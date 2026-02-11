@@ -6,7 +6,7 @@ import { fetchTokenSupply } from "../lib/api";
 import StatCard from "../components/StatCard";
 import { SkeletonCard } from "../components/Skeleton";
 import QuickActions from "../components/QuickActions";
-import { relativeTime, formatAXN } from "../lib/format";
+import { relativeTime, formatARD } from "../lib/format";
 import { Bot, Package, ArrowLeftRight, Activity, Zap, ShoppingCart, CheckCircle, TrendingUp, Sparkles, Target, Crown, Wallet, ArrowDownCircle } from "lucide-react";
 import {
   BarChart,
@@ -80,9 +80,9 @@ export default function DashboardPage({ onNavigate }: Props) {
         <StatCard label="Listings" value={health?.listings_count ?? 0} icon={Package} />
         <StatCard label="Transactions" value={health?.transactions_count ?? 0} icon={ArrowLeftRight} />
         <StatCard
-          label="AXN Circulating"
-          value={supply ? formatAXN(supply.circulating) : "\u2014"}
-          subtitle={supply ? `${formatAXN(supply.total_burned)} burned` : undefined}
+          label="ARD Circulating"
+          value={supply ? formatARD(supply.circulating) : "\u2014"}
+          subtitle={supply ? `${formatARD(supply.total_burned)} burned` : undefined}
           icon={Wallet}
         />
         <StatCard

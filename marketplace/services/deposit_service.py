@@ -1,6 +1,6 @@
-"""Fiat -> AXN on-ramp service for the AgentChains marketplace token economy.
+"""Fiat -> ARD on-ramp service for the AgentChains marketplace token economy.
 
-Converts fiat deposits (USD, INR, EUR, GBP) into AXN tokens using
+Converts fiat deposits (USD, INR, EUR, GBP) into ARD tokens using
 hardcoded exchange rates (Phase 1 MVP). Phase 2 will integrate a live
 FX API for real-time pricing.
 """
@@ -18,7 +18,7 @@ from marketplace.models.token_account import TokenDeposit
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Exchange rates: 1 AXN = X fiat
+# Exchange rates: 1 ARD = X fiat
 # Derived from settings.token_peg_usd (0.001) and approximate FX rates.
 # Phase 2: replace with live API calls.
 # ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ _EXCHANGE_RATES: dict[str, dict] = {
 # ---------------------------------------------------------------------------
 
 def get_exchange_rate(currency: str) -> Decimal:
-    """Return the exchange rate (fiat per 1 AXN) for *currency*.
+    """Return the exchange rate (fiat per 1 ARD) for *currency*.
 
     Raises ``ValueError`` for unsupported currency codes.
     """
@@ -68,7 +68,7 @@ def get_exchange_rate(currency: str) -> Decimal:
 def get_supported_currencies() -> list[dict]:
     """Return metadata for every supported fiat currency.
 
-    Each item contains: code, name, symbol, rate_per_axn, axn_per_unit.
+    Each item contains: code, name, symbol, rate_per_axn, ard_per_unit.
     """
     result: list[dict] = []
     for code, meta in _EXCHANGE_RATES.items():
@@ -104,7 +104,7 @@ async def create_deposit(
     currency: str,
     payment_method: str = "admin_credit",
 ) -> dict:
-    """Create a new pending deposit converting *amount_fiat* to AXN.
+    """Create a new pending deposit converting *amount_fiat* to ARD.
 
     Returns a dict with the deposit details (not yet confirmed).
     """
@@ -129,7 +129,7 @@ async def create_deposit(
     await db.refresh(deposit)
 
     logger.info(
-        "Deposit %s created: %s %s -> %s AXN (agent=%s, method=%s)",
+        "Deposit %s created: %s %s -> %s ARD (agent=%s, method=%s)",
         deposit.id, amount_fiat_d, currency.upper(), amount_axn,
         agent_id, payment_method,
     )
@@ -138,7 +138,7 @@ async def create_deposit(
 
 
 async def confirm_deposit(db: AsyncSession, deposit_id: str) -> dict:
-    """Confirm a pending deposit: credit AXN to the agent's token account.
+    """Confirm a pending deposit: credit ARD to the agent's token account.
 
     Raises ``ValueError`` if the deposit is not in *pending* status.
     """
@@ -164,7 +164,7 @@ async def confirm_deposit(db: AsyncSession, deposit_id: str) -> dict:
     await db.refresh(deposit)
 
     logger.info(
-        "Deposit %s confirmed: %s AXN credited to agent %s",
+        "Deposit %s confirmed: %s ARD credited to agent %s",
         deposit.id, deposit.amount_axn, deposit.agent_id,
     )
 
@@ -216,7 +216,7 @@ async def get_deposits(
 async def credit_signup_bonus(db: AsyncSession, agent_id: str) -> dict:
     """Create and auto-confirm a signup bonus deposit.
 
-    Uses ``settings.token_signup_bonus`` as the AXN amount.  The fiat
+    Uses ``settings.token_signup_bonus`` as the ARD amount.  The fiat
     equivalent is calculated at the USD rate for record-keeping.
     """
     bonus_axn = Decimal(str(settings.token_signup_bonus))
@@ -236,7 +236,7 @@ async def credit_signup_bonus(db: AsyncSession, agent_id: str) -> dict:
     confirmed = await confirm_deposit(db, deposit_dict["id"])
 
     logger.info(
-        "Signup bonus of %s AXN credited to agent %s",
+        "Signup bonus of %s ARD credited to agent %s",
         bonus_axn, agent_id,
     )
 
