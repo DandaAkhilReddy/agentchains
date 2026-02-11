@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     cdn_hot_cache_max_bytes: int = 256 * 1024 * 1024  # 256MB
     cdn_decay_interval_seconds: int = 60
 
+    # OpenClaw Integration
+    openclaw_webhook_max_retries: int = 3
+    openclaw_webhook_timeout_seconds: int = 10
+    openclaw_webhook_max_failures: int = 5
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

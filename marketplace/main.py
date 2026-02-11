@@ -46,15 +46,25 @@ ws_manager = ConnectionManager()
 
 
 async def broadcast_event(event_type: str, data: dict):
-    """Broadcast a typed event to all connected WebSocket clients.
-
-    Called by services (listing, transaction, express) to push real-time updates.
-    """
+    """Broadcast a typed event to all connected WebSocket clients and OpenClaw webhooks."""
     await ws_manager.broadcast({
         "type": event_type,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "data": data,
     })
+    # Dispatch to OpenClaw webhooks in background (fire-and-forget)
+    asyncio.ensure_future(_dispatch_openclaw(event_type, data))
+
+
+async def _dispatch_openclaw(event_type: str, data: dict):
+    """Background task to deliver events to registered OpenClaw webhooks."""
+    try:
+        from marketplace.database import async_session
+        from marketplace.services.openclaw_service import dispatch_to_openclaw_webhooks
+        async with async_session() as db:
+            await dispatch_to_openclaw_webhooks(db, event_type, data)
+    except Exception:
+        pass  # Don't let webhook failures affect the main flow
 
 
 @asynccontextmanager
@@ -173,6 +183,9 @@ def create_app() -> FastAPI:
     app.include_router(seller_api.router, prefix="/api/v1")
     app.include_router(routing.router, prefix="/api/v1")
     app.include_router(wallet.router, prefix="/api/v1")
+
+    from marketplace.api.integrations import openclaw as openclaw_integration
+    app.include_router(openclaw_integration.router, prefix="/api/v1")
 
     # MCP server routes
     if settings.mcp_enabled:

@@ -96,6 +96,22 @@ async function authPost<T>(
   return res.json();
 }
 
+async function authDelete<T>(
+  path: string,
+  token: string,
+): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${await res.text()}`);
+  }
+  return res.json();
+}
+
 export const fetchHealth = () => get<HealthResponse>("/health");
 
 export const fetchAgents = (params?: {
@@ -250,3 +266,24 @@ export const createTransfer = (
   token: string,
   body: { to_agent_id: string; amount: number; memo?: string },
 ) => authPost<TransferResponse>("/wallet/transfer", token, body);
+
+// ── OpenClaw Integration ──
+
+export const registerOpenClawWebhook = (token: string, body: {
+  gateway_url: string;
+  bearer_token: string;
+  event_types: string[];
+  filters: Record<string, unknown>;
+}) => authPost<any>("/integrations/openclaw/register-webhook", token, body);
+
+export const fetchOpenClawWebhooks = (token: string) =>
+  authGet<{ webhooks: any[]; count: number }>("/integrations/openclaw/webhooks", token);
+
+export const deleteOpenClawWebhook = (token: string, webhookId: string) =>
+  authDelete<{ deleted: boolean }>(`/integrations/openclaw/webhooks/${webhookId}`, token);
+
+export const testOpenClawWebhook = (token: string, webhookId: string) =>
+  authPost<{ success: boolean; message: string }>(`/integrations/openclaw/webhooks/${webhookId}/test`, token, {});
+
+export const fetchOpenClawStatus = (token: string) =>
+  authGet<{ connected: boolean; webhooks_count: number; active_count: number; last_delivery: string | null }>("/integrations/openclaw/status", token);

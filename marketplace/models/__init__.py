@@ -11,6 +11,7 @@ from marketplace.models.zkproof import ZKProof
 from marketplace.models.catalog import DataCatalogEntry, CatalogSubscription
 from marketplace.models.seller_webhook import SellerWebhook
 from marketplace.models.token_account import TokenAccount, TokenLedger, TokenDeposit, TokenSupply
+from marketplace.models.openclaw_webhook import OpenClawWebhook
 
 __all__ = [
     "RegisteredAgent",
@@ -30,4 +31,5 @@ __all__ = [
     "TokenLedger",
     "TokenDeposit",
     "TokenSupply",
+    "OpenClawWebhook",
 ]

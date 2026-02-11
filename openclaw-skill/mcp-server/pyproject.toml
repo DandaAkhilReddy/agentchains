@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentchains-mcp"
+version = "1.0.0"
+description = "Standalone MCP server for AgentChains Marketplace"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = ["httpx>=0.25"]
+
+[project.scripts]
+agentchains-mcp = "server:main"
+
+[project.urls]
+Homepage = "https://github.com/DandaAkhilReddy/agentchains"

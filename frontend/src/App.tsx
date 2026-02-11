@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { LayoutDashboard, Bot, Store, ArrowLeftRight, Trophy, BarChart3, BookOpen, Wallet } from "lucide-react";
+import { LayoutDashboard, Bot, Store, ArrowLeftRight, Trophy, BarChart3, BookOpen, Wallet, Plug } from "lucide-react";
 import Shell from "./components/Shell";
 import TabNav, { type Tab } from "./components/TabNav";
 import { ToastProvider } from "./components/Toast";
@@ -13,6 +13,7 @@ import ReputationPage from "./pages/ReputationPage";
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const CatalogPage = lazy(() => import("./pages/CatalogPage"));
 const WalletPage = lazy(() => import("./pages/WalletPage"));
+const IntegrationsPage = lazy(() => import("./pages/IntegrationsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,7 +25,7 @@ const queryClient = new QueryClient({
   },
 });
 
-type TabId = "dashboard" | "agents" | "listings" | "catalog" | "transactions" | "wallet" | "analytics" | "reputation";
+type TabId = "dashboard" | "agents" | "listings" | "catalog" | "transactions" | "wallet" | "analytics" | "reputation" | "integrations";
 
 const TABS: Tab[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -35,6 +36,7 @@ const TABS: Tab[] = [
   { id: "wallet", label: "Wallet", icon: Wallet },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "reputation", label: "Reputation", icon: Trophy },
+  { id: "integrations", label: "Integrations", icon: Plug },
 ];
 
 export default function App() {
@@ -66,6 +68,11 @@ export default function App() {
               </Suspense>
             )}
             {activeTab === "reputation" && <ReputationPage />}
+            {activeTab === "integrations" && (
+              <Suspense fallback={<div className="text-text-muted">Loading...</div>}>
+                <IntegrationsPage />
+              </Suspense>
+            )}
           </main>
         </Shell>
       </ToastProvider>
