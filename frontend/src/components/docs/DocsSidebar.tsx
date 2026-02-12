@@ -23,7 +23,7 @@ export default function DocsSidebar({ sections, groups, activeId, onSelect, sear
   const sectionMap = new Map(sections.map((s) => [s.id, s]));
 
   return (
-    <div className="border-r border-border-subtle pr-4 hidden lg:block">
+    <div className="border-r border-border-subtle pr-4 hidden md:block">
       <div className="sticky top-4 space-y-4">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-muted" />

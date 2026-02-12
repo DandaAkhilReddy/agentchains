@@ -20,7 +20,6 @@ import {
   Wallet,
   ArrowDownCircle,
   ArrowUpCircle,
-  Flame,
   Gift,
   RefreshCw,
   Coins,
@@ -34,7 +33,6 @@ const TX_TYPE_CONFIG: Record<string, { icon: typeof Wallet; color: string; label
   purchase: { icon: ArrowUpCircle, color: "text-danger", label: "Purchase" },
   sale: { icon: ArrowDownCircle, color: "text-success", label: "Sale" },
   fee: { icon: Coins, color: "text-warning", label: "Fee" },
-  burn: { icon: Flame, color: "text-danger", label: "Burn" },
   bonus: { icon: Gift, color: "text-secondary", label: "Bonus" },
   refund: { icon: RefreshCw, color: "text-primary", label: "Refund" },
   transfer: { icon: ArrowUpCircle, color: "text-primary", label: "Transfer" },
@@ -153,9 +151,9 @@ export default function WalletPage() {
       <div className="flex flex-col items-center py-20">
         <div className="glass-card gradient-border-card p-8 w-full max-w-md space-y-4">
           <div className="text-center">
-            <h3 className="text-lg font-bold gradient-text">Connect Wallet</h3>
+            <h3 className="text-lg font-bold gradient-text">Sign In</h3>
             <p className="mt-1 text-sm text-text-secondary">
-              Paste your agent JWT to access your ARD wallet
+              Paste your agent JWT to access your account
             </p>
           </div>
           <input
@@ -250,7 +248,7 @@ export default function WalletPage() {
         <div className="glass-card gradient-border-card glow-hover p-5">
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
             <ArrowDownCircle className="h-4 w-4 text-success" />
-            Buy ARD Tokens
+            Add Funds
           </h3>
           <div className="space-y-3">
             <div className="flex gap-2">
@@ -292,29 +290,23 @@ export default function WalletPage() {
         <div className="glass-card gradient-border-card glow-hover p-5">
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            Token Supply
+            Platform Stats
           </h3>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-text-muted">Circulating</span>
+              <span className="text-xs text-text-muted">In Use</span>
               <span className="text-sm font-semibold text-text-primary" style={{ fontFamily: "var(--font-mono)" }}>
                 {formatARD(supply?.circulating ?? 0)}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-text-muted">Total Burned</span>
-              <span className="text-sm font-semibold text-danger" style={{ fontFamily: "var(--font-mono)" }}>
-                {formatARD(supply?.total_burned ?? 0)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-text-muted">Platform Reserve</span>
+              <span className="text-xs text-text-muted">Platform Balance</span>
               <span className="text-sm font-semibold text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
                 {formatARD(supply?.platform_balance ?? 0)}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-text-muted">Total Minted</span>
+              <span className="text-xs text-text-muted">Total Issued</span>
               <span className="text-sm font-semibold text-text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
                 {formatARD(supply?.total_minted ?? 0)}
               </span>
@@ -335,14 +327,14 @@ export default function WalletPage() {
       {/* Transaction History */}
       <div>
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">
-          Token History
+          Transaction History
         </h3>
         <DataTable
           columns={ledgerColumns}
           data={history?.entries ?? []}
           isLoading={histLoading}
           keyFn={(e) => e.id}
-          emptyMessage="No token transactions yet"
+          emptyMessage="No transactions yet"
         />
         {history && history.total > 10 && (
           <Pagination page={page} totalPages={Math.ceil(history.total / 10)} onPageChange={setPage} />

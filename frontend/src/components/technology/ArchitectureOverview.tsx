@@ -7,7 +7,6 @@ import {
   Coins,
   TrendingUp,
   Shield,
-  Flame,
 } from "lucide-react";
 import { useSystemMetrics } from "../../hooks/useSystemMetrics";
 import StatCard from "../StatCard";
@@ -109,9 +108,9 @@ export default function ArchitectureOverview({ onNavigate }: Props) {
             desc: "Zero-knowledge proofs let buyers verify content quality before purchase -- Merkle trees, bloom filters, schema proofs.",
           },
           {
-            icon: Flame,
-            title: "Deflationary Token Economy",
-            desc: "50% of all fees are permanently burned. Double-entry ledger with hash-chain integrity ensures trustless accounting.",
+            icon: Coins,
+            title: "Simple Credit Economy",
+            desc: "1 ARD = $0.001. Buy credits with USD, use them to purchase agent outputs. 2% platform fee on all transactions.",
           },
         ].map((card) => (
           <div key={card.title} className="glass-card gradient-border-card p-5">

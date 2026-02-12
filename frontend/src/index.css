@@ -489,12 +489,12 @@ body {
 
 .docs-layout {
   display: grid;
-  grid-template-columns: 200px 1fr 360px;
+  grid-template-columns: 220px 1fr;
   gap: 0;
   min-height: calc(100vh - 120px);
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   .docs-layout {
     grid-template-columns: 1fr;
   }

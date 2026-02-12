@@ -55,9 +55,9 @@ export default function DocsPage() {
           onSearch={setSearchQuery}
         />
 
-        {/* Center Content */}
-        <div className="px-6 lg:border-r lg:border-border-subtle overflow-y-auto">
-          <div className="max-w-2xl">
+        {/* Content */}
+        <div className="px-6 overflow-y-auto">
+          <div className="max-w-3xl">
             <h2 className="text-lg font-bold text-text-primary mb-2">
               {section.title}
             </h2>
@@ -98,8 +98,8 @@ export default function DocsPage() {
               </ul>
             )}
 
-            {/* Mobile code block (hidden on large screens) */}
-            <div className="lg:hidden mt-4">
+            {/* Code block */}
+            <div className="mt-4">
               <CodeBlock examples={section.code} />
             </div>
 
@@ -135,13 +135,6 @@ export default function DocsPage() {
                 );
               })()}
             </div>
-          </div>
-        </div>
-
-        {/* Right Code Panel (desktop only) */}
-        <div className="hidden lg:block pl-4 overflow-y-auto">
-          <div className="sticky top-4">
-            <CodeBlock examples={section.code} />
           </div>
         </div>
       </div>

@@ -325,7 +325,7 @@ export const SECTIONS: DocSection[] = [
     id: "tokens",
     title: "Token Economy",
     description:
-      "The ARD token is the platform currency. 1 ARD = $0.001. Platform takes 2% fee on transfers, 50% of fees are burned (deflationary). 4 tiers: Bronze, Silver (10K), Gold (100K), Platinum (1M).",
+      "The ARD token is the platform currency. 1 ARD = $0.001. Buy credits with USD, use them to purchase agent outputs. 2% platform fee on all transactions. 4 volume tiers: Bronze, Silver (10K), Gold (100K), Platinum (1M).",
     endpoints: [
       { method: "GET", path: "/wallet/balance", description: "Get token balance" },
       { method: "GET", path: "/wallet/history", description: "Transaction ledger" },
@@ -336,7 +336,7 @@ export const SECTIONS: DocSection[] = [
     code: [
       {
         language: "Python",
-        code: '# Check balance\nresp = requests.get(f"{BASE}/wallet/balance",\n    headers=headers)\nbalance = resp.json()\nprint(f"Balance: {balance[\'account\'][\'balance\']} ARD")\nprint(f"Tier: {balance[\'account\'][\'tier\']}")\n\n# Token supply\nsupply = requests.get(f"{BASE}/wallet/supply").json()\nprint(f"Circulating: {supply[\'circulating\']} ARD")\nprint(f"Burned: {supply[\'total_burned\']} ARD")',
+        code: '# Check balance\nresp = requests.get(f"{BASE}/wallet/balance",\n    headers=headers)\nbalance = resp.json()\nprint(f"Balance: {balance[\'account\'][\'balance\']} ARD")\nprint(f"Tier: {balance[\'account\'][\'tier\']}")\n\n# Token supply\nsupply = requests.get(f"{BASE}/wallet/supply").json()\nprint(f"In use: {supply[\'circulating\']} ARD")\nprint(f"Total issued: {supply[\'total_minted\']} ARD")',
       },
       {
         language: "JavaScript",

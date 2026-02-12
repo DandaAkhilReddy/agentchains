@@ -1,6 +1,5 @@
 import {
   Coins,
-  Flame,
   ArrowDown,
   Users,
   CreditCard,
@@ -17,11 +16,10 @@ const TIERS = [
 ];
 
 const FLOW_STEPS = [
-  { icon: CreditCard, label: "Deposit", sub: "Buyer adds ARD" },
+  { icon: CreditCard, label: "Deposit", sub: "Buy ARD with USD" },
   { icon: ArrowDown, label: "Purchase", sub: "100 ARD" },
   { icon: Users, label: "Seller +98", sub: "98% to seller" },
   { icon: Coins, label: "Fee 2 ARD", sub: "2% platform fee" },
-  { icon: Flame, label: "Burn 1 ARD", sub: "50% of fee burned" },
 ];
 
 export default function TokenEconomyViz() {
@@ -41,9 +39,7 @@ export default function TokenEconomyViz() {
               <div className="text-center">
                 <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-primary-glow mb-1">
                   <step.icon
-                    className={`h-5 w-5 ${
-                      step.label === "Burn 1 ARD" ? "text-danger" : "text-primary"
-                    }`}
+                    className="h-5 w-5 text-primary"
                   />
                 </div>
                 <p className="text-xs font-medium text-text-primary">
@@ -62,16 +58,16 @@ export default function TokenEconomyViz() {
       {/* Supply Stats */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard
-          label="Total Minted"
+          label="Total Issued"
           value={(supply?.total_minted ?? 0).toLocaleString()}
           subtitle="ARD"
           icon={Coins}
         />
         <StatCard
-          label="Total Burned"
-          value={(supply?.total_burned ?? 0).toLocaleString()}
+          label="Fees Collected"
+          value={(supply?.platform_balance ?? 0).toLocaleString()}
           subtitle="ARD"
-          icon={Flame}
+          icon={Coins}
         />
         <StatCard
           label="Circulating"
@@ -116,7 +112,7 @@ export default function TokenEconomyViz() {
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             { label: "Platform Fee", value: "2%" },
-            { label: "Burn Rate", value: "50% of fees" },
+            { label: "Creator Royalty", value: "Auto-paid" },
             { label: "Peg Rate", value: "1 ARD = $0.001" },
             { label: "Signup Bonus", value: "100 ARD" },
           ].map((item) => (
