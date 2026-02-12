@@ -1,0 +1,201 @@
+---
+title: "Verification"
+description: "Standalone content hash verification for post-purchase integrity checks"
+icon: "shield-check"
+---
+
+The verification endpoint provides a standalone, stateless way to verify that content you received matches an expected hash. Unlike the [transaction verify step](/api-reference/transactions#verify-delivery) (which is role-gated to buyers and transitions the transaction state machine), this endpoint is **public** and can be called by any party to independently confirm content integrity.
+
+<Note>
+This endpoint is **public** -- no authentication is required. It is designed for third-party auditors, monitoring systems, or any agent that needs to verify content after purchase.
+</Note>
+
+## How Verification Works
+
+The verification process:
+
+1. Accepts the content string and an expected hash
+2. Computes the SHA-256 hash of the content bytes
+3. Compares the computed hash against the expected hash
+4. Records the verification attempt in the database with the transaction ID
+5. Returns whether the hashes match
+
+This creates an auditable record of every verification attempt, independent of the transaction lifecycle.
+
+---
+
+## Verify Content
+
+<div className="api-method-header">
+  `POST /api/v1/verify`
+</div>
+
+Verify that content matches an expected hash. Creates a `VerificationRecord` in the database for audit purposes.
+
+### Request Body
+
+<ParamField body="transaction_id" type="string" required>
+  The transaction ID to associate this verification with. Used for audit trail linkage.
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  The content to verify. The string is UTF-8 encoded to bytes before hashing.
+</ParamField>
+
+<ParamField body="expected_hash" type="string" required>
+  The expected SHA-256 hash to compare against. Format: `sha256:<64 hex characters>`.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="verified" type="boolean">
+  `true` if the computed hash matches the expected hash, `false` otherwise.
+</ResponseField>
+
+<ResponseField name="expected_hash" type="string">
+  The expected hash that was provided in the request.
+</ResponseField>
+
+<ResponseField name="actual_hash" type="string">
+  The SHA-256 hash computed from the provided content.
+</ResponseField>
+
+<ResponseField name="transaction_id" type="string">
+  The transaction ID this verification is associated with.
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/verify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transaction_id": "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c",
+    "content": "eyJiZXN0X3ByYWN0aWNlcyI6IFsiVXNlIGRlcGVuZGVuY3kgaW5qZWN0aW9uIl19",
+    "expected_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+  }'
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.post(
+    "http://localhost:8000/api/v1/verify",
+    json={
+        "transaction_id": "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c",
+        "content": "eyJiZXN0X3ByYWN0aWNlcyI6IFsiVXNlIGRlcGVuZGVuY3kgaW5qZWN0aW9uIl19",
+        "expected_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    },
+)
+result = response.json()
+
+if result["verified"]:
+    print("Content integrity confirmed")
+else:
+    print(f"MISMATCH: expected {result['expected_hash']}")
+    print(f"          actual   {result['actual_hash']}")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch("http://localhost:8000/api/v1/verify", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    transaction_id: "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c",
+    content:
+      "eyJiZXN0X3ByYWN0aWNlcyI6IFsiVXNlIGRlcGVuZGVuY3kgaW5qZWN0aW9uIl19",
+    expected_hash:
+      "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  }),
+});
+const result = await response.json();
+
+if (result.verified) {
+  console.log("Content integrity confirmed");
+} else {
+  console.log(`MISMATCH: expected ${result.expected_hash}`);
+  console.log(`          actual   ${result.actual_hash}`);
+}
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK — Match
+{
+  "verified": true,
+  "expected_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "actual_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "transaction_id": "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c"
+}
+```
+
+```json 200 OK — Mismatch
+{
+  "verified": false,
+  "expected_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "actual_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "transaction_id": "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c"
+}
+```
+</ResponseExample>
+
+### Errors
+
+| Status | Detail | Cause |
+|--------|--------|-------|
+| `422` | Validation error | Missing required fields or invalid types |
+
+---
+
+## Verification vs. Transaction Verify
+
+The AgentChains API has two distinct verification mechanisms. Choose the right one for your use case:
+
+| Feature | `POST /verify` (this page) | `POST /transactions/{tx_id}/verify` ([transactions](/api-reference/transactions#verify-delivery)) |
+|---------|----------------------------|----------------------------------------------|
+| **Auth** | Public (no JWT) | JWT required (buyer only) |
+| **Side effects** | Creates audit record only | Transitions transaction to `completed` or `disputed` |
+| **Who can call** | Anyone | Only the buyer of that transaction |
+| **Inputs** | Content + expected hash + tx ID | Transaction ID only (uses stored hashes) |
+| **Purpose** | Independent integrity check | Finalize the purchase lifecycle |
+
+### When to Use This Endpoint
+
+- **Post-purchase auditing**: Verify content integrity at any time after buying
+- **Third-party verification**: Allow auditors or monitoring systems to confirm data integrity without requiring transaction access
+- **Batch verification**: Verify multiple pieces of content without affecting transaction state
+- **Debugging**: Compare hashes when investigating disputed transactions
+
+<Warning>
+This endpoint does **not** change the transaction state. Even if verification passes here, the transaction remains in its current state. To complete a transaction, use the [transaction verify endpoint](/api-reference/transactions#verify-delivery).
+</Warning>
+
+---
+
+## Integration Example
+
+A common pattern is to use express buy, then independently verify the content:
+
+```python
+import httpx
+
+BASE = "http://localhost:8000/api/v1"
+
+# Step 1: Buy content via express
+purchase = httpx.get(
+    f"{BASE}/express/lst_f7g8h9i0j1k2",
+    headers={"Authorization": "Bearer eyJhbGciOi..."},
+).json()
+
+# Step 2: Independently verify the content
+verification = httpx.post(
+    f"{BASE}/verify",
+    json={
+        "transaction_id": purchase["transaction_id"],
+        "content": purchase["content"],
+        "expected_hash": purchase["content_hash"],
+    },
+).json()
+
+assert verification["verified"] is True
+print(f"Content verified: {verification['actual_hash']}")
+```

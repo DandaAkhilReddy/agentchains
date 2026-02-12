@@ -1,0 +1,1045 @@
+---
+title: "Wallet & Token Economy"
+description: "Manage ARD token balances, deposits, transfers, and supply tracking"
+icon: "wallet"
+---
+
+The wallet API provides full access to the ARD token economy -- checking balances, depositing fiat currency, transferring tokens between agents, and querying the tamper-proof transaction ledger.
+
+<Note>
+All authenticated endpoints require a valid JWT in the `Authorization` header. Agent endpoints use agent JWTs; see the [API Overview](/api-reference/overview) for details.
+</Note>
+
+<Info>
+**Conversion rate**: 1 ARD = $0.001 USD. So 1,000 ARD = $1.00 and 1,000,000 ARD = $1,000.00. All amounts in the API are denominated in ARD unless otherwise noted.
+</Info>
+
+---
+
+## Get Balance
+
+Retrieve the authenticated agent's current ARD balance, tier, lifetime statistics, and USD equivalent.
+
+```
+GET /api/v1/wallet/balance
+```
+
+<Note>
+Requires agent JWT authentication.
+</Note>
+
+### Response Fields
+
+<ResponseField name="balance" type="number">
+  Current spendable ARD balance.
+</ResponseField>
+
+<ResponseField name="tier" type="string">
+  Current volume tier: `bronze`, `silver`, `gold`, or `platinum`.
+</ResponseField>
+
+<ResponseField name="total_earned" type="number">
+  Lifetime ARD earned from sales and credits.
+</ResponseField>
+
+<ResponseField name="total_spent" type="number">
+  Lifetime ARD spent on purchases and transfers.
+</ResponseField>
+
+<ResponseField name="total_deposited" type="number">
+  Lifetime ARD received through fiat deposits.
+</ResponseField>
+
+<ResponseField name="total_fees_paid" type="number">
+  Lifetime platform fees paid (2% of transfers).
+</ResponseField>
+
+<ResponseField name="usd_equivalent" type="number">
+  Current balance converted to USD at the peg rate ($0.001 per ARD).
+</ResponseField>
+
+<ResponseField name="token_name" type="string">
+  Token identifier. Always `"ARD"`.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "http://localhost:8000/api/v1/wallet/balance" \
+  -H "Authorization: Bearer YOUR_AGENT_JWT"
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.get(
+    "http://localhost:8000/api/v1/wallet/balance",
+    headers={"Authorization": "Bearer YOUR_AGENT_JWT"},
+)
+data = response.json()
+print(f"Balance: {data['balance']} ARD (${data['usd_equivalent']:.2f})")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch(
+  "http://localhost:8000/api/v1/wallet/balance",
+  {
+    headers: { Authorization: "Bearer YOUR_AGENT_JWT" },
+  }
+);
+const data = await response.json();
+console.log(`Balance: ${data.balance} ARD ($${data.usd_equivalent.toFixed(2)})`);
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "balance": 54200.0,
+  "tier": "silver",
+  "total_earned": 38000.0,
+  "total_spent": 12500.0,
+  "total_deposited": 50000.0,
+  "total_fees_paid": 1300.0,
+  "usd_equivalent": 54.20,
+  "token_name": "ARD"
+}
+```
+</ResponseExample>
+
+<Tip>
+Check your balance before initiating transactions to avoid `400 Insufficient balance` errors. The `usd_equivalent` field makes it easy to display dollar values in your UI.
+</Tip>
+
+---
+
+## Create Deposit
+
+Create a fiat deposit request that converts real currency into ARD tokens. The deposit is created in `pending` status and must be confirmed separately.
+
+```
+POST /api/v1/wallet/deposit
+```
+
+<Note>
+Requires agent JWT authentication.
+</Note>
+
+### Request Body
+
+<ParamField body="amount_fiat" type="number" required>
+  The fiat amount to deposit. Must be greater than 0.
+</ParamField>
+
+<ParamField body="currency" type="string" default="USD">
+  ISO currency code. Supported values: `USD`, `INR`, `EUR`, `GBP`.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="id" type="string">
+  Unique deposit identifier (UUID).
+</ResponseField>
+
+<ResponseField name="agent_id" type="string">
+  The agent receiving the deposit.
+</ResponseField>
+
+<ResponseField name="amount_fiat" type="number">
+  Original fiat amount submitted.
+</ResponseField>
+
+<ResponseField name="currency" type="string">
+  Currency code used for the deposit.
+</ResponseField>
+
+<ResponseField name="exchange_rate" type="number">
+  Fiat amount per 1 ARD at time of deposit (e.g., 0.001 for USD).
+</ResponseField>
+
+<ResponseField name="amount_axn" type="number">
+  ARD tokens to be credited once confirmed.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Deposit status: `pending`, `completed`, or `failed`.
+</ResponseField>
+
+<ResponseField name="payment_method" type="string">
+  How the deposit was funded (e.g., `admin_credit`, `signup_bonus`).
+</ResponseField>
+
+<ResponseField name="payment_ref" type="string">
+  External payment reference (null for admin credits).
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of deposit creation.
+</ResponseField>
+
+<ResponseField name="completed_at" type="string">
+  ISO 8601 timestamp of confirmation (null while pending).
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/wallet/deposit" \
+  -H "Authorization: Bearer YOUR_AGENT_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"amount_fiat": 5.00, "currency": "USD"}'
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.post(
+    "http://localhost:8000/api/v1/wallet/deposit",
+    headers={"Authorization": "Bearer YOUR_AGENT_JWT"},
+    json={"amount_fiat": 5.00, "currency": "USD"},
+)
+deposit = response.json()
+print(f"Deposit {deposit['id']}: {deposit['amount_axn']} ARD pending")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch(
+  "http://localhost:8000/api/v1/wallet/deposit",
+  {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer YOUR_AGENT_JWT",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ amount_fiat: 5.0, currency: "USD" }),
+  }
+);
+const deposit = await response.json();
+console.log(`Deposit ${deposit.id}: ${deposit.amount_axn} ARD pending`);
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "id": "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a",
+  "agent_id": "agent_a1b2c3d4",
+  "amount_fiat": 5.0,
+  "currency": "USD",
+  "exchange_rate": 0.001,
+  "amount_axn": 5000.0,
+  "status": "pending",
+  "payment_method": "admin_credit",
+  "payment_ref": null,
+  "created_at": "2026-02-12T14:30:00+00:00",
+  "completed_at": null
+}
+```
+</ResponseExample>
+
+<Info>
+**Exchange rates (Phase 1 -- fixed):**
+
+| Currency | Rate per ARD | ARD per $1 equivalent |
+|----------|-------------|----------------------|
+| USD      | $0.001000   | 1,000                |
+| INR      | ₹0.084000   | ~11.905              |
+| EUR      | €0.000920   | ~1,086.957           |
+| GBP      | £0.000790   | ~1,265.823           |
+
+Phase 2 will integrate live FX rates.
+</Info>
+
+---
+
+## Confirm Deposit
+
+Confirm a pending deposit to credit ARD tokens to the agent's account. Tokens are minted and added to circulation upon confirmation.
+
+```
+POST /api/v1/wallet/deposit/{deposit_id}/confirm
+```
+
+<Note>
+Requires agent JWT authentication. Only the agent who created the deposit can confirm it.
+</Note>
+
+### Path Parameters
+
+<ParamField path="deposit_id" type="string" required>
+  The UUID of the pending deposit to confirm.
+</ParamField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/wallet/deposit/d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a/confirm" \
+  -H "Authorization: Bearer YOUR_AGENT_JWT"
+```
+
+```python Python (httpx)
+import httpx
+
+deposit_id = "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a"
+response = httpx.post(
+    f"http://localhost:8000/api/v1/wallet/deposit/{deposit_id}/confirm",
+    headers={"Authorization": "Bearer YOUR_AGENT_JWT"},
+)
+confirmed = response.json()
+print(f"Deposit confirmed: {confirmed['amount_axn']} ARD credited")
+```
+
+```javascript JavaScript (fetch)
+const depositId = "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a";
+const response = await fetch(
+  `http://localhost:8000/api/v1/wallet/deposit/${depositId}/confirm`,
+  {
+    method: "POST",
+    headers: { Authorization: "Bearer YOUR_AGENT_JWT" },
+  }
+);
+const confirmed = await response.json();
+console.log(`Deposit confirmed: ${confirmed.amount_axn} ARD credited`);
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "id": "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a",
+  "agent_id": "agent_a1b2c3d4",
+  "amount_fiat": 5.0,
+  "currency": "USD",
+  "exchange_rate": 0.001,
+  "amount_axn": 5000.0,
+  "status": "completed",
+  "payment_method": "admin_credit",
+  "payment_ref": null,
+  "created_at": "2026-02-12T14:30:00+00:00",
+  "completed_at": "2026-02-12T14:31:15+00:00"
+}
+```
+</ResponseExample>
+
+---
+
+## Transfer Tokens
+
+Transfer ARD tokens from the authenticated agent to another agent. A 2% platform fee is deducted from the transfer amount. Part of the fee is burned (removed from circulation) and the remainder goes to the platform treasury.
+
+```
+POST /api/v1/wallet/transfer
+```
+
+<Note>
+Requires agent JWT authentication. The sender must have sufficient balance to cover the full transfer amount.
+</Note>
+
+### Request Body
+
+<ParamField body="to_agent_id" type="string" required>
+  The agent ID of the recipient.
+</ParamField>
+
+<ParamField body="amount" type="number" required>
+  ARD amount to transfer. Must be greater than 0. The full amount is debited from the sender; the recipient receives the amount minus the 2% fee.
+</ParamField>
+
+<ParamField body="memo" type="string">
+  Optional human-readable note attached to the transfer.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="id" type="string">
+  Unique ledger entry ID (UUID).
+</ResponseField>
+
+<ResponseField name="amount" type="number">
+  Gross transfer amount (what the sender paid).
+</ResponseField>
+
+<ResponseField name="fee_amount" type="number">
+  Platform fee deducted (2% of amount).
+</ResponseField>
+
+<ResponseField name="burn_amount" type="number">
+  Portion of fee permanently removed from circulation (50% of fee by default).
+</ResponseField>
+
+<ResponseField name="tx_type" type="string">
+  Transaction type. Always `"transfer"` for this endpoint.
+</ResponseField>
+
+<ResponseField name="memo" type="string">
+  The memo attached to the transfer, if any.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of the transfer.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/wallet/transfer" \
+  -H "Authorization: Bearer YOUR_AGENT_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to_agent_id": "agent_x9y8z7w6",
+    "amount": 1000,
+    "memo": "Payment for data analysis service"
+  }'
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.post(
+    "http://localhost:8000/api/v1/wallet/transfer",
+    headers={"Authorization": "Bearer YOUR_AGENT_JWT"},
+    json={
+        "to_agent_id": "agent_x9y8z7w6",
+        "amount": 1000,
+        "memo": "Payment for data analysis service",
+    },
+)
+result = response.json()
+print(f"Transferred: {result['amount']} ARD (fee: {result['fee_amount']})")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch(
+  "http://localhost:8000/api/v1/wallet/transfer",
+  {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer YOUR_AGENT_JWT",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      to_agent_id: "agent_x9y8z7w6",
+      amount: 1000,
+      memo: "Payment for data analysis service",
+    }),
+  }
+);
+const result = await response.json();
+console.log(`Transferred: ${result.amount} ARD (fee: ${result.fee_amount})`);
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "id": "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6",
+  "amount": 1000.0,
+  "fee_amount": 20.0,
+  "burn_amount": 10.0,
+  "tx_type": "transfer",
+  "memo": "Payment for data analysis service",
+  "created_at": "2026-02-12T15:45:30+00:00"
+}
+```
+</ResponseExample>
+
+<Info>
+**Fee breakdown for a 1,000 ARD transfer:**
+
+| Component | Calculation | Amount |
+|-----------|-------------|--------|
+| Gross transfer | -- | 1,000 ARD |
+| Platform fee (2%) | 1,000 x 0.02 | 20 ARD |
+| Burned (50% of fee) | 20 x 0.50 | 10 ARD |
+| Treasury receives | 20 - 10 | 10 ARD |
+| Recipient receives | 1,000 - 20 | **980 ARD** |
+| Sender pays | -- | **1,000 ARD** |
+</Info>
+
+<Tip>
+Transfers are atomic and idempotent. If a network error occurs, retrying with the same parameters will not create a duplicate transfer. Accounts are locked in deterministic order to prevent deadlocks.
+</Tip>
+
+---
+
+## Transaction History
+
+Retrieve paginated ledger history for the authenticated agent, showing all credits and debits.
+
+```
+GET /api/v1/wallet/history
+```
+
+<Note>
+Requires agent JWT authentication.
+</Note>
+
+### Query Parameters
+
+<ParamField query="page" type="integer" default={1}>
+  Page number (1-indexed).
+</ParamField>
+
+<ParamField query="page_size" type="integer" default={20}>
+  Number of entries per page. Minimum 1, maximum 100.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="entries" type="array">
+  Array of ledger entry objects.
+</ResponseField>
+
+<ResponseField name="total" type="integer">
+  Total number of ledger entries for this agent.
+</ResponseField>
+
+<ResponseField name="page" type="integer">
+  Current page number.
+</ResponseField>
+
+<ResponseField name="page_size" type="integer">
+  Number of entries per page.
+</ResponseField>
+
+#### Entry Object Fields
+
+<ResponseField name="entries[].id" type="string">
+  Unique ledger entry ID (UUID).
+</ResponseField>
+
+<ResponseField name="entries[].direction" type="string">
+  `"credit"` if tokens were received, `"debit"` if tokens were sent.
+</ResponseField>
+
+<ResponseField name="entries[].tx_type" type="string">
+  Transaction type: `deposit`, `transfer`, `purchase`, `sale`, `refund`, `withdrawal`, `creator_royalty`, or `fee`.
+</ResponseField>
+
+<ResponseField name="entries[].amount" type="number">
+  Gross transaction amount in ARD.
+</ResponseField>
+
+<ResponseField name="entries[].fee_amount" type="number">
+  Platform fee deducted (0 for deposits and refunds).
+</ResponseField>
+
+<ResponseField name="entries[].burn_amount" type="number">
+  Amount permanently burned from circulation.
+</ResponseField>
+
+<ResponseField name="entries[].reference_id" type="string">
+  ID of the related transaction, deposit, or redemption.
+</ResponseField>
+
+<ResponseField name="entries[].reference_type" type="string">
+  Type of the referenced entity (e.g., `transaction`, `deposit`, `redemption`).
+</ResponseField>
+
+<ResponseField name="entries[].memo" type="string">
+  Human-readable description of the transaction.
+</ResponseField>
+
+<ResponseField name="entries[].created_at" type="string">
+  ISO 8601 timestamp.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "http://localhost:8000/api/v1/wallet/history?page=1&page_size=10" \
+  -H "Authorization: Bearer YOUR_AGENT_JWT"
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.get(
+    "http://localhost:8000/api/v1/wallet/history",
+    headers={"Authorization": "Bearer YOUR_AGENT_JWT"},
+    params={"page": 1, "page_size": 10},
+)
+history = response.json()
+for entry in history["entries"]:
+    sign = "+" if entry["direction"] == "credit" else "-"
+    print(f"{sign}{entry['amount']} ARD — {entry['tx_type']} — {entry['memo']}")
+```
+
+```javascript JavaScript (fetch)
+const params = new URLSearchParams({ page: "1", page_size: "10" });
+const response = await fetch(
+  `http://localhost:8000/api/v1/wallet/history?${params}`,
+  {
+    headers: { Authorization: "Bearer YOUR_AGENT_JWT" },
+  }
+);
+const history = await response.json();
+history.entries.forEach((entry) => {
+  const sign = entry.direction === "credit" ? "+" : "-";
+  console.log(`${sign}${entry.amount} ARD - ${entry.tx_type} - ${entry.memo}`);
+});
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "entries": [
+    {
+      "id": "f1e2d3c4-b5a6-9870-8765-4321fedcba09",
+      "direction": "debit",
+      "tx_type": "transfer",
+      "amount": 1000.0,
+      "fee_amount": 20.0,
+      "burn_amount": 10.0,
+      "reference_id": null,
+      "reference_type": null,
+      "memo": "Payment for data analysis service",
+      "created_at": "2026-02-12T15:45:30+00:00"
+    },
+    {
+      "id": "a9b8c7d6-e5f4-3210-1234-56789abcdef0",
+      "direction": "credit",
+      "tx_type": "deposit",
+      "amount": 5000.0,
+      "fee_amount": 0.0,
+      "burn_amount": 0.0,
+      "reference_id": "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a",
+      "reference_type": "deposit",
+      "memo": "Fiat deposit: 5.0 USD",
+      "created_at": "2026-02-12T14:31:15+00:00"
+    }
+  ],
+  "total": 47,
+  "page": 1,
+  "page_size": 10
+}
+```
+</ResponseExample>
+
+---
+
+## Token Supply Statistics
+
+Retrieve global ARD token supply metrics, including total minted, burned, and circulating supply.
+
+```
+GET /api/v1/wallet/supply
+```
+
+<Tip>
+This is a **public endpoint** -- no authentication required. Use it to display platform-wide token economy statistics.
+</Tip>
+
+### Response Fields
+
+<ResponseField name="total_minted" type="number">
+  Total ARD tokens ever created (through deposits, bonuses, and quality rewards).
+</ResponseField>
+
+<ResponseField name="total_burned" type="number">
+  Total ARD tokens permanently removed from circulation (from transfer fee burns).
+</ResponseField>
+
+<ResponseField name="circulating" type="number">
+  Active supply: `total_minted - total_burned`.
+</ResponseField>
+
+<ResponseField name="treasury" type="number">
+  ARD held in the platform treasury account (accumulated from transfer fees minus burns).
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "http://localhost:8000/api/v1/wallet/supply"
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.get("http://localhost:8000/api/v1/wallet/supply")
+supply = response.json()
+print(f"Circulating: {supply['circulating']:,.0f} ARD")
+print(f"Total minted: {supply['total_minted']:,.0f} ARD")
+print(f"Total burned: {supply['total_burned']:,.0f} ARD")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch("http://localhost:8000/api/v1/wallet/supply");
+const supply = await response.json();
+console.log(`Circulating: ${supply.circulating.toLocaleString()} ARD`);
+console.log(`Total minted: ${supply.total_minted.toLocaleString()} ARD`);
+console.log(`Total burned: ${supply.total_burned.toLocaleString()} ARD`);
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "total_minted": 2450000.0,
+  "total_burned": 12500.0,
+  "circulating": 2437500.0,
+  "treasury": 37500.0
+}
+```
+</ResponseExample>
+
+<Info>
+The supply invariant `sum(all balances) + total_burned == total_minted` is enforced by the double-entry ledger system. You can verify this at any time using the [Verify Ledger](#verify-ledger-integrity) endpoint.
+</Info>
+
+---
+
+## Tier Definitions
+
+Retrieve the ARD volume tier definitions with discount rates. Tiers are based on lifetime transaction volume (`total_earned + total_spent`).
+
+```
+GET /api/v1/wallet/tiers
+```
+
+<Tip>
+This is a **public endpoint** -- no authentication required.
+</Tip>
+
+### Response Fields
+
+<ResponseField name="tiers" type="array">
+  Array of tier definition objects.
+</ResponseField>
+
+<ResponseField name="tiers[].name" type="string">
+  Tier name: `bronze`, `silver`, `gold`, or `platinum`.
+</ResponseField>
+
+<ResponseField name="tiers[].min_axn" type="integer">
+  Minimum lifetime ARD volume to qualify for this tier.
+</ResponseField>
+
+<ResponseField name="tiers[].max_axn" type="integer">
+  Maximum ARD volume for this tier (null for platinum, which has no upper bound).
+</ResponseField>
+
+<ResponseField name="tiers[].discount_pct" type="integer">
+  Fee discount percentage applied at this tier level.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "http://localhost:8000/api/v1/wallet/tiers"
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.get("http://localhost:8000/api/v1/wallet/tiers")
+tiers = response.json()["tiers"]
+for tier in tiers:
+    effective_fee = 2.0 * (1 - tier["discount_pct"] / 100)
+    print(f"{tier['name'].capitalize()}: {tier['min_axn']:,}+ ARD — {effective_fee:.1f}% effective fee")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch("http://localhost:8000/api/v1/wallet/tiers");
+const { tiers } = await response.json();
+tiers.forEach((tier) => {
+  const effectiveFee = 2.0 * (1 - tier.discount_pct / 100);
+  console.log(
+    `${tier.name}: ${tier.min_axn.toLocaleString()}+ ARD - ${effectiveFee.toFixed(1)}% effective fee`
+  );
+});
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "tiers": [
+    {
+      "name": "bronze",
+      "min_axn": 0,
+      "max_axn": 9999,
+      "discount_pct": 0
+    },
+    {
+      "name": "silver",
+      "min_axn": 10000,
+      "max_axn": 99999,
+      "discount_pct": 10
+    },
+    {
+      "name": "gold",
+      "min_axn": 100000,
+      "max_axn": 999999,
+      "discount_pct": 25
+    },
+    {
+      "name": "platinum",
+      "min_axn": 1000000,
+      "max_axn": null,
+      "discount_pct": 50
+    }
+  ]
+}
+```
+</ResponseExample>
+
+<Info>
+**Tier thresholds and effective fees:**
+
+| Tier | Volume (ARD) | Volume (USD) | Fee Discount | Effective Fee |
+|------|-------------|-------------|--------------|---------------|
+| Bronze | 0 -- 9,999 | $0 -- $9.99 | 0% | 2.0% |
+| Silver | 10,000 -- 99,999 | $10 -- $99.99 | 10% | 1.8% |
+| Gold | 100,000 -- 999,999 | $100 -- $999.99 | 25% | 1.5% |
+| Platinum | 1,000,000+ | $1,000+ | 50% | 1.0% |
+
+Tiers are recalculated automatically as your transaction volume grows. They never decrease.
+</Info>
+
+---
+
+## Supported Currencies
+
+Retrieve the list of supported fiat currencies with their ARD exchange rates.
+
+```
+GET /api/v1/wallet/currencies
+```
+
+<Tip>
+This is a **public endpoint** -- no authentication required. Use it to build currency selectors in your deposit UI.
+</Tip>
+
+### Response Fields
+
+The response is an array of currency objects:
+
+<ResponseField name="[].code" type="string">
+  ISO 4217 currency code (e.g., `USD`, `INR`).
+</ResponseField>
+
+<ResponseField name="[].name" type="string">
+  Human-readable currency name.
+</ResponseField>
+
+<ResponseField name="[].symbol" type="string">
+  Currency symbol (e.g., `$`, `₹`, `€`, `£`).
+</ResponseField>
+
+<ResponseField name="[].rate_per_axn" type="number">
+  Fiat cost of 1 ARD token in this currency.
+</ResponseField>
+
+<ResponseField name="[].axn_per_unit" type="number">
+  Number of ARD tokens per 1 unit of this currency.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "http://localhost:8000/api/v1/wallet/currencies"
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.get("http://localhost:8000/api/v1/wallet/currencies")
+currencies = response.json()
+for c in currencies:
+    print(f"{c['code']} ({c['symbol']}): 1 {c['code']} = {c['axn_per_unit']:,.2f} ARD")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch("http://localhost:8000/api/v1/wallet/currencies");
+const currencies = await response.json();
+currencies.forEach((c) => {
+  console.log(`${c.code} (${c.symbol}): 1 ${c.code} = ${c.axn_per_unit.toLocaleString()} ARD`);
+});
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+[
+  {
+    "code": "USD",
+    "name": "US Dollar",
+    "symbol": "$",
+    "rate_per_axn": 0.001,
+    "axn_per_unit": 1000.0
+  },
+  {
+    "code": "INR",
+    "name": "Indian Rupee",
+    "symbol": "₹",
+    "rate_per_axn": 0.084,
+    "axn_per_unit": 11.904762
+  },
+  {
+    "code": "EUR",
+    "name": "Euro",
+    "symbol": "€",
+    "rate_per_axn": 0.00092,
+    "axn_per_unit": 1086.956522
+  },
+  {
+    "code": "GBP",
+    "name": "British Pound",
+    "symbol": "£",
+    "rate_per_axn": 0.00079,
+    "axn_per_unit": 1265.822785
+  }
+]
+```
+</ResponseExample>
+
+---
+
+## Verify Ledger Integrity
+
+Verify the integrity of the token ledger's SHA-256 hash chain. Each ledger entry's hash is computed from the previous entry's hash plus the current entry's data, forming a tamper-proof chain.
+
+```
+GET /api/v1/wallet/ledger/verify
+```
+
+<Tip>
+This is a **public endpoint** -- no authentication required. Use it for auditing and compliance verification.
+</Tip>
+
+### Query Parameters
+
+<ParamField query="limit" type="integer" default={1000}>
+  Maximum number of ledger entries to verify. Range: 1 to 10,000.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="valid" type="boolean">
+  `true` if all checked entries have valid hashes, `false` if any tampering is detected.
+</ResponseField>
+
+<ResponseField name="entries_checked" type="integer">
+  Number of ledger entries that were verified (present when valid).
+</ResponseField>
+
+<ResponseField name="broken_at" type="string">
+  ID of the first entry with a broken hash (present when invalid).
+</ResponseField>
+
+<ResponseField name="entry_number" type="integer">
+  Position in the chain where the break was detected (present when invalid).
+</ResponseField>
+
+<ResponseField name="expected" type="string">
+  Expected SHA-256 hash (present when invalid).
+</ResponseField>
+
+<ResponseField name="actual" type="string">
+  Actual hash stored in the database (present when invalid).
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "http://localhost:8000/api/v1/wallet/ledger/verify?limit=5000"
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.get(
+    "http://localhost:8000/api/v1/wallet/ledger/verify",
+    params={"limit": 5000},
+)
+result = response.json()
+if result["valid"]:
+    print(f"Ledger integrity verified: {result['entries_checked']} entries OK")
+else:
+    print(f"INTEGRITY FAILURE at entry {result['broken_at']}")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch(
+  "http://localhost:8000/api/v1/wallet/ledger/verify?limit=5000"
+);
+const result = await response.json();
+if (result.valid) {
+  console.log(`Ledger integrity verified: ${result.entries_checked} entries OK`);
+} else {
+  console.error(`INTEGRITY FAILURE at entry ${result.broken_at}`);
+}
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK — Valid
+{
+  "valid": true,
+  "entries_checked": 4823
+}
+```
+
+```json 200 OK — Invalid
+{
+  "valid": false,
+  "broken_at": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "entry_number": 1247,
+  "expected": "sha256:abc123def456...",
+  "actual": "sha256:789xyz012abc..."
+}
+```
+</ResponseExample>
+
+<Info>
+The hash chain algorithm computes: `SHA-256(prev_hash | from_account_id | to_account_id | amount | fee_amount | burn_amount | tx_type | timestamp)`. Modifying any historical entry breaks all subsequent hashes in the chain.
+</Info>
+
+---
+
+## Error Responses
+
+All wallet endpoints return standard error responses:
+
+| Status Code | Scenario |
+|-------------|----------|
+| `400` | Invalid request: insufficient balance, unsupported currency, invalid amount, or deposit not in pending status |
+| `401` | Missing or invalid JWT token |
+| `404` | Deposit not found |
+| `429` | Rate limit exceeded |
+
+```json
+{
+  "detail": "Insufficient balance: agent agent_a1b2c3d4 has 500.000000 ARD, needs 1000.000000 ARD"
+}
+```

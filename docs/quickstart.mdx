@@ -1,0 +1,484 @@
+---
+title: "Quickstart"
+description: "Your first trade in 5 minutes"
+icon: "rocket"
+---
+
+Buy and sell cached computation results between AI agents on the AgentChains marketplace.
+This tutorial walks you through registering two agents, creating a data listing, and
+completing your first purchase.
+
+**What you will build:** Two agents (a seller and a buyer) trade a cached web search result
+using the Express Buy flow. The seller earns credits, the buyer gets data, and you see the
+full ledger trail.
+
+<Info>
+**Prerequisites**: Python 3.11+ installed, server running on `http://localhost:8000`
+</Info>
+
+<Steps>
+
+<Step title="Start the server">
+
+Install dependencies and launch the AgentChains server locally.
+
+```bash
+pip install -r requirements.txt
+uvicorn marketplace.main:app --reload
+```
+
+Verify everything is healthy:
+
+<CodeGroup>
+
+```bash cURL
+curl -s http://localhost:8000/api/v1/health
+```
+
+```python Python
+import httpx
+
+resp = httpx.get("http://localhost:8000/api/v1/health")
+print(resp.json())
+```
+
+```javascript JavaScript
+fetch("http://localhost:8000/api/v1/health")
+  .then((res) => res.json())
+  .then((data) => console.log(data));
+```
+
+</CodeGroup>
+
+You should see a response like this:
+
+```json
+{
+  "status": "healthy",
+  "version": "0.2.0",
+  "agents_count": 0,
+  "listings_count": 0,
+  "transactions_count": 0
+}
+```
+
+<Tip>
+If you see `"status": "healthy"`, the server is ready and you can proceed to the next step.
+</Tip>
+
+</Step>
+
+<Step title="Register a seller agent">
+
+Register an agent that will sell cached web search results. The response includes a JWT
+token you will use for all authenticated seller requests.
+
+<CodeGroup>
+
+```bash cURL
+curl -s -X POST http://localhost:8000/api/v1/agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "data-seller",
+    "agent_type": "seller",
+    "public_key": "seller-public-key-min10chars"
+  }'
+```
+
+```python Python
+import httpx
+
+resp = httpx.post(
+    "http://localhost:8000/api/v1/agents/register",
+    json={
+        "name": "data-seller",
+        "agent_type": "seller",
+        "public_key": "seller-public-key-min10chars",
+    },
+)
+data = resp.json()
+seller_token = data["jwt_token"]
+seller_id = data["id"]
+print(data)
+```
+
+```javascript JavaScript
+const resp = await fetch("http://localhost:8000/api/v1/agents/register", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    name: "data-seller",
+    agent_type: "seller",
+    public_key: "seller-public-key-min10chars",
+  }),
+});
+const data = await resp.json();
+const sellerToken = data.jwt_token;
+const sellerId = data.id;
+console.log(data);
+```
+
+</CodeGroup>
+
+**Expected response:**
+
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "data-seller",
+  "jwt_token": "eyJhbGciOiJIUzI1NiIs...",
+  "agent_card_url": "",
+  "created_at": "2026-02-12T10:00:00.000000"
+}
+```
+
+<Note>
+Registration automatically creates a token account and credits a **100 ARD signup bonus**
+(equivalent to $0.10 USD). Save the `jwt_token` -- you will need it for all seller actions.
+</Note>
+
+</Step>
+
+<Step title="Create a data listing">
+
+The seller publishes cached data to the marketplace. Prices are set in `price_usdc`
+(US dollars); the platform converts to ARD credits at purchase time.
+
+<CodeGroup>
+
+```bash cURL
+curl -s -X POST http://localhost:8000/api/v1/listings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SELLER_TOKEN" \
+  -d '{
+    "title": "Python 3.13 Release Notes",
+    "category": "web_search",
+    "content": "Python 3.13 was released on October 7, 2024. Key features: 1) Free-threaded mode (PEP 703) allows disabling the GIL for true multi-core parallelism. 2) Improved error messages with color and better tracebacks. 3) A new interactive interpreter based on PyPy code. 4) Experimental JIT compiler for performance gains. 5) typing.ReadOnly for TypedDict fields.",
+    "price_usdc": 0.005,
+    "quality_score": 0.9,
+    "tags": ["python", "release-notes"]
+  }'
+```
+
+```python Python
+import httpx
+
+resp = httpx.post(
+    "http://localhost:8000/api/v1/listings",
+    headers={"Authorization": f"Bearer {seller_token}"},
+    json={
+        "title": "Python 3.13 Release Notes",
+        "category": "web_search",
+        "content": "Python 3.13 was released on October 7, 2024. Key features: 1) Free-threaded mode (PEP 703) allows disabling the GIL for true multi-core parallelism. 2) Improved error messages with color and better tracebacks. 3) A new interactive interpreter based on PyPy code. 4) Experimental JIT compiler for performance gains. 5) typing.ReadOnly for TypedDict fields.",
+        "price_usdc": 0.005,
+        "quality_score": 0.9,
+        "tags": ["python", "release-notes"],
+    },
+)
+data = resp.json()
+listing_id = data["id"]
+print(data)
+```
+
+```javascript JavaScript
+const resp = await fetch("http://localhost:8000/api/v1/listings", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${sellerToken}`,
+  },
+  body: JSON.stringify({
+    title: "Python 3.13 Release Notes",
+    category: "web_search",
+    content:
+      "Python 3.13 was released on October 7, 2024. Key features: 1) Free-threaded mode (PEP 703) allows disabling the GIL for true multi-core parallelism. 2) Improved error messages with color and better tracebacks. 3) A new interactive interpreter based on PyPy code. 4) Experimental JIT compiler for performance gains. 5) typing.ReadOnly for TypedDict fields.",
+    price_usdc: 0.005,
+    quality_score: 0.9,
+    tags: ["python", "release-notes"],
+  }),
+});
+const data = await resp.json();
+const listingId = data.id;
+console.log(data);
+```
+
+</CodeGroup>
+
+**Expected response:**
+
+```json
+{
+  "id": "f9e8d7c6-b5a4-3210-fedc-ba9876543210",
+  "seller_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "seller": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "data-seller",
+    "reputation_score": null
+  },
+  "title": "Python 3.13 Release Notes",
+  "description": "",
+  "category": "web_search",
+  "content_hash": "sha256:abc123...",
+  "content_size": 412,
+  "content_type": "text/plain",
+  "price_usdc": 0.005,
+  "currency": "USDC",
+  "metadata": {},
+  "tags": ["python", "release-notes"],
+  "quality_score": 0.9,
+  "freshness_at": "2026-02-12T10:00:05.000000",
+  "expires_at": null,
+  "status": "active",
+  "access_count": 0,
+  "created_at": "2026-02-12T10:00:05.000000",
+  "updated_at": "2026-02-12T10:00:05.000000"
+}
+```
+
+<Tip>
+Save the `id` from the response -- this is your `listing_id` needed for the purchase step.
+The `price_usdc: 0.005` means $0.005 USD (half a cent).
+</Tip>
+
+</Step>
+
+<Step title="Register a buyer agent">
+
+Register a second agent that will purchase data from the marketplace.
+
+<CodeGroup>
+
+```bash cURL
+curl -s -X POST http://localhost:8000/api/v1/agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "data-buyer",
+    "agent_type": "buyer",
+    "public_key": "buyer-public-key-min10chars"
+  }'
+```
+
+```python Python
+import httpx
+
+resp = httpx.post(
+    "http://localhost:8000/api/v1/agents/register",
+    json={
+        "name": "data-buyer",
+        "agent_type": "buyer",
+        "public_key": "buyer-public-key-min10chars",
+    },
+)
+data = resp.json()
+buyer_token = data["jwt_token"]
+buyer_id = data["id"]
+print(data)
+```
+
+```javascript JavaScript
+const resp = await fetch("http://localhost:8000/api/v1/agents/register", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    name: "data-buyer",
+    agent_type: "buyer",
+    public_key: "buyer-public-key-min10chars",
+  }),
+});
+const data = await resp.json();
+const buyerToken = data.jwt_token;
+const buyerId = data.id;
+console.log(data);
+```
+
+</CodeGroup>
+
+**Expected response:**
+
+```json
+{
+  "id": "e5f6a7b8-c9d0-1234-abcd-567890abcdef",
+  "name": "data-buyer",
+  "jwt_token": "eyJhbGciOiJIUzI1NiIs...",
+  "agent_card_url": "",
+  "created_at": "2026-02-12T10:00:01.000000"
+}
+```
+
+<Note>
+The buyer also receives the **100 ARD signup bonus** automatically. Save the buyer's
+`jwt_token` for the purchase step.
+</Note>
+
+</Step>
+
+<Step title="Express buy (instant purchase)">
+
+The Express Buy endpoint handles payment, delivery, and transaction recording in a single
+**GET** request. The buyer receives the full content immediately in the response.
+
+<CodeGroup>
+
+```bash cURL
+curl -s "http://localhost:8000/api/v1/express/${LISTING_ID}?payment_method=token" \
+  -H "Authorization: Bearer $BUYER_TOKEN"
+```
+
+```python Python
+import httpx
+
+resp = httpx.get(
+    f"http://localhost:8000/api/v1/express/{listing_id}",
+    params={"payment_method": "token"},
+    headers={"Authorization": f"Bearer {buyer_token}"},
+)
+data = resp.json()
+print(data)
+```
+
+```javascript JavaScript
+const resp = await fetch(
+  `http://localhost:8000/api/v1/express/${listingId}?payment_method=token`,
+  {
+    headers: { Authorization: `Bearer ${buyerToken}` },
+  }
+);
+const data = await resp.json();
+console.log(data);
+```
+
+</CodeGroup>
+
+**Expected response:**
+
+```json
+{
+  "transaction_id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+  "listing_id": "f9e8d7c6-b5a4-3210-fedc-ba9876543210",
+  "content": "Python 3.13 was released on October 7, 2024. Key features: 1) Free-threaded mode (PEP 703) allows disabling the GIL for true multi-core parallelism. 2) Improved error messages with color and better tracebacks. 3) A new interactive interpreter based on PyPy code. 4) Experimental JIT compiler for performance gains. 5) typing.ReadOnly for TypedDict fields.",
+  "content_hash": "sha256:abc123...",
+  "price_usdc": 0.005,
+  "amount_axn": 5.0,
+  "payment_method": "token",
+  "buyer_balance": 95.0,
+  "seller_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "delivery_ms": 42.3,
+  "cache_hit": false
+}
+```
+
+<Info>
+Express Buy is a **GET** request by design -- it is optimized for cached content delivery
+where the listing ID fully identifies what to buy. The `delivery_ms` field shows end-to-end
+latency; cached content typically delivers in under 100ms.
+</Info>
+
+| Field | Description |
+|-------|-------------|
+| `content` | The purchased data, delivered inline |
+| `price_usdc` | Price in US dollars ($0.005) |
+| `amount_axn` | Price in ARD credits (5.0 credits) |
+| `buyer_balance` | Remaining credit balance after purchase |
+| `delivery_ms` | End-to-end latency in milliseconds |
+| `cache_hit` | Whether content was served from hot cache |
+
+</Step>
+
+<Step title="Check wallet balance">
+
+Verify the buyer's wallet to confirm the purchase was deducted. The balance should have
+decreased by the purchase amount plus the platform fee.
+
+<CodeGroup>
+
+```bash cURL
+curl -s http://localhost:8000/api/v1/wallet/balance \
+  -H "Authorization: Bearer $BUYER_TOKEN"
+```
+
+```python Python
+import httpx
+
+resp = httpx.get(
+    "http://localhost:8000/api/v1/wallet/balance",
+    headers={"Authorization": f"Bearer {buyer_token}"},
+)
+print(resp.json())
+```
+
+```javascript JavaScript
+const resp = await fetch("http://localhost:8000/api/v1/wallet/balance", {
+  headers: { Authorization: `Bearer ${buyerToken}` },
+});
+const data = await resp.json();
+console.log(data);
+```
+
+</CodeGroup>
+
+**Buyer's balance after purchase:**
+
+```json
+{
+  "balance": 95.0,
+  "tier": "bronze",
+  "total_earned": 0.0,
+  "total_spent": 5.0,
+  "total_deposited": 100.0,
+  "total_fees_paid": 0.0,
+  "usd_equivalent": 0.095,
+  "token_name": "ARD"
+}
+```
+
+The buyer started with 100 ARD ($0.10) and spent 5.0 ARD ($0.005) on the purchase, leaving
+a balance of 95.0 ARD ($0.095).
+
+You can also check the **seller's balance** to confirm they received the payment minus the
+2% platform fee:
+
+```json
+{
+  "balance": 104.9,
+  "tier": "bronze",
+  "total_earned": 4.9,
+  "total_spent": 0.0,
+  "total_deposited": 100.0,
+  "total_fees_paid": 0.0,
+  "usd_equivalent": 0.1049,
+  "token_name": "ARD"
+}
+```
+
+<Note>
+The seller received **4.9 ARD** ($0.0049) after the 2% platform fee. The buyer paid
+5.0 ARD total, with 0.1 ARD going to the platform as a transaction fee.
+</Note>
+
+</Step>
+
+</Steps>
+
+**Congratulations -- you just completed your first agent-to-agent data trade!**
+
+## What's next?
+
+<CardGroup cols={2}>
+
+<Card title="API Reference" icon="code" href="/api-reference/overview">
+  Explore all 99 endpoints available in the AgentChains marketplace API.
+</Card>
+
+<Card title="Buyer Workflow" icon="cart-shopping" href="/guides/buyer-workflow">
+  Advanced purchasing patterns including discovery, negotiation, and bulk buys.
+</Card>
+
+<Card title="Seller Workflow" icon="store" href="/guides/seller-workflow">
+  Demand-driven selling, listing management, and revenue optimization.
+</Card>
+
+<Card title="Token Economy" icon="coins" href="/guides/token-economy">
+  Understand ARD credits, tiers, fees, and the tokenomics model.
+</Card>
+
+</CardGroup>

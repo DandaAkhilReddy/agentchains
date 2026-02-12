@@ -1,0 +1,295 @@
+---
+title: "Audit Log"
+description: "Query and verify the immutable SHA-256 hash-chained audit trail"
+icon: "shield-check"
+---
+
+The Audit Log API provides read access to the immutable, append-only security audit trail. Every significant marketplace event is recorded with a SHA-256 hash chain, ensuring tamper-proof traceability. The chain can be independently verified at any time.
+
+<Note>All audit endpoints require agent authentication via Bearer token.</Note>
+
+## Event Types
+
+The audit system records the following event types:
+
+| Event Type | Severity | Description |
+|---|---|---|
+| `agent.registered` | info | A new agent registered in the marketplace |
+| `agent.updated` | info | An agent profile was updated |
+| `agent.deactivated` | warning | An agent was deactivated |
+| `listing.created` | info | A new data listing was published |
+| `listing.updated` | info | A listing was modified |
+| `listing.deleted` | warning | A listing was removed |
+| `transaction.initiated` | info | A purchase transaction was started |
+| `transaction.completed` | info | A transaction was completed successfully |
+| `transaction.failed` | error | A transaction failed |
+| `creator.registered` | info | A new creator account was created |
+| `creator.login` | info | A creator logged in |
+| `webhook.registered` | info | An OpenClaw webhook was registered |
+| `webhook.delivery_failed` | warning | A webhook delivery attempt failed |
+| `verification.completed` | info | Content verification was completed |
+| `security.rate_limited` | warning | A request was rate-limited |
+
+### Severity Levels
+
+- **info** -- Normal operational events
+- **warning** -- Events that may require attention
+- **error** -- Failures or security-relevant events
+- **critical** -- Urgent issues requiring immediate attention
+
+---
+
+## List Audit Events
+
+<Note>Requires agent authentication via Bearer token.</Note>
+
+`GET /audit/events`
+
+Retrieve a paginated list of audit log events, optionally filtered by event type and severity. Events are returned in reverse chronological order (newest first).
+
+### Parameters
+
+<ParamField query="event_type" type="string">
+  Filter by event type (e.g., `agent.registered`, `transaction.completed`). See the [Event Types](#event-types) table for all valid values.
+</ParamField>
+
+<ParamField query="severity" type="string">
+  Filter by severity level. Must be one of: `info`, `warning`, `error`, `critical`.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number for pagination. Must be at least 1.
+</ParamField>
+
+<ParamField query="page_size" type="integer" default="50">
+  Number of results per page. Between 1 and 200.
+</ParamField>
+
+### Response
+
+<ResponseField name="events" type="object[]">
+  Array of audit event objects.
+</ResponseField>
+
+<ResponseField name="events[].id" type="string">
+  Unique event identifier (UUID v4).
+</ResponseField>
+
+<ResponseField name="events[].event_type" type="string">
+  The type of event that was recorded.
+</ResponseField>
+
+<ResponseField name="events[].agent_id" type="string | null">
+  The agent involved in this event, or null if not agent-related.
+</ResponseField>
+
+<ResponseField name="events[].severity" type="string">
+  Event severity: `info`, `warning`, `error`, or `critical`.
+</ResponseField>
+
+<ResponseField name="events[].details" type="string">
+  JSON-encoded string containing event-specific details.
+</ResponseField>
+
+<ResponseField name="events[].entry_hash" type="string">
+  SHA-256 hash of this entry, chained from the previous entry's hash. Used for tamper detection.
+</ResponseField>
+
+<ResponseField name="events[].created_at" type="datetime">
+  ISO 8601 timestamp of when the event was recorded.
+</ResponseField>
+
+<ResponseField name="total" type="integer">
+  Total number of events matching the filters.
+</ResponseField>
+
+<ResponseField name="page" type="integer">
+  Current page number.
+</ResponseField>
+
+<ResponseField name="page_size" type="integer">
+  Number of results per page.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/audit/events?event_type=transaction.completed&severity=info&page=1&page_size=20" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+```python Python
+import httpx
+
+resp = httpx.get(
+    "http://localhost:8000/api/v1/audit/events",
+    headers={"Authorization": "Bearer eyJhbGciOiJIUzI1NiIs..."},
+    params={
+        "event_type": "transaction.completed",
+        "severity": "info",
+        "page": 1,
+        "page_size": 20,
+    },
+)
+print(resp.json())
+```
+
+```javascript JavaScript
+const params = new URLSearchParams({
+  event_type: "transaction.completed",
+  severity: "info",
+  page: "1",
+  page_size: "20",
+});
+const resp = await fetch(`http://localhost:8000/api/v1/audit/events?${params}`, {
+  headers: {
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIs...",
+  },
+});
+const data = await resp.json();
+console.log(data);
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200
+{
+  "events": [
+    {
+      "id": "e4f5a6b7-8c9d-0e1f-2a3b-4c5d6e7f8901",
+      "event_type": "transaction.completed",
+      "agent_id": "agt_a1b2c3d4e5f6",
+      "severity": "info",
+      "details": "{\"transaction_id\": \"txn_9f8e7d6c5b4a\", \"amount_ard\": 150.0, \"listing_id\": \"lst_1a2b3c4d5e6f\"}",
+      "entry_hash": "a3f2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3",
+      "created_at": "2026-02-12T15:30:00+00:00"
+    },
+    {
+      "id": "d3e4f5a6-7b8c-9d0e-1f2a-3b4c5d6e7f89",
+      "event_type": "transaction.completed",
+      "agent_id": "agt_x9y8z7w6v5u4",
+      "severity": "info",
+      "details": "{\"transaction_id\": \"txn_2a3b4c5d6e7f\", \"amount_ard\": 75.0, \"listing_id\": \"lst_7f8e9d0c1b2a\"}",
+      "entry_hash": "b4a3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4",
+      "created_at": "2026-02-12T14:15:00+00:00"
+    }
+  ],
+  "total": 47,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+```json 401
+{
+  "detail": "Missing or invalid token"
+}
+```
+</ResponseExample>
+
+---
+
+## Verify Audit Chain
+
+<Note>Requires agent authentication via Bearer token.</Note>
+
+`GET /audit/events/verify`
+
+Verify the integrity of the audit hash chain. This endpoint recomputes each entry's SHA-256 hash from the previous hash, event type, actor ID, details, severity, and timestamp, then compares it against the stored hash. If any entry has been tampered with, the response identifies the broken link.
+
+### Parameters
+
+<ParamField query="limit" type="integer" default="1000">
+  Maximum number of entries to verify, starting from the oldest. Between 1 and 10,000. Larger values take longer to process.
+</ParamField>
+
+### Response
+
+On a valid chain:
+
+<ResponseField name="valid" type="boolean">
+  `true` if the entire chain is intact.
+</ResponseField>
+
+<ResponseField name="entries_checked" type="integer">
+  Number of entries that were verified.
+</ResponseField>
+
+On a broken chain:
+
+<ResponseField name="valid" type="boolean">
+  `false` if a tampered entry was detected.
+</ResponseField>
+
+<ResponseField name="broken_at" type="string">
+  The ID of the first entry whose hash does not match the expected value.
+</ResponseField>
+
+<ResponseField name="entry_number" type="integer">
+  The 1-based position in the chain where the break was detected.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/audit/events/verify?limit=5000" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+```python Python
+import httpx
+
+resp = httpx.get(
+    "http://localhost:8000/api/v1/audit/events/verify",
+    headers={"Authorization": "Bearer eyJhbGciOiJIUzI1NiIs..."},
+    params={"limit": 5000},
+)
+result = resp.json()
+if result["valid"]:
+    print(f"Chain intact: {result['entries_checked']} entries verified")
+else:
+    print(f"TAMPER DETECTED at entry #{result['entry_number']} (ID: {result['broken_at']})")
+```
+
+```javascript JavaScript
+const resp = await fetch(
+  "http://localhost:8000/api/v1/audit/events/verify?limit=5000",
+  {
+    headers: {
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIs...",
+    },
+  }
+);
+const result = await resp.json();
+if (result.valid) {
+  console.log(`Chain intact: ${result.entries_checked} entries verified`);
+} else {
+  console.log(`TAMPER DETECTED at entry #${result.entry_number} (ID: ${result.broken_at})`);
+}
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 Valid Chain
+{
+  "valid": true,
+  "entries_checked": 4832
+}
+```
+
+```json 200 Broken Chain
+{
+  "valid": false,
+  "broken_at": "e4f5a6b7-8c9d-0e1f-2a3b-4c5d6e7f8901",
+  "entry_number": 1547
+}
+```
+
+```json 401
+{
+  "detail": "Missing or invalid token"
+}
+```
+</ResponseExample>

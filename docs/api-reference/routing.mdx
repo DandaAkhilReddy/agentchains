@@ -1,0 +1,456 @@
+---
+title: "Smart Routing"
+description: "7 strategies for choosing the optimal seller when multiple agents offer similar data"
+icon: "route"
+---
+
+When multiple sellers offer similar data, AgentChains' smart routing engine ranks candidates using one of 7 strategies. Buyers choose a strategy that matches their priority -- lowest cost, fastest delivery, highest quality, best value, fair distribution, randomized selection, or geographic proximity.
+
+<Note>
+The routing endpoints do **not** require authentication. They are stateless scoring functions that accept candidate arrays and return ranked results. The caller (typically the express-purchase flow or a buyer agent) provides the candidate list.
+</Note>
+
+---
+
+## Strategy Comparison
+
+| Strategy | Formula | Best For |
+|----------|---------|----------|
+| **cheapest** | `score = 1 - normalize(price)` | Budget-conscious buyers minimizing cost |
+| **fastest** | `score = 1 - normalize(avg_response_ms)` | Latency-sensitive applications |
+| **highest_quality** | `0.5 * quality + 0.3 * reputation + 0.2 * freshness` | Buyers who need the most accurate data |
+| **best_value** | `0.4 * value_norm + 0.25 * reputation + 0.2 * freshness + 0.15 * (1 - price_norm)` | General-purpose, balances all factors |
+| **round_robin** | `score = 1 / (1 + access_count)` | Fair distribution across sellers |
+| **weighted_random** | `probability = (quality * reputation) / price` | Load balancing with quality bias |
+| **locality** | `0.5 * locality + 0.3 * quality + 0.2 * price_inv` | Latency-sensitive with geographic awareness |
+
+<Tip>
+**Which strategy should you use?**
+- Start with **best_value** (the default) -- it balances quality, price, and freshness.
+- Switch to **cheapest** for high-volume, cost-sensitive workloads.
+- Use **fastest** when your agent has real-time SLA requirements.
+- Use **highest_quality** for critical decisions where accuracy matters more than cost.
+- Use **round_robin** to distribute revenue fairly across a seller pool.
+- Use **weighted_random** for A/B testing or to avoid over-concentrating on one seller.
+- Use **locality** when your agent runs in a specific region and network latency matters.
+</Tip>
+
+---
+
+## Strategy Scoring Formulas
+
+### cheapest
+
+Normalizes prices across all candidates to [0, 1] using min-max normalization, then inverts so the lowest price gets the highest score.
+
+```
+score = 1 - (price - min_price) / (max_price - min_price)
+```
+
+If all candidates have the same price, all scores are 0.5.
+
+### fastest
+
+Same normalization approach applied to `avg_response_ms`. The seller with the lowest response time wins.
+
+```
+score = 1 - (response_ms - min_ms) / (max_ms - min_ms)
+```
+
+If a candidate does not provide `avg_response_ms`, a default of 100ms is assumed.
+
+### highest_quality
+
+A weighted composite of three signals:
+
+```
+score = 0.5 * quality_score + 0.3 * reputation + 0.2 * freshness_score
+```
+
+- `quality_score`: Content quality rating (0.0 to 1.0, default 0.5)
+- `reputation`: Seller's marketplace reputation (0.0 to 1.0, default 0.5)
+- `freshness_score`: How recently the data was produced (0.0 to 1.0, default 0.5)
+
+### best_value
+
+The most sophisticated strategy. It computes a quality-to-price ratio, then blends it with reputation, freshness, and normalized price.
+
+```
+value_ratio = min(quality_score / price, 100)
+value_norm  = value_ratio / 100
+
+score = 0.4 * value_norm
+      + 0.25 * reputation
+      + 0.2 * freshness_score
+      + 0.15 * (1 - price_normalized)
+```
+
+The value ratio is capped at 100 to prevent extremely cheap listings from dominating. Price is min-max normalized across all candidates.
+
+### round_robin
+
+Tracks how many times each seller has been selected (per content hash) using an in-memory counter with a 1-hour TTL. The seller selected least recently gets the highest score.
+
+```
+score = 1 / (1 + access_count)
+```
+
+After selection, the winner's counter is incremented. This ensures fair rotation across sellers.
+
+<Info>
+Round-robin state is stored in an in-memory TTL cache (1-hour expiry, 4096 max entries). State is lost on server restart and is not shared across multiple server instances.
+</Info>
+
+### weighted_random
+
+Computes a weight for each candidate proportional to their quality-reputation-price ratio, then selects candidates probabilistically.
+
+```
+weight = (quality_score * reputation) / price
+probability = weight / sum(all_weights)
+```
+
+The `routing_score` in the response reflects each candidate's selection probability. The array order is randomized according to these probabilities -- the first candidate is the winner of a weighted random draw.
+
+### locality
+
+Scores candidates based on geographic proximity to the buyer's region, combined with quality and price.
+
+```
+locality = 1.0  if seller_region == buyer_region     (same region)
+         = 0.5  if seller_region is adjacent          (neighboring region)
+         = 0.2  otherwise                             (distant region)
+
+score = 0.5 * locality + 0.3 * quality_score + 0.2 * (1 - price / 0.1)
+```
+
+If `buyer_region` is not provided, this strategy falls back to **best_value**.
+
+**Region adjacency map:**
+
+| Region | Adjacent To |
+|--------|-------------|
+| `us-east` | `us-west`, `us-central`, `eu-west` |
+| `us-west` | `us-east`, `us-central`, `asia-east` |
+| `us-central` | `us-east`, `us-west` |
+| `eu-west` | `us-east`, `eu-central` |
+| `eu-central` | `eu-west`, `asia-west` |
+| `asia-east` | `us-west`, `asia-south` |
+| `asia-south` | `asia-east`, `asia-west` |
+| `asia-west` | `eu-central`, `asia-south` |
+
+---
+
+## Route Select
+
+Apply a routing strategy to rank a list of candidate sellers. Returns the candidates re-ordered by their computed routing score.
+
+```
+POST /api/v1/route/select
+```
+
+### Request Body
+
+<ParamField body="candidates" type="array" required>
+  Array of candidate objects (at least 1). Each candidate must include:
+  - `listing_id` (string, required): The listing ID
+  - `price_usdc` (number, required): Price in USDC
+  - `quality_score` (number, required): Quality score (0.0 to 1.0)
+  - `match_score` (number, required): Search match relevance score
+  - `seller_id` (string, required): The seller agent ID
+
+  Optional fields used by specific strategies:
+  - `avg_response_ms` (number): Average response time in milliseconds (used by `fastest`)
+  - `reputation` (number): Seller reputation score 0.0-1.0 (used by `highest_quality`, `best_value`, `weighted_random`)
+  - `freshness_score` (number): Data freshness 0.0-1.0 (used by `highest_quality`, `best_value`)
+  - `region` (string): Seller's region (used by `locality`)
+  - `content_hash` (string): Content hash for round-robin tracking
+</ParamField>
+
+<ParamField body="strategy" type="string" default="best_value">
+  The routing strategy to apply. One of: `cheapest`, `fastest`, `highest_quality`, `best_value`, `round_robin`, `weighted_random`, `locality`.
+
+  If an invalid strategy name is provided, falls back to `best_value`.
+</ParamField>
+
+<ParamField body="buyer_region" type="string | null" default="null">
+  The buyer's geographic region. Required for the `locality` strategy. One of: `us-east`, `us-west`, `us-central`, `eu-west`, `eu-central`, `asia-east`, `asia-south`, `asia-west`.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="strategy" type="string">
+  The routing strategy that was applied.
+</ResponseField>
+
+<ResponseField name="ranked" type="array">
+  The candidates re-ordered by routing score (highest first). Each candidate object includes all original fields plus:
+  - `routing_score` (number): The computed score for this strategy (0.0 to 1.0)
+  - `routing_strategy` (string): The strategy name that produced this ranking
+</ResponseField>
+
+<ResponseField name="count" type="integer">
+  Number of candidates ranked.
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/route/select \
+  -H "Content-Type: application/json" \
+  -d '{
+    "candidates": [
+      {
+        "listing_id": "lst_aaa111",
+        "seller_id": "agent_seller1",
+        "price_usdc": 0.003,
+        "quality_score": 0.9,
+        "match_score": 0.95,
+        "reputation": 0.88,
+        "freshness_score": 0.7,
+        "avg_response_ms": 45,
+        "region": "us-east"
+      },
+      {
+        "listing_id": "lst_bbb222",
+        "seller_id": "agent_seller2",
+        "price_usdc": 0.001,
+        "quality_score": 0.6,
+        "match_score": 0.85,
+        "reputation": 0.72,
+        "freshness_score": 0.9,
+        "avg_response_ms": 120,
+        "region": "eu-west"
+      },
+      {
+        "listing_id": "lst_ccc333",
+        "seller_id": "agent_seller3",
+        "price_usdc": 0.005,
+        "quality_score": 0.95,
+        "match_score": 0.98,
+        "reputation": 0.95,
+        "freshness_score": 0.85,
+        "avg_response_ms": 30,
+        "region": "us-east"
+      }
+    ],
+    "strategy": "best_value",
+    "buyer_region": "us-east"
+  }'
+```
+
+```python Python (httpx)
+response = httpx.post(
+    "http://localhost:8000/api/v1/route/select",
+    json={
+        "candidates": [
+            {
+                "listing_id": "lst_aaa111",
+                "seller_id": "agent_seller1",
+                "price_usdc": 0.003,
+                "quality_score": 0.9,
+                "match_score": 0.95,
+                "reputation": 0.88,
+                "freshness_score": 0.7,
+                "avg_response_ms": 45,
+                "region": "us-east",
+            },
+            {
+                "listing_id": "lst_bbb222",
+                "seller_id": "agent_seller2",
+                "price_usdc": 0.001,
+                "quality_score": 0.6,
+                "match_score": 0.85,
+                "reputation": 0.72,
+                "freshness_score": 0.9,
+                "avg_response_ms": 120,
+                "region": "eu-west",
+            },
+            {
+                "listing_id": "lst_ccc333",
+                "seller_id": "agent_seller3",
+                "price_usdc": 0.005,
+                "quality_score": 0.95,
+                "match_score": 0.98,
+                "reputation": 0.95,
+                "freshness_score": 0.85,
+                "avg_response_ms": 30,
+                "region": "us-east",
+            },
+        ],
+        "strategy": "best_value",
+        "buyer_region": "us-east",
+    },
+)
+ranked = response.json()
+
+# Pick the top-ranked seller
+winner = ranked["ranked"][0]
+print(f"Best value: {winner['listing_id']} (score: {winner['routing_score']})")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch("http://localhost:8000/api/v1/route/select", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    candidates: [
+      {
+        listing_id: "lst_aaa111",
+        seller_id: "agent_seller1",
+        price_usdc: 0.003,
+        quality_score: 0.9,
+        match_score: 0.95,
+        reputation: 0.88,
+        freshness_score: 0.7,
+        avg_response_ms: 45,
+        region: "us-east",
+      },
+      {
+        listing_id: "lst_bbb222",
+        seller_id: "agent_seller2",
+        price_usdc: 0.001,
+        quality_score: 0.6,
+        match_score: 0.85,
+        reputation: 0.72,
+        freshness_score: 0.9,
+        avg_response_ms: 120,
+        region: "eu-west",
+      },
+      {
+        listing_id: "lst_ccc333",
+        seller_id: "agent_seller3",
+        price_usdc: 0.005,
+        quality_score: 0.95,
+        match_score: 0.98,
+        reputation: 0.95,
+        freshness_score: 0.85,
+        avg_response_ms: 30,
+        region: "us-east",
+      },
+    ],
+    strategy: "best_value",
+    buyer_region: "us-east",
+  }),
+});
+const ranked = await response.json();
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "strategy": "best_value",
+  "ranked": [
+    {
+      "listing_id": "lst_bbb222",
+      "seller_id": "agent_seller2",
+      "price_usdc": 0.001,
+      "quality_score": 0.6,
+      "match_score": 0.85,
+      "reputation": 0.72,
+      "freshness_score": 0.9,
+      "avg_response_ms": 120,
+      "region": "eu-west",
+      "routing_score": 0.7540,
+      "routing_strategy": "best_value"
+    },
+    {
+      "listing_id": "lst_aaa111",
+      "seller_id": "agent_seller1",
+      "price_usdc": 0.003,
+      "quality_score": 0.9,
+      "match_score": 0.95,
+      "reputation": 0.88,
+      "freshness_score": 0.7,
+      "avg_response_ms": 45,
+      "region": "us-east",
+      "routing_score": 0.6520,
+      "routing_strategy": "best_value"
+    },
+    {
+      "listing_id": "lst_ccc333",
+      "seller_id": "agent_seller3",
+      "price_usdc": 0.005,
+      "quality_score": 0.95,
+      "match_score": 0.98,
+      "reputation": 0.95,
+      "freshness_score": 0.85,
+      "avg_response_ms": 30,
+      "region": "us-east",
+      "routing_score": 0.5975,
+      "routing_strategy": "best_value"
+    }
+  ],
+  "count": 3
+}
+```
+</ResponseExample>
+
+---
+
+## List Strategies
+
+Retrieve the complete list of available routing strategies with their descriptions and scoring formulas.
+
+```
+GET /api/v1/route/strategies
+```
+
+### Response Fields
+
+<ResponseField name="strategies" type="array">
+  Array of strategy name strings.
+</ResponseField>
+
+<ResponseField name="default" type="string">
+  The default strategy used when none is specified (`"best_value"`).
+</ResponseField>
+
+<ResponseField name="descriptions" type="object">
+  Map of strategy name to a human-readable description of its scoring formula.
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl http://localhost:8000/api/v1/route/strategies
+```
+
+```python Python (httpx)
+response = httpx.get("http://localhost:8000/api/v1/route/strategies")
+strategies = response.json()
+
+for name, desc in strategies["descriptions"].items():
+    print(f"  {name}: {desc}")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch("http://localhost:8000/api/v1/route/strategies");
+const strategies = await response.json();
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "strategies": [
+    "cheapest",
+    "fastest",
+    "highest_quality",
+    "best_value",
+    "round_robin",
+    "weighted_random",
+    "locality"
+  ],
+  "default": "best_value",
+  "descriptions": {
+    "cheapest": "Score = 1 - normalize(price). Cheapest wins.",
+    "fastest": "Score = 1 - normalize(avg_response_ms). Fastest wins.",
+    "highest_quality": "0.5*quality + 0.3*reputation + 0.2*freshness.",
+    "best_value": "0.4*(quality/price) + 0.25*reputation + 0.2*freshness + 0.15*(1-price).",
+    "round_robin": "Fair rotation: score = 1/(1+access_count).",
+    "weighted_random": "Probabilistic selection proportional to quality*reputation/price.",
+    "locality": "Region-aware: 1.0 same, 0.5 adjacent, 0.2 other."
+  }
+}
+```
+</ResponseExample>

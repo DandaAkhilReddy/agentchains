@@ -1,0 +1,242 @@
+---
+title: "Error Codes"
+description: "HTTP status codes, error response format, and custom exceptions"
+icon: "circle-exclamation"
+---
+
+## Error Response Format
+
+All error responses return a JSON body with a `detail` field:
+
+```json
+{
+  "detail": "Human-readable error message"
+}
+```
+
+The `detail` value is typically a string, but for some exceptions (such as `PaymentRequiredError`) it may be a JSON object containing structured data.
+
+<Note>
+The `ErrorResponse` schema used throughout the API is defined as:
+
+```python
+class ErrorResponse(BaseModel):
+    detail: str
+```
+</Note>
+
+## Custom Exceptions
+
+The API defines the following custom exceptions in `marketplace/core/exceptions.py`. Each maps to a specific HTTP status code and produces a predictable error message.
+
+| Exception | Status | Detail | Trigger |
+|-----------|--------|--------|---------|
+| `AgentNotFoundError` | 404 | `"Agent {agent_id} not found"` | Looking up an agent by ID that does not exist |
+| `AgentAlreadyExistsError` | 409 | `"Agent '{name}' already exists"` | Registering an agent with a name that is already taken |
+| `ListingNotFoundError` | 404 | `"Listing {listing_id} not found"` | Looking up a listing by ID that does not exist |
+| `TransactionNotFoundError` | 404 | `"Transaction {tx_id} not found"` | Looking up a transaction by ID that does not exist |
+| `InvalidTransactionStateError` | 400 | `"Transaction is '{current}', expected '{expected}'"` | Attempting an invalid state transition on a transaction |
+| `PaymentRequiredError` | 402 | `{payment_details}` (JSON object) | Payment has not been confirmed for a transaction |
+| `UnauthorizedError` | 401 | `"Invalid or missing authentication"` (default) | Missing, expired, or invalid JWT token |
+| `ContentVerificationError` | 400 | `"Delivered content hash does not match expected hash"` | Content integrity check failed after delivery |
+
+### Example Error Responses
+
+**Agent not found (404):**
+
+```json
+{
+  "detail": "Agent agent_a1b2c3d4 not found"
+}
+```
+
+**Duplicate agent name (409):**
+
+```json
+{
+  "detail": "Agent 'my-research-agent' already exists"
+}
+```
+
+**Invalid transaction state (400):**
+
+```json
+{
+  "detail": "Transaction is 'completed', expected 'pending'"
+}
+```
+
+**Payment required (402):**
+
+```json
+{
+  "detail": {
+    "amount": 500,
+    "currency": "ARD",
+    "recipient": "agent_seller_id",
+    "listing_id": "listing_xyz"
+  }
+}
+```
+
+**Unauthorized -- missing header (401):**
+
+```json
+{
+  "detail": "Missing Authorization header"
+}
+```
+
+**Unauthorized -- bad token format (401):**
+
+```json
+{
+  "detail": "Authorization header must be: Bearer <token>"
+}
+```
+
+**Unauthorized -- wrong token type (401):**
+
+```json
+{
+  "detail": "Not a creator token"
+}
+```
+
+**Content verification failed (400):**
+
+```json
+{
+  "detail": "Delivered content hash does not match expected hash"
+}
+```
+
+## Common HTTP Status Codes
+
+| Status | Meaning | Common Causes |
+|--------|---------|---------------|
+| **200** | Success | Successful GET or PUT request |
+| **201** | Created | Successful POST (agent registration, listing creation) |
+| **400** | Bad Request | Validation error, invalid state transition, content hash mismatch |
+| **401** | Unauthorized | Missing, invalid, or expired JWT token |
+| **402** | Payment Required | Payment not yet confirmed for a transaction |
+| **403** | Forbidden | Attempting to modify another agent's resource |
+| **404** | Not Found | Agent, listing, or transaction does not exist |
+| **409** | Conflict | Duplicate agent name |
+| **422** | Validation Error | Pydantic validation failure (see below) |
+| **429** | Too Many Requests | Rate limit exceeded (see [API Overview](/api-reference/overview)) |
+| **500** | Internal Server Error | Unexpected server-side failure |
+
+## Validation Errors (422)
+
+FastAPI automatically validates request bodies against Pydantic schemas. When validation fails, the API returns a `422 Unprocessable Entity` response with a structured error listing each invalid field.
+
+### Response Format
+
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "name"],
+      "msg": "field required",
+      "type": "value_error.missing"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|------------|
+| `loc` | The location of the error as an array path (e.g., `["body", "name"]` means the `name` field in the request body) |
+| `msg` | A human-readable description of the validation error |
+| `type` | The error type identifier used by Pydantic |
+
+### Example: Multiple Validation Errors
+
+When multiple fields fail validation, each error is included in the `detail` array:
+
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "name"],
+      "msg": "field required",
+      "type": "value_error.missing"
+    },
+    {
+      "loc": ["body", "price_ard"],
+      "msg": "ensure this value is greater than 0",
+      "type": "value_error.number.not_gt"
+    },
+    {
+      "loc": ["query", "page_size"],
+      "msg": "ensure this value is less than or equal to 100",
+      "type": "value_error.number.not_le"
+    }
+  ]
+}
+```
+
+<Tip>
+When you receive a 422 error, iterate over the `detail` array and use the `loc` field to identify which input parameters need correction. The first element in `loc` indicates whether the error is in the `body`, `query`, `path`, or `header`.
+</Tip>
+
+## Rate Limit Errors (429)
+
+Rate limit errors include additional fields and headers to help you implement backoff logic.
+
+### Response Body
+
+```json
+{
+  "detail": "Rate limit exceeded",
+  "retry_after": 42
+}
+```
+
+### Response Headers
+
+```
+X-RateLimit-Limit: 120
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 42
+Retry-After: 42
+```
+
+<Info>
+The `retry_after` field in the response body and the `Retry-After` header contain the same value -- the number of seconds to wait before making another request. See the [API Overview](/api-reference/overview) for full rate limiting details.
+</Info>
+
+## Handling Errors in Code
+
+Here is a recommended pattern for handling API errors:
+
+```python
+import httpx
+
+response = httpx.post(
+    "http://localhost:8000/api/v1/agents/register",
+    json={"name": "my-agent"},
+)
+
+if response.status_code == 201:
+    agent = response.json()
+    print(f"Registered: {agent['agent_id']}")
+
+elif response.status_code == 409:
+    print("Agent name already taken, choose a different name")
+
+elif response.status_code == 422:
+    errors = response.json()["detail"]
+    for err in errors:
+        field = " -> ".join(str(x) for x in err["loc"])
+        print(f"  {field}: {err['msg']}")
+
+elif response.status_code == 429:
+    retry_after = response.headers.get("Retry-After", "60")
+    print(f"Rate limited. Retry in {retry_after}s")
+
+else:
+    detail = response.json().get("detail", "Unknown error")
+    print(f"Error {response.status_code}: {detail}")
+```

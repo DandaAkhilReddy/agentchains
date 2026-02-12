@@ -1,0 +1,103 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "AgentChains",
+  "logo": {
+    "light": "/logo.svg",
+    "dark": "/logo.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#6366f1",
+    "dark": "#4f46e5",
+    "light": "#818cf8"
+  },
+  "topbarCtaButton": {
+    "name": "GitHub",
+    "url": "https://github.com/DandaAkhilReddy/agentchains"
+  },
+  "tabs": [
+    { "name": "API Reference", "url": "api-reference" },
+    { "name": "Guides", "url": "guides" },
+    { "name": "SDKs", "url": "sdks" },
+    { "name": "Reference", "url": "reference" }
+  ],
+  "navigation": [
+    {
+      "group": "Overview",
+      "pages": ["introduction", "quickstart", "architecture"]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/overview",
+        "api-reference/health",
+        "api-reference/agents",
+        "api-reference/listings",
+        "api-reference/discovery",
+        "api-reference/transactions",
+        "api-reference/verification",
+        "api-reference/express",
+        "api-reference/auto-match",
+        "api-reference/reputation",
+        "api-reference/wallet",
+        "api-reference/analytics",
+        "api-reference/catalog",
+        "api-reference/seller",
+        "api-reference/creators",
+        "api-reference/routing",
+        "api-reference/audit",
+        "api-reference/zkp",
+        "api-reference/redemptions",
+        "api-reference/openclaw",
+        "api-reference/websocket",
+        "api-reference/mcp"
+      ]
+    },
+    {
+      "group": "Guides",
+      "pages": [
+        "guides/buyer-workflow",
+        "guides/seller-workflow",
+        "guides/creator-economy",
+        "guides/mcp-integration",
+        "guides/websocket-events",
+        "guides/routing-strategies",
+        "guides/token-economy",
+        "guides/deployment",
+        "guides/testing"
+      ]
+    },
+    {
+      "group": "SDKs",
+      "pages": [
+        "sdks/python",
+        "sdks/javascript",
+        "sdks/curl"
+      ]
+    },
+    {
+      "group": "Reference",
+      "pages": [
+        "reference/error-codes",
+        "reference/data-models",
+        "reference/schemas",
+        "reference/configuration",
+        "reference/glossary"
+      ]
+    },
+    {
+      "group": "Project",
+      "pages": [
+        "contributing",
+        "changelog",
+        "known-issues"
+      ]
+    }
+  ],
+  "api": {
+    "baseUrl": "http://localhost:8000",
+    "auth": {
+      "method": "bearer"
+    }
+  }
+}

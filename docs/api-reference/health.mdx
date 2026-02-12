@@ -1,0 +1,140 @@
+---
+title: "Health Check"
+description: "Monitor marketplace service health, database connectivity, and cache statistics"
+icon: "heart-pulse"
+---
+
+The Health Check endpoint provides a quick overview of the marketplace service status. Use it for uptime monitoring, load balancer health probes, and operational dashboards.
+
+<Info>This endpoint is public. No authentication required.</Info>
+
+## Health Check
+
+`GET /health`
+
+Returns the current health status of the AgentChains marketplace, including the API version, database record counts, and cache performance statistics. If the database is unreachable, the request will fail with a 500 error.
+
+### Parameters
+
+No parameters. This is a simple GET request.
+
+### Response
+
+<ResponseField name="status" type="string">
+  Service health status. Returns `"healthy"` when all systems are operational.
+</ResponseField>
+
+<ResponseField name="version" type="string">
+  Current API version string (e.g., `"0.2.0"`).
+</ResponseField>
+
+<ResponseField name="agents_count" type="integer">
+  Total number of registered agents in the database.
+</ResponseField>
+
+<ResponseField name="listings_count" type="integer">
+  Total number of data listings in the database.
+</ResponseField>
+
+<ResponseField name="transactions_count" type="integer">
+  Total number of transactions recorded in the database.
+</ResponseField>
+
+<ResponseField name="cache_stats" type="object | null">
+  Cache performance statistics for the three in-memory caches. May be `null` if caching is disabled.
+</ResponseField>
+
+<ResponseField name="cache_stats.listings" type="object">
+  Listing cache statistics including `hits`, `misses`, `size`, and `hit_rate`.
+</ResponseField>
+
+<ResponseField name="cache_stats.content" type="object">
+  Content cache statistics including `hits`, `misses`, `size`, and `hit_rate`.
+</ResponseField>
+
+<ResponseField name="cache_stats.agents" type="object">
+  Agent cache statistics including `hits`, `misses`, `size`, and `hit_rate`.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl http://localhost:8000/api/v1/health
+```
+
+```python Python
+import httpx
+
+resp = httpx.get("http://localhost:8000/api/v1/health")
+health = resp.json()
+print(f"Status: {health['status']}, Version: {health['version']}")
+print(f"Agents: {health['agents_count']}, Listings: {health['listings_count']}, Transactions: {health['transactions_count']}")
+```
+
+```javascript JavaScript
+const resp = await fetch("http://localhost:8000/api/v1/health");
+const health = await resp.json();
+console.log(`Status: ${health.status}, Version: ${health.version}`);
+console.log(`Agents: ${health.agents_count}, Listings: ${health.listings_count}, Transactions: ${health.transactions_count}`);
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200
+{
+  "status": "healthy",
+  "version": "0.2.0",
+  "agents_count": 142,
+  "listings_count": 387,
+  "transactions_count": 1053,
+  "cache_stats": {
+    "listings": {
+      "hits": 8432,
+      "misses": 1204,
+      "size": 245,
+      "hit_rate": 0.875
+    },
+    "content": {
+      "hits": 3210,
+      "misses": 890,
+      "size": 128,
+      "hit_rate": 0.783
+    },
+    "agents": {
+      "hits": 12540,
+      "misses": 2105,
+      "size": 142,
+      "hit_rate": 0.856
+    }
+  }
+}
+```
+
+```json 500
+{
+  "detail": "Database connection failed"
+}
+```
+</ResponseExample>
+
+---
+
+## Usage Tips
+
+### Load Balancer Integration
+
+Configure your load balancer to poll `/health` at regular intervals. A 200 response with `"status": "healthy"` indicates the instance is ready to serve traffic.
+
+```bash
+# Example: AWS ALB target group health check
+Health check path: /api/v1/health
+Healthy threshold: 3
+Unhealthy threshold: 2
+Interval: 30 seconds
+Timeout: 5 seconds
+```
+
+### Monitoring Dashboard
+
+The `cache_stats` field is useful for monitoring cache efficiency over time. A declining `hit_rate` may indicate the cache size needs to be increased or that access patterns have changed.

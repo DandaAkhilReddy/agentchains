@@ -1,0 +1,244 @@
+---
+title: "Contributing"
+description: "How to contribute to AgentChains development"
+icon: "code-pull-request"
+---
+
+Thanks for your interest in contributing. AgentChains is an open-source agent-to-agent data
+marketplace and we welcome contributions of all kinds -- bug fixes, new features, tests,
+documentation, and new agent types.
+
+## Getting started
+
+### Prerequisites
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Python | 3.11+ | Backend runtime |
+| Node.js | 20+ | Frontend runtime |
+| Git | latest | Version control |
+
+### Local setup (zero cloud needed)
+
+<Steps>
+
+<Step title="Clone and install the backend">
+
+```bash
+git clone https://github.com/DandaAkhilReddy/agentchains.git
+cd agentchains
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+</Step>
+
+<Step title="Start the backend server">
+
+```bash
+python -m uvicorn marketplace.main:app --port 8000 --reload
+```
+
+</Step>
+
+<Step title="Install and start the frontend">
+
+Open a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+</Step>
+
+<Step title="Verify everything works">
+
+| URL | What it shows |
+|-----|---------------|
+| [http://localhost:3000](http://localhost:3000) | Dashboard (frontend) |
+| [http://localhost:8000/docs](http://localhost:8000/docs) | API docs (Swagger) |
+| [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health) | Health check |
+
+</Step>
+
+</Steps>
+
+<Info>
+The app uses SQLite and local filesystem by default -- no cloud accounts, no Docker, no
+external databases required for development.
+</Info>
+
+## Project structure
+
+```
+agentchains/
+  marketplace/          # FastAPI backend (routes, services, models)
+    api/                #   Route handlers (thin -- validate + delegate)
+    services/           #   Business logic (fat services)
+    models/             #   SQLAlchemy ORM models
+    core/               #   Auth, hashing, rate limiter, config
+    mcp/                #   Model Context Protocol server
+    tests/              #   Backend test suite (627 tests)
+  frontend/             # React 19 + TypeScript SPA
+    src/
+      components/       #   Reusable UI components
+      pages/            #   Route-level page components
+      hooks/            #   Custom React hooks
+      lib/              #   API client, formatters, WebSocket
+      test/             #   Test utilities and setup
+  agents/               # AI agent definitions and runners
+  docs/                 # Project documentation (Mintlify)
+```
+
+For detailed architecture, see the [Architecture](/architecture) page.
+
+## Development workflow
+
+### Branch naming
+
+Use prefixed branch names off `main`:
+
+| Prefix | Use case | Example |
+|--------|----------|---------|
+| `feat/` | New features | `feat/add-agent-scheduler` |
+| `fix/` | Bug fixes | `fix/token-balance-rounding` |
+| `docs/` | Documentation | `docs/update-api-reference` |
+| `test/` | Test coverage | `test/add-listing-edge-cases` |
+| `refactor/` | Code improvements | `refactor/extract-pricing-logic` |
+
+### Commit messages
+
+Use [conventional commits](https://www.conventionalcommits.org/):
+
+```
+feat: add webhook retry with exponential backoff
+fix: correct token balance after failed transaction
+docs: add MCP tool authoring guide
+test: add edge cases for listing expiry
+chore: bump FastAPI to 0.115
+```
+
+## Code style and conventions
+
+### Python (backend)
+
+- **PEP 8 + Ruff** -- configured in `pyproject.toml`, line length 100.
+- **Type hints required** for all function signatures.
+- **Async/await** for ALL database and I/O operations.
+- **Pydantic v2** models for request/response schemas.
+- **Pattern: thin routes, fat services.**
+
+```python
+# Route (thin -- validate + delegate)
+@router.post("/my-endpoint")
+async def my_endpoint(
+    data: MySchema,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    result = await my_service.do_thing(db, agent_id, data)
+    return result
+```
+
+Routes validate input and return responses. Business logic lives in services.
+
+### TypeScript (frontend)
+
+- **ESLint + TypeScript strict mode**.
+- **React functional components** with hooks.
+- **TanStack React Query v5** for server state.
+- **Tailwind CSS 4 only** -- no inline styles, no CSS variables in page files.
+- Use existing components: `PageHeader`, `StatCard`, `DataTable`, `Badge`, `Pagination`.
+
+## Testing requirements
+
+All tests MUST pass before submitting a PR.
+
+<CodeGroup>
+
+```bash Backend (627 tests)
+python -m pytest marketplace/tests/ -v
+```
+
+```bash Frontend (391 tests)
+cd frontend && npx vitest run
+```
+
+</CodeGroup>
+
+See the [Testing Guide](/guides/testing) for details on test architecture, fixtures, and
+writing new tests.
+
+## PR process
+
+### Before submitting
+
+Run the full test suite and verify all tests pass. Then open a pull request against `main`.
+
+### PR checklist
+
+<Check>Code follows project patterns (thin routes, fat services)</Check>
+<Check>Type hints / TypeScript types for all new code</Check>
+<Check>Tests added for new functionality</Check>
+<Check>All existing tests pass</Check>
+<Check>No hardcoded credentials or secrets</Check>
+<Check>Frontend: uses Tailwind classes only (no CSS vars in page files)</Check>
+<Check>Documentation updated if adding new endpoints or features</Check>
+
+### Review process
+
+1. Open a PR with a clear title and description of what changed and why.
+2. Automated CI runs both backend and frontend test suites.
+3. A maintainer reviews the code for style, correctness, and test coverage.
+4. Address any review feedback and push updates.
+5. Once approved and CI is green, the PR is merged into `main`.
+
+## What to work on
+
+- Check [open issues](https://github.com/DandaAkhilReddy/agentchains/issues) for bugs and
+  feature requests.
+- Look for `good first issue` labels for beginner-friendly tasks.
+- Areas that welcome contributions:
+
+| Area | Description |
+|------|-------------|
+| Test coverage | Add edge-case and negative-path tests |
+| Agent types | New agent definitions in `agents/` |
+| MCP tools | New Model Context Protocol tools |
+| Documentation | Guides, examples, and API docs |
+
+## Documentation standards
+
+- API endpoints: document in the [API Reference](/api-reference/overview) with request/response examples.
+- New features: add a guide page under `docs/guides/` if the feature requires a walkthrough.
+- Use Mintlify components (`<Steps>`, `<CodeGroup>`, `<Info>`, `<Note>`, `<Warning>`) for
+  structured documentation.
+
+### Related guides
+
+<CardGroup cols={2}>
+
+<Card title="Architecture" icon="sitemap" href="/architecture">
+  System design, data flows, and service layers.
+</Card>
+
+<Card title="API Reference" icon="code" href="/api-reference/overview">
+  All 99 endpoints documented with examples.
+</Card>
+
+<Card title="Testing Guide" icon="flask-vial" href="/guides/testing">
+  Test patterns, fixtures, and writing new tests.
+</Card>
+
+<Card title="Known Issues" icon="triangle-exclamation" href="/known-issues">
+  Current limitations and planned improvements.
+</Card>
+
+</CardGroup>
+
+## Questions?
+
+Open an issue or start a discussion on
+[GitHub](https://github.com/DandaAkhilReddy/agentchains).

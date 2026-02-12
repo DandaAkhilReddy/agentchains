@@ -1,0 +1,912 @@
+---
+title: "Redemptions"
+description: "Convert ARD tokens into API credits, gift cards, UPI transfers, or bank deposits"
+icon: "money-bill-transfer"
+---
+
+The redemptions API allows creators to cash out earned ARD tokens into real-world value. Four redemption methods are available, each with different minimum thresholds and processing times.
+
+<Note>
+All redemption endpoints require a valid **creator JWT** in the `Authorization` header. Creator tokens are issued via `POST /creators/login` and include `"type": "creator"` in the payload. Agent JWTs cannot be used for redemptions.
+</Note>
+
+<Info>
+**Conversion rate**: 1 ARD = $0.001 USD. ARD is debited from the creator's account immediately when a redemption request is created, ensuring funds are held during processing.
+</Info>
+
+---
+
+## Get Redemption Methods
+
+Retrieve all available redemption methods with their minimum thresholds, processing times, and descriptions.
+
+```
+GET /api/v1/redemptions/methods
+```
+
+<Tip>
+This is a **public endpoint** -- no authentication required. Use it to populate redemption method selectors in your UI.
+</Tip>
+
+### Response Fields
+
+<ResponseField name="methods" type="array">
+  Array of available redemption method objects.
+</ResponseField>
+
+<ResponseField name="methods[].type" type="string">
+  Method identifier: `api_credits`, `gift_card`, `upi`, or `bank_withdrawal`.
+</ResponseField>
+
+<ResponseField name="methods[].label" type="string">
+  Human-readable display name for the method.
+</ResponseField>
+
+<ResponseField name="methods[].description" type="string">
+  Detailed description of the redemption method.
+</ResponseField>
+
+<ResponseField name="methods[].min_ard" type="number">
+  Minimum ARD amount required to use this method.
+</ResponseField>
+
+<ResponseField name="methods[].min_usd" type="number">
+  USD equivalent of the minimum ARD threshold.
+</ResponseField>
+
+<ResponseField name="methods[].processing_time" type="string">
+  Estimated time to complete the redemption.
+</ResponseField>
+
+<ResponseField name="methods[].countries" type="array">
+  ISO country codes where this method is available (only present for region-limited methods like UPI).
+</ResponseField>
+
+<ResponseField name="token_name" type="string">
+  Token identifier. Always `"ARD"`.
+</ResponseField>
+
+<ResponseField name="peg_rate_usd" type="number">
+  Current ARD-to-USD conversion rate (0.001).
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "http://localhost:8000/api/v1/redemptions/methods"
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.get("http://localhost:8000/api/v1/redemptions/methods")
+data = response.json()
+for method in data["methods"]:
+    print(f"{method['label']}: min {method['min_ard']:.0f} ARD "
+          f"(${method['min_usd']:.2f}) — {method['processing_time']}")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch("http://localhost:8000/api/v1/redemptions/methods");
+const data = await response.json();
+data.methods.forEach((method) => {
+  console.log(
+    `${method.label}: min ${method.min_ard} ARD ($${method.min_usd.toFixed(2)}) - ${method.processing_time}`
+  );
+});
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "methods": [
+    {
+      "type": "api_credits",
+      "label": "API Call Credits",
+      "description": "Instant: Convert ARD to API call credits (1 ARD = 1 credit)",
+      "min_ard": 100.0,
+      "min_usd": 0.1,
+      "processing_time": "Instant"
+    },
+    {
+      "type": "gift_card",
+      "label": "Amazon Gift Card",
+      "description": "Redeem for Amazon gift cards (email delivery)",
+      "min_ard": 1000.0,
+      "min_usd": 1.0,
+      "processing_time": "24 hours"
+    },
+    {
+      "type": "upi",
+      "label": "UPI Transfer (India)",
+      "description": "Near-instant transfer to your UPI ID",
+      "min_ard": 5000.0,
+      "min_usd": 5.0,
+      "processing_time": "Minutes",
+      "countries": ["IN"]
+    },
+    {
+      "type": "bank_withdrawal",
+      "label": "Bank Transfer",
+      "description": "Transfer to your bank account",
+      "min_ard": 10000.0,
+      "min_usd": 10.0,
+      "processing_time": "3-7 business days"
+    }
+  ],
+  "token_name": "ARD",
+  "peg_rate_usd": 0.001
+}
+```
+</ResponseExample>
+
+<Info>
+**Minimum redemption thresholds:**
+
+| Method | Minimum ARD | Minimum USD | Processing Time |
+|--------|------------|-------------|-----------------|
+| API Credits | 100 ARD | $0.10 | Instant |
+| Gift Card | 1,000 ARD | $1.00 | 24 hours |
+| UPI Transfer | 5,000 ARD | $5.00 | Minutes |
+| Bank Transfer | 10,000 ARD | $10.00 | 3--7 business days |
+
+API credit redemptions are processed automatically. All other methods require admin approval or payment provider integration.
+</Info>
+
+---
+
+## Create Redemption Request
+
+Create a new redemption request to convert ARD tokens into real-world value. The specified ARD amount is debited from the creator's account immediately and held until the request is processed.
+
+```
+POST /api/v1/redemptions
+```
+
+<Note>
+Requires creator JWT authentication.
+</Note>
+
+### Request Body
+
+<ParamField body="redemption_type" type="string" required>
+  The redemption method to use. Must be one of: `api_credits`, `gift_card`, `bank_withdrawal`, `upi`.
+</ParamField>
+
+<ParamField body="amount_ard" type="number" required>
+  The ARD amount to redeem. Must be greater than 0 and at or above the minimum threshold for the chosen method.
+</ParamField>
+
+<ParamField body="currency" type="string" default="USD">
+  Target currency for fiat redemptions (ignored for `api_credits`). Maximum 10 characters.
+</ParamField>
+
+<ParamField body="payout_details" type="object">
+  Additional details for the payout method. For UPI, include `{"upi_id": "user@upi"}`. For bank transfers, include `{"account_number": "...", "ifsc": "...", "bank_name": "..."}`.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="id" type="string">
+  Unique redemption request ID (UUID).
+</ResponseField>
+
+<ResponseField name="creator_id" type="string">
+  The creator who initiated the redemption.
+</ResponseField>
+
+<ResponseField name="redemption_type" type="string">
+  The redemption method chosen.
+</ResponseField>
+
+<ResponseField name="amount_ard" type="number">
+  ARD amount being redeemed.
+</ResponseField>
+
+<ResponseField name="amount_fiat" type="number">
+  Fiat equivalent at the current exchange rate (null for `api_credits`).
+</ResponseField>
+
+<ResponseField name="currency" type="string">
+  Target fiat currency.
+</ResponseField>
+
+<ResponseField name="exchange_rate" type="number">
+  ARD-to-fiat conversion rate used (null for `api_credits`).
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Request status: `pending`, `processing`, `completed`, or `rejected`.
+</ResponseField>
+
+<ResponseField name="payout_ref" type="string">
+  External payout reference (populated after processing).
+</ResponseField>
+
+<ResponseField name="admin_notes" type="string">
+  Notes from admin review (populated after processing).
+</ResponseField>
+
+<ResponseField name="rejection_reason" type="string">
+  Reason for rejection, if applicable.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of request creation.
+</ResponseField>
+
+<ResponseField name="processed_at" type="string">
+  ISO 8601 timestamp when processing began (null while pending).
+</ResponseField>
+
+<ResponseField name="completed_at" type="string">
+  ISO 8601 timestamp of completion (null while pending/processing).
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+# Redeem 5,000 ARD for API credits (instant)
+curl -X POST "http://localhost:8000/api/v1/redemptions" \
+  -H "Authorization: Bearer YOUR_CREATOR_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "redemption_type": "api_credits",
+    "amount_ard": 5000,
+    "currency": "USD"
+  }'
+```
+
+```python Python (httpx)
+import httpx
+
+# Redeem 5,000 ARD for API credits (instant processing)
+response = httpx.post(
+    "http://localhost:8000/api/v1/redemptions",
+    headers={"Authorization": "Bearer YOUR_CREATOR_JWT"},
+    json={
+        "redemption_type": "api_credits",
+        "amount_ard": 5000,
+        "currency": "USD",
+    },
+)
+redemption = response.json()
+print(f"Redemption {redemption['id']}: {redemption['status']}")
+if redemption["status"] == "completed":
+    print(f"  {redemption['amount_ard']:.0f} API credits granted instantly")
+```
+
+```javascript JavaScript (fetch)
+// Redeem 5,000 ARD for API credits (instant processing)
+const response = await fetch(
+  "http://localhost:8000/api/v1/redemptions",
+  {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer YOUR_CREATOR_JWT",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      redemption_type: "api_credits",
+      amount_ard: 5000,
+      currency: "USD",
+    }),
+  }
+);
+const redemption = await response.json();
+console.log(`Redemption ${redemption.id}: ${redemption.status}`);
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 201 Created — API Credits (Instant)
+{
+  "id": "r1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+  "creator_id": "creator_x9y8z7",
+  "redemption_type": "api_credits",
+  "amount_ard": 5000.0,
+  "amount_fiat": null,
+  "currency": "USD",
+  "exchange_rate": null,
+  "status": "completed",
+  "payout_ref": "api_credits_5000",
+  "admin_notes": null,
+  "rejection_reason": null,
+  "created_at": "2026-02-12T16:00:00+00:00",
+  "processed_at": "2026-02-12T16:00:00+00:00",
+  "completed_at": "2026-02-12T16:00:00+00:00"
+}
+```
+
+```json 201 Created — Bank Withdrawal (Pending)
+{
+  "id": "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f",
+  "creator_id": "creator_x9y8z7",
+  "redemption_type": "bank_withdrawal",
+  "amount_ard": 50000.0,
+  "amount_fiat": 50.0,
+  "currency": "USD",
+  "exchange_rate": 0.001,
+  "status": "pending",
+  "payout_ref": null,
+  "admin_notes": null,
+  "rejection_reason": null,
+  "created_at": "2026-02-12T16:05:00+00:00",
+  "processed_at": null,
+  "completed_at": null
+}
+```
+</ResponseExample>
+
+<Tip>
+**API credit redemptions are processed instantly** -- the response will already show `status: "completed"` with `payout_ref: "api_credits_5000"`. All other redemption types return `status: "pending"` and require admin approval or payment provider processing.
+</Tip>
+
+<Info>
+**How the hold works:** When you create a redemption, the ARD is immediately debited from your account and a `withdrawal` ledger entry is created. This prevents you from double-spending the same tokens. If the redemption is cancelled or rejected, the full amount is refunded.
+</Info>
+
+---
+
+## List My Redemptions
+
+Retrieve a paginated list of your redemption requests, optionally filtered by status.
+
+```
+GET /api/v1/redemptions
+```
+
+<Note>
+Requires creator JWT authentication. Only returns redemptions belonging to the authenticated creator.
+</Note>
+
+### Query Parameters
+
+<ParamField query="status" type="string">
+  Filter by status: `pending`, `processing`, `completed`, or `rejected`. Omit to return all statuses.
+</ParamField>
+
+<ParamField query="page" type="integer" default={1}>
+  Page number (1-indexed).
+</ParamField>
+
+<ParamField query="page_size" type="integer" default={20}>
+  Number of items per page. Minimum 1, maximum 100.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="redemptions" type="array">
+  Array of redemption request objects (same shape as the [Create Redemption](#create-redemption-request) response).
+</ResponseField>
+
+<ResponseField name="total" type="integer">
+  Total number of matching redemption requests.
+</ResponseField>
+
+<ResponseField name="page" type="integer">
+  Current page number.
+</ResponseField>
+
+<ResponseField name="page_size" type="integer">
+  Number of items per page.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+# List all pending redemptions
+curl -X GET "http://localhost:8000/api/v1/redemptions?status=pending&page=1&page_size=10" \
+  -H "Authorization: Bearer YOUR_CREATOR_JWT"
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.get(
+    "http://localhost:8000/api/v1/redemptions",
+    headers={"Authorization": "Bearer YOUR_CREATOR_JWT"},
+    params={"status": "pending", "page": 1, "page_size": 10},
+)
+data = response.json()
+print(f"Found {data['total']} pending redemptions")
+for r in data["redemptions"]:
+    print(f"  {r['id']}: {r['amount_ard']:.0f} ARD via {r['redemption_type']}")
+```
+
+```javascript JavaScript (fetch)
+const params = new URLSearchParams({
+  status: "pending",
+  page: "1",
+  page_size: "10",
+});
+const response = await fetch(
+  `http://localhost:8000/api/v1/redemptions?${params}`,
+  {
+    headers: { Authorization: "Bearer YOUR_CREATOR_JWT" },
+  }
+);
+const data = await response.json();
+console.log(`Found ${data.total} pending redemptions`);
+data.redemptions.forEach((r) => {
+  console.log(`  ${r.id}: ${r.amount_ard} ARD via ${r.redemption_type}`);
+});
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "redemptions": [
+    {
+      "id": "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f",
+      "creator_id": "creator_x9y8z7",
+      "redemption_type": "bank_withdrawal",
+      "amount_ard": 50000.0,
+      "amount_fiat": 50.0,
+      "currency": "USD",
+      "exchange_rate": 0.001,
+      "status": "pending",
+      "payout_ref": null,
+      "admin_notes": null,
+      "rejection_reason": null,
+      "created_at": "2026-02-12T16:05:00+00:00",
+      "processed_at": null,
+      "completed_at": null
+    },
+    {
+      "id": "r1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+      "creator_id": "creator_x9y8z7",
+      "redemption_type": "api_credits",
+      "amount_ard": 5000.0,
+      "amount_fiat": null,
+      "currency": "USD",
+      "exchange_rate": null,
+      "status": "completed",
+      "payout_ref": "api_credits_5000",
+      "admin_notes": null,
+      "rejection_reason": null,
+      "created_at": "2026-02-12T16:00:00+00:00",
+      "processed_at": "2026-02-12T16:00:00+00:00",
+      "completed_at": "2026-02-12T16:00:00+00:00"
+    }
+  ],
+  "total": 2,
+  "page": 1,
+  "page_size": 10
+}
+```
+</ResponseExample>
+
+---
+
+## Get Redemption Status
+
+Retrieve the current status and details of a specific redemption request.
+
+```
+GET /api/v1/redemptions/{redemption_id}
+```
+
+<Note>
+Requires creator JWT authentication. You can only view your own redemption requests.
+</Note>
+
+### Path Parameters
+
+<ParamField path="redemption_id" type="string" required>
+  The UUID of the redemption request to retrieve.
+</ParamField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "http://localhost:8000/api/v1/redemptions/r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f" \
+  -H "Authorization: Bearer YOUR_CREATOR_JWT"
+```
+
+```python Python (httpx)
+import httpx
+
+redemption_id = "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f"
+response = httpx.get(
+    f"http://localhost:8000/api/v1/redemptions/{redemption_id}",
+    headers={"Authorization": "Bearer YOUR_CREATOR_JWT"},
+)
+r = response.json()
+print(f"Status: {r['status']}")
+if r["amount_fiat"]:
+    print(f"Payout: ${r['amount_fiat']:.2f} {r['currency']}")
+```
+
+```javascript JavaScript (fetch)
+const redemptionId = "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f";
+const response = await fetch(
+  `http://localhost:8000/api/v1/redemptions/${redemptionId}`,
+  {
+    headers: { Authorization: "Bearer YOUR_CREATOR_JWT" },
+  }
+);
+const r = await response.json();
+console.log(`Status: ${r.status}`);
+if (r.amount_fiat) {
+  console.log(`Payout: $${r.amount_fiat.toFixed(2)} ${r.currency}`);
+}
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "id": "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f",
+  "creator_id": "creator_x9y8z7",
+  "redemption_type": "bank_withdrawal",
+  "amount_ard": 50000.0,
+  "amount_fiat": 50.0,
+  "currency": "USD",
+  "exchange_rate": 0.001,
+  "status": "processing",
+  "payout_ref": null,
+  "admin_notes": "Queued for bank transfer processing (3-7 business days)",
+  "rejection_reason": null,
+  "created_at": "2026-02-12T16:05:00+00:00",
+  "processed_at": "2026-02-12T18:30:00+00:00",
+  "completed_at": null
+}
+```
+</ResponseExample>
+
+---
+
+## Cancel Redemption
+
+Cancel a pending redemption request. The held ARD tokens are refunded to the creator's account in full, and a refund ledger entry is created.
+
+```
+POST /api/v1/redemptions/{redemption_id}/cancel
+```
+
+<Note>
+Requires creator JWT authentication. Only the creator who initiated the redemption can cancel it.
+</Note>
+
+### Path Parameters
+
+<ParamField path="redemption_id" type="string" required>
+  The UUID of the redemption request to cancel.
+</ParamField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/redemptions/r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f/cancel" \
+  -H "Authorization: Bearer YOUR_CREATOR_JWT"
+```
+
+```python Python (httpx)
+import httpx
+
+redemption_id = "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f"
+response = httpx.post(
+    f"http://localhost:8000/api/v1/redemptions/{redemption_id}/cancel",
+    headers={"Authorization": "Bearer YOUR_CREATOR_JWT"},
+)
+result = response.json()
+print(f"Cancelled: {result['amount_ard']:.0f} ARD refunded")
+```
+
+```javascript JavaScript (fetch)
+const redemptionId = "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f";
+const response = await fetch(
+  `http://localhost:8000/api/v1/redemptions/${redemptionId}/cancel`,
+  {
+    method: "POST",
+    headers: { Authorization: "Bearer YOUR_CREATOR_JWT" },
+  }
+);
+const result = await response.json();
+console.log(`Cancelled: ${result.amount_ard} ARD refunded`);
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "id": "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f",
+  "creator_id": "creator_x9y8z7",
+  "redemption_type": "bank_withdrawal",
+  "amount_ard": 50000.0,
+  "amount_fiat": 50.0,
+  "currency": "USD",
+  "exchange_rate": 0.001,
+  "status": "rejected",
+  "payout_ref": null,
+  "admin_notes": null,
+  "rejection_reason": "Cancelled by creator",
+  "created_at": "2026-02-12T16:05:00+00:00",
+  "processed_at": null,
+  "completed_at": "2026-02-12T17:22:00+00:00"
+}
+```
+</ResponseExample>
+
+<Info>
+**Only `pending` redemptions can be cancelled.** Once a redemption moves to `processing` status (admin-approved or being fulfilled by a payment provider), it cannot be cancelled. If you need to reverse a processing redemption, contact platform support.
+</Info>
+
+---
+
+## Admin: Approve Redemption
+
+Approve a pending redemption request and route it to the appropriate payment processor. API credit redemptions are fulfilled instantly; other methods are queued for processing.
+
+```
+POST /api/v1/redemptions/admin/{redemption_id}/approve
+```
+
+<Note>
+Requires admin authentication. This endpoint is for platform administrators only.
+</Note>
+
+### Path Parameters
+
+<ParamField path="redemption_id" type="string" required>
+  The UUID of the redemption request to approve.
+</ParamField>
+
+### Request Body
+
+<ParamField body="admin_notes" type="string" default="">
+  Optional notes from the admin reviewer.
+</ParamField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/redemptions/admin/r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f/approve" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"admin_notes": "Verified creator identity. Approved for payout."}'
+```
+
+```python Python (httpx)
+import httpx
+
+redemption_id = "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f"
+response = httpx.post(
+    f"http://localhost:8000/api/v1/redemptions/admin/{redemption_id}/approve",
+    headers={"Authorization": "Bearer YOUR_ADMIN_JWT"},
+    json={"admin_notes": "Verified creator identity. Approved for payout."},
+)
+result = response.json()
+print(f"Approved: {result['status']} — {result['redemption_type']}")
+```
+
+```javascript JavaScript (fetch)
+const redemptionId = "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f";
+const response = await fetch(
+  `http://localhost:8000/api/v1/redemptions/admin/${redemptionId}/approve`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer YOUR_ADMIN_JWT",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      admin_notes: "Verified creator identity. Approved for payout.",
+    }),
+  }
+);
+const result = await response.json();
+console.log(`Approved: ${result.status} - ${result.redemption_type}`);
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "id": "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f",
+  "creator_id": "creator_x9y8z7",
+  "redemption_type": "bank_withdrawal",
+  "amount_ard": 50000.0,
+  "amount_fiat": 50.0,
+  "currency": "USD",
+  "exchange_rate": 0.001,
+  "status": "processing",
+  "payout_ref": null,
+  "admin_notes": "Queued for bank transfer processing (3-7 business days)",
+  "rejection_reason": null,
+  "created_at": "2026-02-12T16:05:00+00:00",
+  "processed_at": "2026-02-12T18:30:00+00:00",
+  "completed_at": null
+}
+```
+</ResponseExample>
+
+<Info>
+**Processing routes by type:**
+
+| Redemption Type | What Happens on Approval |
+|----------------|-------------------------|
+| `api_credits` | Instant: credits added to `ApiCreditBalance`, status set to `completed` |
+| `gift_card` | Status set to `processing`, queued for Amazon Incentives API fulfillment |
+| `upi` | Status set to `processing`, queued for Razorpay Payouts UPI transfer |
+| `bank_withdrawal` | Status set to `processing`, queued for Razorpay/Stripe Payouts bank transfer |
+</Info>
+
+---
+
+## Admin: Reject Redemption
+
+Reject a pending redemption request and refund the held ARD tokens to the creator's account. A refund ledger entry is automatically created.
+
+```
+POST /api/v1/redemptions/admin/{redemption_id}/reject
+```
+
+<Note>
+Requires admin authentication. This endpoint is for platform administrators only.
+</Note>
+
+### Path Parameters
+
+<ParamField path="redemption_id" type="string" required>
+  The UUID of the redemption request to reject.
+</ParamField>
+
+### Request Body
+
+<ParamField body="reason" type="string" required>
+  The reason for rejecting the redemption. Must be at least 1 character.
+</ParamField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/redemptions/admin/r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f/reject" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "Bank account details could not be verified. Please update your payout information."}'
+```
+
+```python Python (httpx)
+import httpx
+
+redemption_id = "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f"
+response = httpx.post(
+    f"http://localhost:8000/api/v1/redemptions/admin/{redemption_id}/reject",
+    headers={"Authorization": "Bearer YOUR_ADMIN_JWT"},
+    json={
+        "reason": "Bank account details could not be verified. "
+                  "Please update your payout information.",
+    },
+)
+result = response.json()
+print(f"Rejected: {result['amount_ard']:.0f} ARD refunded to {result['creator_id']}")
+```
+
+```javascript JavaScript (fetch)
+const redemptionId = "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f";
+const response = await fetch(
+  `http://localhost:8000/api/v1/redemptions/admin/${redemptionId}/reject`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer YOUR_ADMIN_JWT",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      reason:
+        "Bank account details could not be verified. Please update your payout information.",
+    }),
+  }
+);
+const result = await response.json();
+console.log(`Rejected: ${result.amount_ard} ARD refunded to ${result.creator_id}`);
+```
+
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "id": "r7d8e9f0-a1b2-3c4d-5e6f-7a8b9c0d1e2f",
+  "creator_id": "creator_x9y8z7",
+  "redemption_type": "bank_withdrawal",
+  "amount_ard": 50000.0,
+  "amount_fiat": 50.0,
+  "currency": "USD",
+  "exchange_rate": 0.001,
+  "status": "rejected",
+  "payout_ref": null,
+  "admin_notes": null,
+  "rejection_reason": "Bank account details could not be verified. Please update your payout information.",
+  "created_at": "2026-02-12T16:05:00+00:00",
+  "processed_at": null,
+  "completed_at": "2026-02-12T19:15:00+00:00"
+}
+```
+</ResponseExample>
+
+<Info>
+**Refund process:** When a redemption is rejected, the system automatically:
+1. Credits the full ARD amount back to the creator's `TokenAccount.balance`
+2. Reverses the `total_spent` counter
+3. Creates a `refund` ledger entry with `reference_type: "redemption_rejected"`
+4. Sets the redemption status to `rejected` with the provided reason
+</Info>
+
+---
+
+## Redemption Lifecycle
+
+The following diagram shows the complete lifecycle of a redemption request:
+
+```
+pending ──┬──> processing ──> completed    (approved, payout successful)
+          │                └──> failed      (payout failed)
+          ├──> rejected                     (admin rejected, ARD refunded)
+          └──> rejected                     (creator cancelled, ARD refunded)
+```
+
+<Info>
+**Special case -- API credits:** When `redemption_type` is `api_credits`, the request skips the `pending` state entirely and is auto-processed to `completed` immediately. The creator receives 1 API call credit per ARD redeemed. API credits are tracked in the `ApiCreditBalance` table.
+</Info>
+
+---
+
+## Error Responses
+
+All redemption endpoints return standard error responses:
+
+| Status Code | Scenario |
+|-------------|----------|
+| `400` | Invalid redemption type, amount below minimum threshold, insufficient balance, or redemption not in cancellable status |
+| `401` | Missing or invalid creator JWT |
+| `404` | Redemption request not found or does not belong to the authenticated creator |
+| `429` | Rate limit exceeded |
+
+### Error Examples
+
+```json
+{
+  "detail": "Minimum for bank_withdrawal is 10000 ARD ($10.00 USD)"
+}
+```
+
+```json
+{
+  "detail": "Insufficient balance: 3500.00 ARD (need 5000.00 ARD)"
+}
+```
+
+```json
+{
+  "detail": "Cannot cancel redemption in 'processing' status"
+}
+```
+
+<Tip>
+Before creating a redemption, call the [Get Redemption Methods](#get-redemption-methods) endpoint to check current minimums, and verify your creator balance is sufficient. This avoids `400` errors from threshold or balance validation.
+</Tip>

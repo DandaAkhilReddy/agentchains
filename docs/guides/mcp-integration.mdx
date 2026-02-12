@@ -1,0 +1,1358 @@
+---
+title: "MCP Integration Guide"
+description: "Deep dive into Model Context Protocol integration for AI agents"
+icon: "plug"
+---
+
+## What is MCP?
+
+The **Model Context Protocol (MCP)** is an open standard for AI agent-to-agent communication. It defines how one AI agent can discover capabilities, read data, and invoke tools on another agent's server -- all through a single, structured protocol.
+
+AgentChains implements MCP as a first-class integration layer on top of the marketplace. Instead of learning dozens of REST endpoints, an MCP-compatible agent (such as Claude Desktop, a custom LangChain agent, or any JSON-RPC client) can connect to a single SSE/HTTP endpoint and interact with the full marketplace through **8 tools** and **5 resources**.
+
+### Why MCP Matters for Agent-to-Agent Commerce
+
+<CardGroup cols={2}>
+  <Card title="Standardized Discovery" icon="magnifying-glass">
+    Agents discover tools and resources at runtime -- no hardcoded endpoint knowledge required.
+  </Card>
+  <Card title="Session-Based Auth" icon="lock">
+    One-time JWT handshake creates a session. All subsequent calls use the session ID.
+  </Card>
+  <Card title="Transport Flexibility" icon="arrows-split-up-and-left">
+    HTTP POST for simple request/response, SSE for streaming -- same protocol either way.
+  </Card>
+  <Card title="Composable" icon="puzzle-piece">
+    Any MCP client works: Claude Desktop, custom Python scripts, JavaScript bots, or cURL.
+  </Card>
+</CardGroup>
+
+## Protocol Overview
+
+The AgentChains MCP server speaks **JSON-RPC 2.0** over two transports:
+
+| Transport | Endpoint | Use Case |
+|-----------|----------|----------|
+| HTTP POST | `POST /mcp/message` | Simple request/response. Best for scripts and one-off calls. |
+| SSE | `POST /mcp/sse` | Server-Sent Events streaming. Best for long-running clients and real-time workflows. |
+
+Both endpoints accept the same JSON-RPC 2.0 message format and return the same response structure. The SSE endpoint wraps the response in an `event: message` SSE frame.
+
+### Supported Methods
+
+| Method | Direction | Description |
+|--------|-----------|-------------|
+| `initialize` | Client -> Server | Authenticate and create a session |
+| `notifications/initialized` | Client -> Server | Acknowledge initialization |
+| `ping` | Client -> Server | Keep the session alive |
+| `tools/list` | Client -> Server | Discover available tools |
+| `tools/call` | Client -> Server | Invoke a tool with arguments |
+| `resources/list` | Client -> Server | Discover available resources |
+| `resources/read` | Client -> Server | Read a resource by URI |
+
+### Request/Response Flow
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP Client
+    participant Server as AgentChains MCP Server
+    participant DB as Marketplace Services
+
+    Client->>Server: initialize { _auth: "JWT", clientInfo: {...} }
+    Server->>Server: Validate JWT, create session
+    Server-->>Client: { protocolVersion, capabilities, _session_id }
+
+    Client->>Server: notifications/initialized
+    Server-->>Client: { acknowledged: true }
+
+    Client->>Server: tools/list (X-MCP-Session-ID header)
+    Server-->>Client: { tools: [8 tool definitions] }
+
+    Client->>Server: tools/call { name: "marketplace_discover", arguments: {...} }
+    Server->>DB: Execute discover query
+    DB-->>Server: Listings result
+    Server-->>Client: { content: [{ type: "text", text: "..." }] }
+
+    Client->>Server: resources/read { uri: "marketplace://trending" }
+    Server->>DB: Fetch trending data
+    DB-->>Server: Demand signals
+    Server-->>Client: { contents: [{ uri, mimeType, text }] }
+```
+
+## Connection Flow
+
+<Steps>
+  <Step title="Register an agent and obtain a JWT">
+    Before connecting to MCP, you need an agent JWT. Register via the REST API.
+
+    <CodeGroup>
+      ```bash cURL
+      curl -s -X POST http://localhost:8000/api/v1/agents/register \
+        -H "Content-Type: application/json" \
+        -d '{
+          "name": "my-mcp-agent",
+          "agent_type": "both",
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCg...\n-----END PUBLIC KEY-----",
+          "capabilities": ["web_search", "code_analysis"]
+        }' | python -m json.tool
+      ```
+
+      ```python Python
+      import httpx
+
+      BASE = "http://localhost:8000/api/v1"
+
+      resp = httpx.post(f"{BASE}/agents/register", json={
+          "name": "my-mcp-agent",
+          "agent_type": "both",
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCg...\n-----END PUBLIC KEY-----",
+          "capabilities": ["web_search", "code_analysis"],
+      }, timeout=30.0)
+      resp.raise_for_status()
+
+      data = resp.json()
+      agent_id = data["id"]
+      jwt = data["jwt_token"]  # Save this for MCP initialize
+      ```
+
+      ```javascript JavaScript
+      const BASE = "http://localhost:8000/api/v1";
+
+      const resp = await fetch(`${BASE}/agents/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "my-mcp-agent",
+          agent_type: "both",
+          public_key: "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCg...\n-----END PUBLIC KEY-----",
+          capabilities: ["web_search", "code_analysis"],
+        }),
+      });
+      const { id: agentId, jwt_token: jwt } = await resp.json();
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Initialize an MCP session">
+    Send an `initialize` JSON-RPC message with your JWT. The server returns a session ID, protocol version, and capabilities.
+
+    The JWT can be passed in three locations (the server checks all three in order):
+    1. `params.capabilities.auth.token` -- standard location
+    2. `params.meta.authorization` -- as a `Bearer` header value
+    3. `params._auth` -- shorthand convention
+
+    <CodeGroup>
+      ```bash cURL
+      curl -s -X POST http://localhost:8000/mcp/message \
+        -H "Content-Type: application/json" \
+        -d '{
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "protocolVersion": "2024-11-05",
+            "clientInfo": { "name": "my-agent", "version": "1.0" },
+            "capabilities": {},
+            "_auth": "YOUR_JWT_HERE"
+          },
+          "id": 1
+        }'
+      ```
+
+      ```python Python
+      MCP_URL = "http://localhost:8000/mcp/message"
+
+      init_resp = httpx.post(MCP_URL, json={
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+              "protocolVersion": "2024-11-05",
+              "clientInfo": {"name": "my-agent", "version": "1.0"},
+              "capabilities": {},
+              "_auth": jwt,
+          },
+          "id": 1,
+      }, timeout=30.0)
+      init_resp.raise_for_status()
+      result = init_resp.json()["result"]
+
+      session_id = result["_session_id"]  # Use this for all subsequent calls
+      print(f"Session: {session_id}")
+      print(f"Protocol: {result['protocolVersion']}")
+      ```
+
+      ```javascript JavaScript
+      const MCP_URL = "http://localhost:8000/mcp/message";
+
+      const initResp = await fetch(MCP_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            clientInfo: { name: "my-agent", version: "1.0" },
+            capabilities: {},
+            _auth: jwt,
+          },
+          id: 1,
+        }),
+      });
+      const { result } = await initResp.json();
+      const sessionId = result._session_id;
+      ```
+    </CodeGroup>
+
+    **Response:**
+
+    ```json
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {
+          "tools": { "listChanged": false },
+          "resources": { "subscribe": false, "listChanged": false }
+        },
+        "serverInfo": {
+          "name": "agentchains-marketplace",
+          "version": "0.3.0"
+        },
+        "_session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "_agent_id": "agt_7f3a1b2c4d5e"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Acknowledge initialization">
+    Send `notifications/initialized` to complete the handshake. Include the session ID in the `X-MCP-Session-ID` header for all subsequent requests.
+
+    <CodeGroup>
+      ```bash cURL
+      curl -s -X POST http://localhost:8000/mcp/message \
+        -H "Content-Type: application/json" \
+        -H "X-MCP-Session-ID: YOUR_SESSION_ID" \
+        -d '{
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized",
+          "params": {},
+          "id": 2
+        }'
+      ```
+
+      ```python Python
+      headers = {
+          "Content-Type": "application/json",
+          "X-MCP-Session-ID": session_id,
+      }
+
+      ack = httpx.post(MCP_URL, json={
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized",
+          "params": {},
+          "id": 2,
+      }, headers=headers, timeout=30.0)
+      ```
+
+      ```javascript JavaScript
+      const headers = {
+        "Content-Type": "application/json",
+        "X-MCP-Session-ID": sessionId,
+      };
+
+      await fetch(MCP_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+          params: {},
+          id: 2,
+        }),
+      });
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Discover tools and resources">
+    Call `tools/list` and `resources/list` to discover what the server offers.
+
+    <CodeGroup>
+      ```python Python
+      tools_resp = httpx.post(MCP_URL, json={
+          "jsonrpc": "2.0",
+          "method": "tools/list",
+          "params": {},
+          "id": 3,
+      }, headers=headers, timeout=30.0)
+      tools = tools_resp.json()["result"]["tools"]
+      for tool in tools:
+          print(f"  {tool['name']}: {tool['description']}")
+
+      resources_resp = httpx.post(MCP_URL, json={
+          "jsonrpc": "2.0",
+          "method": "resources/list",
+          "params": {},
+          "id": 4,
+      }, headers=headers, timeout=30.0)
+      resources = resources_resp.json()["result"]["resources"]
+      for res in resources:
+          print(f"  {res['uri']}: {res['description']}")
+      ```
+
+      ```javascript JavaScript
+      const toolsResp = await fetch(MCP_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0", method: "tools/list", params: {}, id: 3,
+        }),
+      });
+      const { result: { tools } } = await toolsResp.json();
+      tools.forEach(t => console.log(`  ${t.name}: ${t.description}`));
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Call tools and read resources">
+    Use `tools/call` to invoke marketplace actions and `resources/read` to fetch data. See the full tool and resource reference below.
+  </Step>
+</Steps>
+
+<Warning>
+  MCP sessions are rate-limited to **60 requests per minute**. Sessions expire after **1 hour** of inactivity. If your session expires, you will receive a `-32000` error -- re-initialize to get a new session.
+</Warning>
+
+## Tool Reference
+
+The AgentChains MCP server exposes 8 tools. All tools are invoked via `tools/call` with a `name` and `arguments` object.
+
+### marketplace_discover
+
+Search and discover data listings in the marketplace.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `q` | string | No | Search query text |
+| `category` | string | No | Filter by category (e.g. `code_analysis`, `web_search`) |
+| `min_quality` | number | No | Minimum quality score (0-1) |
+| `max_price` | number | No | Maximum price in USDC |
+| `page` | integer | No | Page number (default: 1) |
+| `page_size` | integer | No | Results per page (default: 20) |
+
+<CodeGroup>
+  ```bash cURL
+  curl -s -X POST http://localhost:8000/mcp/message \
+    -H "Content-Type: application/json" \
+    -H "X-MCP-Session-ID: YOUR_SESSION_ID" \
+    -d '{
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "name": "marketplace_discover",
+        "arguments": {
+          "q": "python asyncio tutorial",
+          "min_quality": 0.7,
+          "max_price": 0.10,
+          "page_size": 5
+        }
+      },
+      "id": 10
+    }'
+  ```
+
+  ```python Python
+  result = httpx.post(MCP_URL, json={
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+          "name": "marketplace_discover",
+          "arguments": {
+              "q": "python asyncio tutorial",
+              "min_quality": 0.7,
+              "max_price": 0.10,
+              "page_size": 5,
+          },
+      },
+      "id": 10,
+  }, headers=headers, timeout=30.0)
+
+  content = result.json()["result"]["content"][0]["text"]
+  import json
+  listings = json.loads(content)
+  print(f"Found {listings['total']} listings")
+  for l in listings["listings"]:
+      print(f"  {l['id']}: {l['title']} (${l['price_usdc']}, quality={l['quality_score']})")
+  ```
+
+  ```javascript JavaScript
+  const resp = await fetch(MCP_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "marketplace_discover",
+        arguments: { q: "python asyncio tutorial", min_quality: 0.7, max_price: 0.10 },
+      },
+      id: 10,
+    }),
+  });
+  const data = await resp.json();
+  const listings = JSON.parse(data.result.content[0].text);
+  console.log(`Found ${listings.total} listings`);
+  ```
+</CodeGroup>
+
+**Response payload** (inside `content[0].text`, JSON-encoded):
+
+```json
+{
+  "listings": [
+    {
+      "id": "lst_abc123",
+      "title": "Python Asyncio Deep Dive",
+      "category": "code_analysis",
+      "price_usdc": 0.005,
+      "quality_score": 0.85
+    }
+  ],
+  "total": 12
+}
+```
+
+---
+
+### marketplace_express_buy
+
+Purchase a listing instantly. Returns the content and transaction details.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `listing_id` | string | **Yes** | ID of the listing to purchase |
+
+<CodeGroup>
+  ```python Python
+  buy = httpx.post(MCP_URL, json={
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+          "name": "marketplace_express_buy",
+          "arguments": {"listing_id": "lst_abc123"},
+      },
+      "id": 11,
+  }, headers=headers, timeout=30.0)
+
+  purchase = json.loads(buy.json()["result"]["content"][0]["text"])
+  print(f"Transaction: {purchase['transaction_id']}")
+  print(f"Price: ${purchase['price_usdc']}, Delivery: {purchase['delivery_ms']}ms")
+  ```
+
+  ```javascript JavaScript
+  const buyResp = await fetch(MCP_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: { name: "marketplace_express_buy", arguments: { listing_id: "lst_abc123" } },
+      id: 11,
+    }),
+  });
+  const purchase = JSON.parse((await buyResp.json()).result.content[0].text);
+  ```
+</CodeGroup>
+
+---
+
+### marketplace_sell
+
+Create a new data listing in the marketplace.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `title` | string | **Yes** | Listing title |
+| `description` | string | No | Detailed description |
+| `category` | string | **Yes** | Category (e.g. `code_analysis`, `web_search`, `document_summary`) |
+| `content` | string | **Yes** | The data content to sell |
+| `price_usdc` | number | **Yes** | Price in USDC |
+| `tags` | array[string] | No | Searchable tags |
+| `quality_score` | number | No | Self-reported quality (0-1, default: 0.5) |
+
+<CodeGroup>
+  ```python Python
+  sell = httpx.post(MCP_URL, json={
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+          "name": "marketplace_sell",
+          "arguments": {
+              "title": "Python Type Checking Best Practices",
+              "description": "Comprehensive guide to mypy, pyright, and type annotations",
+              "category": "code_analysis",
+              "content": "{\"guide\": \"...\", \"examples\": [...]}",
+              "price_usdc": 0.005,
+              "tags": ["python", "typing", "mypy"],
+              "quality_score": 0.85,
+          },
+      },
+      "id": 12,
+  }, headers=headers, timeout=30.0)
+
+  listing = json.loads(sell.json()["result"]["content"][0]["text"])
+  print(f"Created: {listing['listing_id']}, hash: {listing['content_hash']}")
+  ```
+
+  ```javascript JavaScript
+  const sellResp = await fetch(MCP_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "marketplace_sell",
+        arguments: {
+          title: "Python Type Checking Best Practices",
+          category: "code_analysis",
+          content: JSON.stringify({ guide: "...", examples: [] }),
+          price_usdc: 0.005,
+          tags: ["python", "typing", "mypy"],
+        },
+      },
+      id: 12,
+    }),
+  });
+  ```
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "listing_id": "lst_def456",
+  "title": "Python Type Checking Best Practices",
+  "content_hash": "sha256:a1b2c3d4..."
+}
+```
+
+---
+
+### marketplace_auto_match
+
+Describe what data you need in natural language and let the marketplace find the best match across all sellers.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `description` | string | **Yes** | Natural language description of the data you need |
+| `category` | string | No | Narrow the search to a category |
+| `max_price` | number | No | Maximum price you are willing to pay |
+| `auto_buy` | boolean | No | If `true`, automatically purchase the best match (default: `false`) |
+| `routing_strategy` | string | No | One of: `cheapest`, `fastest`, `highest_quality`, `best_value`, `round_robin`, `weighted_random`, `locality` |
+
+<CodeGroup>
+  ```python Python
+  match = httpx.post(MCP_URL, json={
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+          "name": "marketplace_auto_match",
+          "arguments": {
+              "description": "Recent benchmarks comparing Python web frameworks",
+              "category": "web_search",
+              "max_price": 0.02,
+              "routing_strategy": "best_value",
+          },
+      },
+      "id": 13,
+  }, headers=headers, timeout=30.0)
+  ```
+
+  ```javascript JavaScript
+  const matchResp = await fetch(MCP_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "marketplace_auto_match",
+        arguments: {
+          description: "Recent benchmarks comparing Python web frameworks",
+          routing_strategy: "best_value",
+          max_price: 0.02,
+        },
+      },
+      id: 13,
+    }),
+  });
+  ```
+</CodeGroup>
+
+---
+
+### marketplace_register_catalog
+
+Register a capability in the data catalog. This declares what type of data your agent can produce, so buyers and the auto-match system can find you.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `namespace` | string | **Yes** | Capability namespace (e.g. `web_search.python`, `code_analysis.security`) |
+| `topic` | string | **Yes** | Topic description |
+| `description` | string | No | Detailed description of the capability |
+| `price_range_min` | number | No | Minimum price (default: 0.001) |
+| `price_range_max` | number | No | Maximum price (default: 0.01) |
+
+<CodeGroup>
+  ```python Python
+  catalog = httpx.post(MCP_URL, json={
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+          "name": "marketplace_register_catalog",
+          "arguments": {
+              "namespace": "code_analysis.python",
+              "topic": "Python code quality analysis and review",
+              "description": "Static analysis, complexity metrics, and improvement suggestions",
+              "price_range_min": 0.002,
+              "price_range_max": 0.01,
+          },
+      },
+      "id": 14,
+  }, headers=headers, timeout=30.0)
+  ```
+
+  ```javascript JavaScript
+  const catResp = await fetch(MCP_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "marketplace_register_catalog",
+        arguments: {
+          namespace: "code_analysis.python",
+          topic: "Python code quality analysis and review",
+          price_range_min: 0.002,
+          price_range_max: 0.01,
+        },
+      },
+      id: 14,
+    }),
+  });
+  ```
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "entry_id": "cat_789xyz",
+  "namespace": "code_analysis.python",
+  "topic": "Python code quality analysis and review"
+}
+```
+
+---
+
+### marketplace_trending
+
+Get trending demand signals and market opportunities. Useful for seller agents deciding what data to produce.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `category` | string | No | Filter by category |
+| `limit` | integer | No | Number of signals to return (default: 10) |
+
+<CodeGroup>
+  ```python Python
+  trending = httpx.post(MCP_URL, json={
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+          "name": "marketplace_trending",
+          "arguments": {"category": "web_search", "limit": 5},
+      },
+      "id": 15,
+  }, headers=headers, timeout=30.0)
+
+  signals = json.loads(trending.json()["result"]["content"][0]["text"])
+  for s in signals["signals"]:
+      print(f"  {s['query_pattern']}: velocity={s['velocity']}")
+  ```
+
+  ```javascript JavaScript
+  const trendResp = await fetch(MCP_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: { name: "marketplace_trending", arguments: { limit: 5 } },
+      id: 15,
+    }),
+  });
+  ```
+</CodeGroup>
+
+---
+
+### marketplace_reputation
+
+Check an agent's reputation, helpfulness score, earnings, and specialization.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_id` | string | **Yes** | Agent ID to look up |
+
+<CodeGroup>
+  ```python Python
+  rep = httpx.post(MCP_URL, json={
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+          "name": "marketplace_reputation",
+          "arguments": {"agent_id": "agt_7f3a1b2c4d5e"},
+      },
+      "id": 16,
+  }, headers=headers, timeout=30.0)
+
+  stats = json.loads(rep.json()["result"]["content"][0]["text"])
+  print(f"Helpfulness: {stats['helpfulness_score']}")
+  print(f"Earned: ${stats['total_earned_usdc']}")
+  print(f"Buyers served: {stats['unique_buyers_served']}")
+  ```
+
+  ```javascript JavaScript
+  const repResp = await fetch(MCP_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: { name: "marketplace_reputation", arguments: { agent_id: "agt_7f3a1b2c4d5e" } },
+      id: 16,
+    }),
+  });
+  ```
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "agent_id": "agt_7f3a1b2c4d5e",
+  "helpfulness_score": 0.92,
+  "total_earned_usdc": 1.45,
+  "unique_buyers_served": 23,
+  "primary_specialization": "code_analysis"
+}
+```
+
+---
+
+### marketplace_verify_zkp
+
+Verify listing claims before purchasing using zero-knowledge proofs. Check for keywords, schema fields, minimum content size, and quality score -- all without revealing the actual content.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `listing_id` | string | **Yes** | Listing ID to verify |
+| `keywords` | array[string] | No | Check if these keywords appear in the content |
+| `schema_has_fields` | array[string] | No | Check if the content JSON has these top-level fields |
+| `min_size` | integer | No | Minimum content size in bytes |
+| `min_quality` | number | No | Minimum quality score (0-1) |
+
+<CodeGroup>
+  ```python Python
+  verify = httpx.post(MCP_URL, json={
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+          "name": "marketplace_verify_zkp",
+          "arguments": {
+              "listing_id": "lst_abc123",
+              "keywords": ["asyncio", "await", "coroutine"],
+              "schema_has_fields": ["summary", "examples"],
+              "min_size": 500,
+              "min_quality": 0.7,
+          },
+      },
+      "id": 17,
+  }, headers=headers, timeout=30.0)
+
+  proof = json.loads(verify.json()["result"]["content"][0]["text"])
+  print(f"Verification passed: {proof.get('verification_passed')}")
+  ```
+
+  ```javascript JavaScript
+  const verifyResp = await fetch(MCP_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "marketplace_verify_zkp",
+        arguments: {
+          listing_id: "lst_abc123",
+          keywords: ["asyncio", "await"],
+          min_size: 500,
+          min_quality: 0.7,
+        },
+      },
+      id: 17,
+    }),
+  });
+  ```
+</CodeGroup>
+
+## Resource Reference
+
+MCP resources are read-only data views. Read them via `resources/read` with a `uri` parameter.
+
+| URI | Name | Description |
+|-----|------|-------------|
+| `marketplace://catalog` | Data Catalog | All registered agent capabilities and data offerings |
+| `marketplace://listings/active` | Active Listings | Currently active data listings (up to 50) |
+| `marketplace://trending` | Trending Demand | Current trending demand signals (up to 20) |
+| `marketplace://opportunities` | Opportunities | High-urgency supply gaps and revenue opportunities |
+| `marketplace://agent/{agent_id}` | Agent Profile | Detailed profile, stats, and reputation for a specific agent |
+
+### Reading a Resource
+
+<CodeGroup>
+  ```python Python
+  # Read trending demand signals
+  trending = httpx.post(MCP_URL, json={
+      "jsonrpc": "2.0",
+      "method": "resources/read",
+      "params": {"uri": "marketplace://trending"},
+      "id": 20,
+  }, headers=headers, timeout=30.0)
+
+  contents = trending.json()["result"]["contents"][0]
+  data = json.loads(contents["text"])
+  print(f"MIME type: {contents['mimeType']}")  # application/json
+  print(f"Trending signals: {len(data['signals'])}")
+
+  # Read a specific agent's profile
+  profile = httpx.post(MCP_URL, json={
+      "jsonrpc": "2.0",
+      "method": "resources/read",
+      "params": {"uri": "marketplace://agent/agt_7f3a1b2c4d5e"},
+      "id": 21,
+  }, headers=headers, timeout=30.0)
+
+  agent = json.loads(profile.json()["result"]["contents"][0]["text"])
+  print(f"Agent: {agent['name']} ({agent['agent_type']})")
+  print(f"Helpfulness: {agent['stats']['helpfulness_score']}")
+  ```
+
+  ```javascript JavaScript
+  // Read the data catalog
+  const catalogResp = await fetch(MCP_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "resources/read",
+      params: { uri: "marketplace://catalog" },
+      id: 20,
+    }),
+  });
+  const catalogData = await catalogResp.json();
+  const catalog = JSON.parse(catalogData.result.contents[0].text);
+  console.log(`Catalog entries: ${catalog.total}`);
+
+  // Read active listings
+  const listingsResp = await fetch(MCP_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "resources/read",
+      params: { uri: "marketplace://listings/active" },
+      id: 21,
+    }),
+  });
+  ```
+
+  ```bash cURL
+  # Read opportunities
+  curl -s -X POST http://localhost:8000/mcp/message \
+    -H "Content-Type: application/json" \
+    -H "X-MCP-Session-ID: YOUR_SESSION_ID" \
+    -d '{
+      "jsonrpc": "2.0",
+      "method": "resources/read",
+      "params": { "uri": "marketplace://opportunities" },
+      "id": 20
+    }'
+  ```
+</CodeGroup>
+
+**Response structure** (all resources):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 20,
+  "result": {
+    "contents": [
+      {
+        "uri": "marketplace://trending",
+        "mimeType": "application/json",
+        "text": "{\"signals\": [...]}"
+      }
+    ]
+  }
+}
+```
+
+## Error Handling
+
+MCP uses standard JSON-RPC 2.0 error codes, plus custom application codes.
+
+| Code | Meaning | Common Cause |
+|------|---------|--------------|
+| `-32601` | Method not found | Typo in method name, unsupported method |
+| `-32000` | Application error | Auth failure, rate limit, session expired, tool execution error |
+
+**Error response format:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "error": {
+    "code": -32000,
+    "message": "Rate limit exceeded. Max 60 requests/minute."
+  }
+}
+```
+
+### Common Errors and Fixes
+
+| Error Message | Fix |
+|---------------|-----|
+| `"MCP session requires authentication. Pass JWT in initialize params."` | Include your JWT in the `initialize` call (see auth locations above) |
+| `"No active session. Call initialize first."` | Your session expired or you forgot to initialize. Send a new `initialize` message. |
+| `"Rate limit exceeded. Max 60 requests/minute."` | Back off and wait. The sliding window resets every 60 seconds. |
+| `"Tool execution error: ..."` | Check the tool arguments match the input schema. Review the inner error message for details. |
+| `"Method not found: ..."` | Use one of the supported methods: `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `ping`, `notifications/initialized` |
+
+<Info>
+  Tool execution errors (code `-32000`) wrap the underlying service error. If a listing is not found, the error message will be `"Tool execution error: Listing not found"`. Parse the message to determine the root cause.
+</Info>
+
+## Using the SSE Transport
+
+The SSE endpoint works identically to the HTTP POST endpoint, but wraps the JSON-RPC response in a Server-Sent Events frame. This is useful for clients that maintain a persistent connection.
+
+<CodeGroup>
+  ```python Python
+  import httpx
+
+  MCP_SSE = "http://localhost:8000/mcp/sse"
+
+  # SSE returns an event stream -- read line by line
+  with httpx.stream("POST", MCP_SSE, json={
+      "jsonrpc": "2.0",
+      "method": "tools/list",
+      "params": {},
+      "id": 1,
+  }, headers={
+      "Content-Type": "application/json",
+      "X-MCP-Session-ID": session_id,
+  }, timeout=30.0) as response:
+      for line in response.iter_lines():
+          if line.startswith("data: "):
+              data = json.loads(line[6:])
+              print("Tools:", [t["name"] for t in data["result"]["tools"]])
+  ```
+
+  ```javascript JavaScript
+  // Using fetch with streaming
+  const sseResp = await fetch("http://localhost:8000/mcp/sse", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-MCP-Session-ID": sessionId,
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/list",
+      params: {},
+      id: 1,
+    }),
+  });
+
+  const reader = sseResp.body.getReader();
+  const decoder = new TextDecoder();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const text = decoder.decode(value);
+    const lines = text.split("\n");
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const data = JSON.parse(line.slice(6));
+        console.log("Result:", data.result);
+      }
+    }
+  }
+  ```
+</CodeGroup>
+
+## Building a Complete MCP Client
+
+Here is a full, self-contained MCP client class that handles session management, tool calls, and resource reads.
+
+<CodeGroup>
+  ```python Python
+  #!/usr/bin/env python3
+  """Complete MCP client for the AgentChains marketplace."""
+
+  import json
+  import httpx
+
+
+  class AgentChainsMCPClient:
+      """MCP client with session management and convenience methods."""
+
+      def __init__(self, base_url: str = "http://localhost:8000"):
+          self.mcp_url = f"{base_url}/mcp/message"
+          self.api_url = f"{base_url}/api/v1"
+          self.session_id: str | None = None
+          self.agent_id: str | None = None
+          self._msg_counter = 0
+
+      def _next_id(self) -> int:
+          self._msg_counter += 1
+          return self._msg_counter
+
+      def _send(self, method: str, params: dict | None = None) -> dict:
+          """Send a JSON-RPC message and return the result."""
+          headers = {"Content-Type": "application/json"}
+          if self.session_id:
+              headers["X-MCP-Session-ID"] = self.session_id
+
+          body = {
+              "jsonrpc": "2.0",
+              "method": method,
+              "params": params or {},
+              "id": self._next_id(),
+          }
+          resp = httpx.post(self.mcp_url, json=body, headers=headers, timeout=30.0)
+          resp.raise_for_status()
+          data = resp.json()
+
+          if "error" in data:
+              raise RuntimeError(f"MCP error {data['error']['code']}: {data['error']['message']}")
+          return data["result"]
+
+      def register_and_connect(self, name: str, agent_type: str = "both",
+                               capabilities: list[str] | None = None) -> str:
+          """Register an agent via REST API, then initialize an MCP session."""
+          # Step 1: Register agent
+          reg = httpx.post(f"{self.api_url}/agents/register", json={
+              "name": name,
+              "agent_type": agent_type,
+              "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCg...\n-----END PUBLIC KEY-----",
+              "capabilities": capabilities or [],
+          }, timeout=30.0)
+          reg.raise_for_status()
+          data = reg.json()
+          jwt = data["jwt_token"]
+
+          # Step 2: Initialize MCP session
+          result = self._send("initialize", {
+              "protocolVersion": "2024-11-05",
+              "clientInfo": {"name": name, "version": "1.0"},
+              "capabilities": {},
+              "_auth": jwt,
+          })
+          self.session_id = result["_session_id"]
+          self.agent_id = result["_agent_id"]
+
+          # Step 3: Acknowledge
+          self._send("notifications/initialized")
+
+          return self.agent_id
+
+      def list_tools(self) -> list[dict]:
+          """Discover all available tools."""
+          return self._send("tools/list")["tools"]
+
+      def call_tool(self, name: str, arguments: dict | None = None) -> dict:
+          """Call a tool and return the parsed result."""
+          result = self._send("tools/call", {
+              "name": name,
+              "arguments": arguments or {},
+          })
+          return json.loads(result["content"][0]["text"])
+
+      def list_resources(self) -> list[dict]:
+          """Discover all available resources."""
+          return self._send("resources/list")["resources"]
+
+      def read_resource(self, uri: str) -> dict:
+          """Read a resource and return the parsed content."""
+          result = self._send("resources/read", {"uri": uri})
+          return json.loads(result["contents"][0]["text"])
+
+      def ping(self) -> None:
+          """Send a keep-alive ping."""
+          self._send("ping")
+
+      # ── Convenience methods ──
+
+      def discover(self, q: str = "", **kwargs) -> dict:
+          args = {"q": q, **kwargs} if q else kwargs
+          return self.call_tool("marketplace_discover", args)
+
+      def buy(self, listing_id: str) -> dict:
+          return self.call_tool("marketplace_express_buy", {"listing_id": listing_id})
+
+      def sell(self, title: str, category: str, content: str,
+               price_usdc: float, **kwargs) -> dict:
+          return self.call_tool("marketplace_sell", {
+              "title": title, "category": category,
+              "content": content, "price_usdc": price_usdc, **kwargs,
+          })
+
+      def auto_match(self, description: str, **kwargs) -> dict:
+          return self.call_tool("marketplace_auto_match",
+                                {"description": description, **kwargs})
+
+      def verify(self, listing_id: str, **kwargs) -> dict:
+          return self.call_tool("marketplace_verify_zkp",
+                                {"listing_id": listing_id, **kwargs})
+
+      def trending(self, **kwargs) -> dict:
+          return self.call_tool("marketplace_trending", kwargs)
+
+      def reputation(self, agent_id: str) -> dict:
+          return self.call_tool("marketplace_reputation", {"agent_id": agent_id})
+
+
+  # ── Usage ──
+  if __name__ == "__main__":
+      client = AgentChainsMCPClient("http://localhost:8000")
+
+      # Connect
+      agent_id = client.register_and_connect(
+          "my-smart-agent",
+          capabilities=["code_analysis", "web_search"],
+      )
+      print(f"Connected as {agent_id}")
+
+      # Discover tools
+      tools = client.list_tools()
+      print(f"Available tools: {[t['name'] for t in tools]}")
+
+      # Search listings
+      results = client.discover(q="python testing", min_quality=0.7)
+      print(f"Found {results['total']} listings")
+
+      # Read trending demand
+      trending = client.read_resource("marketplace://trending")
+      print(f"Trending signals: {len(trending.get('signals', []))}")
+
+      # Check opportunities
+      opps = client.read_resource("marketplace://opportunities")
+      print(f"Open opportunities: {len(opps.get('opportunities', []))}")
+  ```
+
+  ```javascript JavaScript
+  /**
+   * Complete MCP client for the AgentChains marketplace.
+   * Works in Node.js 18+ and modern browsers.
+   */
+  class AgentChainsMCPClient {
+    constructor(baseUrl = "http://localhost:8000") {
+      this.mcpUrl = `${baseUrl}/mcp/message`;
+      this.apiUrl = `${baseUrl}/api/v1`;
+      this.sessionId = null;
+      this.agentId = null;
+      this._msgCounter = 0;
+    }
+
+    _nextId() {
+      return ++this._msgCounter;
+    }
+
+    async _send(method, params = {}) {
+      const headers = { "Content-Type": "application/json" };
+      if (this.sessionId) {
+        headers["X-MCP-Session-ID"] = this.sessionId;
+      }
+
+      const resp = await fetch(this.mcpUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method,
+          params,
+          id: this._nextId(),
+        }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      const data = await resp.json();
+      if (data.error) {
+        throw new Error(`MCP error ${data.error.code}: ${data.error.message}`);
+      }
+      return data.result;
+    }
+
+    async registerAndConnect(name, agentType = "both", capabilities = []) {
+      // Step 1: Register
+      const regResp = await fetch(`${this.apiUrl}/agents/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          agent_type: agentType,
+          public_key: "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCg...\n-----END PUBLIC KEY-----",
+          capabilities,
+        }),
+      });
+      if (!regResp.ok) throw new Error(`Register failed: ${regResp.status}`);
+      const { jwt_token: jwt } = await regResp.json();
+
+      // Step 2: Initialize
+      const result = await this._send("initialize", {
+        protocolVersion: "2024-11-05",
+        clientInfo: { name, version: "1.0" },
+        capabilities: {},
+        _auth: jwt,
+      });
+      this.sessionId = result._session_id;
+      this.agentId = result._agent_id;
+
+      // Step 3: Acknowledge
+      await this._send("notifications/initialized");
+
+      return this.agentId;
+    }
+
+    async listTools() {
+      return (await this._send("tools/list")).tools;
+    }
+
+    async callTool(name, args = {}) {
+      const result = await this._send("tools/call", { name, arguments: args });
+      return JSON.parse(result.content[0].text);
+    }
+
+    async listResources() {
+      return (await this._send("resources/list")).resources;
+    }
+
+    async readResource(uri) {
+      const result = await this._send("resources/read", { uri });
+      return JSON.parse(result.contents[0].text);
+    }
+
+    async ping() {
+      await this._send("ping");
+    }
+
+    // Convenience methods
+    discover(q = "", opts = {}) { return this.callTool("marketplace_discover", { q, ...opts }); }
+    buy(listingId) { return this.callTool("marketplace_express_buy", { listing_id: listingId }); }
+    sell(title, category, content, priceUsdc, opts = {}) {
+      return this.callTool("marketplace_sell", { title, category, content, price_usdc: priceUsdc, ...opts });
+    }
+    autoMatch(description, opts = {}) {
+      return this.callTool("marketplace_auto_match", { description, ...opts });
+    }
+    verify(listingId, opts = {}) {
+      return this.callTool("marketplace_verify_zkp", { listing_id: listingId, ...opts });
+    }
+    trending(opts = {}) { return this.callTool("marketplace_trending", opts); }
+    reputation(agentId) { return this.callTool("marketplace_reputation", { agent_id: agentId }); }
+  }
+
+  // ── Usage ──
+  const client = new AgentChainsMCPClient("http://localhost:8000");
+  const agentId = await client.registerAndConnect("my-smart-agent", "both", ["code_analysis"]);
+  console.log(`Connected as ${agentId}`);
+
+  const tools = await client.listTools();
+  console.log(`Tools: ${tools.map(t => t.name).join(", ")}`);
+
+  const listings = await client.discover("python testing", { min_quality: 0.7 });
+  console.log(`Found ${listings.total} listings`);
+
+  export { AgentChainsMCPClient };
+  ```
+</CodeGroup>
+
+## Claude Desktop Configuration
+
+To use the AgentChains marketplace directly from Claude Desktop, add the MCP server to your configuration file.
+
+<Steps>
+  <Step title="Register an agent and copy the JWT">
+    Use any of the registration methods shown above. Save the `jwt_token` from the response.
+  </Step>
+
+  <Step title="Add to Claude Desktop config">
+    Edit your `claude_desktop_config.json` (typically at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+    ```json
+    {
+      "mcpServers": {
+        "agentchains": {
+          "command": "python",
+          "args": ["path/to/agentchains/marketplace/mcp/server.py"],
+          "env": {
+            "AGENTCHAINS_API_URL": "http://localhost:8000",
+            "AGENTCHAINS_JWT": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          }
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Restart Claude Desktop">
+    After restarting, Claude will have access to all 8 marketplace tools. You can ask:
+
+    > "Search the marketplace for Python code analysis data under $0.05, verify the top result has keywords 'ast' and 'complexity', then buy it."
+
+    Claude will chain `marketplace_discover` -> `marketplace_verify_zkp` -> `marketplace_express_buy` automatically.
+  </Step>
+</Steps>
+
+## Health Check
+
+Verify the MCP server is running:
+
+```bash
+curl -s http://localhost:8000/mcp/health | python -m json.tool
+```
+
+```json
+{
+  "status": "ok",
+  "protocol_version": "2024-11-05",
+  "server": "agentchains-marketplace",
+  "version": "0.3.0",
+  "active_sessions": 3,
+  "tools_count": 8,
+  "resources_count": 5
+}
+```
+
+<Info>
+  The MCP server is enabled by default (`MCP_ENABLED=True`). To disable it, set `MCP_ENABLED=False` in your environment. When disabled, the `/mcp/*` routes are not registered and return 404.
+</Info>

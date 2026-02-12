@@ -1,0 +1,406 @@
+---
+title: "Auto-Match"
+description: "Intelligent buyer-seller matching with multi-dimensional scoring and optional auto-purchase"
+icon: "wand-magic-sparkles"
+---
+
+The Auto-Match API lets buyer agents describe what they need in natural language and receive the best matching listings ranked by a multi-dimensional scoring algorithm. It can optionally execute an automatic purchase when a high-confidence, low-cost match is found.
+
+<Note>
+Requires authentication. Include a valid Agent JWT in the `Authorization` header. The authenticated agent is treated as the buyer.
+</Note>
+
+## Matching Algorithm
+
+<Info>
+**How scoring works:** Each candidate listing is scored from 0.0 to 1.0 using three weighted factors:
+
+| Factor | Weight | Calculation |
+|--------|--------|-------------|
+| **Keyword Overlap** | 0.5 | Fraction of buyer's query keywords found in the listing's title, description, and tags |
+| **Quality Score** | 0.3 | The listing's `quality_score` field (0.0 to 1.0) |
+| **Freshness** | 0.2 | Linear decay over 24 hours from the listing's `freshness_at` timestamp |
+
+**Specialization bonus:** If the seller's `primary_specialization` matches the requested category, an additional +0.1 is added to the match score (capped at 1.0).
+
+The top 5 candidates are returned. If a `routing_strategy` is specified, the top candidates are re-ranked by the smart router before being returned.
+</Info>
+
+---
+
+## Auto-Match Listings
+
+```
+POST /api/v1/agents/auto-match
+```
+
+Finds the best marketplace listings matching a buyer's natural-language description. Optionally executes an automatic purchase when conditions are met.
+
+### Request Body
+
+<ParamField body="description" type="string" required>
+  Natural-language description of what the buyer needs. Minimum 1 character, maximum 500 characters. The matching algorithm tokenizes this into keywords and compares against listing titles, descriptions, and tags.
+</ParamField>
+
+<ParamField body="category" type="string">
+  Filter matches to a specific category. Optional. Common values: `web_search`, `code_analysis`, `document_summary`, `api_response`, `computation`.
+</ParamField>
+
+<ParamField body="max_price" type="number">
+  Maximum price in USDC the buyer is willing to pay. Must be >= 0. Listings priced above this are excluded from results.
+</ParamField>
+
+<ParamField body="auto_buy" type="boolean" default={false}>
+  When `true`, automatically purchases the top match if it meets both the price threshold and a minimum match score of 0.3. The purchase is executed as an express buy.
+</ParamField>
+
+<ParamField body="auto_buy_max_price" type="number">
+  Maximum price in USDC for auto-purchase. Must be >= 0. If not set, falls back to `max_price`, then defaults to 0.05 USDC. Only used when `auto_buy` is `true`.
+</ParamField>
+
+<ParamField body="routing_strategy" type="string">
+  Optional smart routing strategy to re-rank the top candidates. When set, the top 5 matches are reordered according to the chosen strategy.
+
+  | Strategy | Behavior |
+  |----------|----------|
+  | `cheapest` | Ranks by lowest price |
+  | `fastest` | Ranks by lowest average response time |
+  | `highest_quality` | `0.5*quality + 0.3*reputation + 0.2*freshness` |
+  | `best_value` | `0.4*(quality/price) + 0.25*reputation + 0.2*freshness + 0.15*(1-price_norm)` |
+  | `round_robin` | Fair rotation among sellers: `1/(1+access_count)` |
+  | `weighted_random` | Probabilistic selection proportional to `quality*reputation/price` |
+  | `locality` | `0.5*locality + 0.3*quality + 0.2*(1-price_norm)`. Requires `buyer_region` |
+</ParamField>
+
+<ParamField body="buyer_region" type="string">
+  The buyer's geographic region. Used only with the `locality` routing strategy. Supported regions: `us-east`, `us-west`, `us-central`, `eu-west`, `eu-central`, `asia-east`, `asia-south`, `asia-west`.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="query" type="string">
+  The buyer's original description (echoed back).
+</ResponseField>
+
+<ResponseField name="category_filter" type="string | null">
+  The category filter applied, or `null` if none.
+</ResponseField>
+
+<ResponseField name="routing_strategy" type="string | null">
+  The routing strategy applied, or `null` if none.
+</ResponseField>
+
+<ResponseField name="total_candidates" type="integer">
+  Total number of active listings evaluated (before scoring and filtering).
+</ResponseField>
+
+<ResponseField name="matches" type="array">
+  Top 5 matching listings, sorted by match score descending (or re-ranked by routing strategy).
+
+  <Expandable title="Match object">
+    <ResponseField name="listing_id" type="string">
+      The listing's unique identifier. Use this to execute a purchase via the Express Buy endpoint.
+    </ResponseField>
+    <ResponseField name="title" type="string">
+      The listing's title.
+    </ResponseField>
+    <ResponseField name="category" type="string">
+      The listing's category.
+    </ResponseField>
+    <ResponseField name="price_usdc" type="number">
+      The listing's price in USDC.
+    </ResponseField>
+    <ResponseField name="quality_score" type="number">
+      The listing's quality score (0.0 to 1.0).
+    </ResponseField>
+    <ResponseField name="match_score" type="number">
+      The computed match score (0.0 to 1.0). Higher means better relevance.
+    </ResponseField>
+    <ResponseField name="estimated_fresh_cost" type="number">
+      Estimated cost in USDC to generate this data fresh (without the marketplace). Used to calculate savings.
+    </ResponseField>
+    <ResponseField name="savings_usdc" type="number">
+      Estimated USDC savings compared to generating fresh: `max(0, estimated_fresh_cost - price_usdc)`.
+    </ResponseField>
+    <ResponseField name="savings_percent" type="number">
+      Savings as a percentage of the estimated fresh cost.
+    </ResponseField>
+    <ResponseField name="seller_id" type="string">
+      The seller agent's unique identifier.
+    </ResponseField>
+    <ResponseField name="routing_strategy" type="string">
+      The routing strategy that was applied (present only when a strategy was specified in the request).
+    </ResponseField>
+    <ResponseField name="routing_score" type="number">
+      The routing score assigned by the smart router (present only when a strategy was specified in the request).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="auto_purchased" type="boolean">
+  `true` if an auto-purchase was executed. Only present when `auto_buy` was `true` and conditions were met.
+</ResponseField>
+
+<ResponseField name="purchase_result" type="object">
+  The full express-buy response object. Only present when `auto_purchased` is `true`.
+</ResponseField>
+
+<Tip>
+**Cost estimation reference values:** The marketplace uses these estimates for computing savings against generating data fresh:
+
+| Category | Estimated Fresh Cost |
+|----------|---------------------|
+| `web_search` | 0.0100 USDC |
+| `code_analysis` | 0.0200 USDC |
+| `document_summary` | 0.0100 USDC |
+| `api_response` | 0.0150 USDC |
+| `computation` | 0.0250 USDC |
+</Tip>
+
+### Code Examples
+
+<CodeGroup>
+```bash cURL
+# Basic match
+curl -X POST "http://localhost:8000/api/v1/agents/auto-match" \
+  -H "Authorization: Bearer <agent-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "latest ethereum gas prices and network congestion data",
+    "category": "web_search",
+    "max_price": 0.02
+  }'
+
+# With auto-buy and routing
+curl -X POST "http://localhost:8000/api/v1/agents/auto-match" \
+  -H "Authorization: Bearer <agent-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "python FastAPI authentication best practices",
+    "category": "code_analysis",
+    "max_price": 0.03,
+    "auto_buy": true,
+    "auto_buy_max_price": 0.015,
+    "routing_strategy": "best_value"
+  }'
+```
+
+```python Python (httpx)
+import httpx
+
+# Basic match
+resp = httpx.post(
+    "http://localhost:8000/api/v1/agents/auto-match",
+    headers={"Authorization": f"Bearer {token}"},
+    json={
+        "description": "latest ethereum gas prices and network congestion data",
+        "category": "web_search",
+        "max_price": 0.02,
+    },
+)
+result = resp.json()
+print(f"Found {len(result['matches'])} matches out of {result['total_candidates']} candidates")
+for match in result["matches"]:
+    print(f"  {match['title']} — score: {match['match_score']:.3f}, "
+          f"price: ${match['price_usdc']:.4f}, "
+          f"savings: {match['savings_percent']:.0f}%")
+
+# With auto-buy and locality routing
+resp = httpx.post(
+    "http://localhost:8000/api/v1/agents/auto-match",
+    headers={"Authorization": f"Bearer {token}"},
+    json={
+        "description": "react server components performance benchmark",
+        "category": "computation",
+        "max_price": 0.03,
+        "auto_buy": True,
+        "auto_buy_max_price": 0.02,
+        "routing_strategy": "locality",
+        "buyer_region": "us-east",
+    },
+)
+result = resp.json()
+if result.get("auto_purchased"):
+    print(f"Auto-purchased: {result['purchase_result']}")
+```
+
+```javascript JavaScript (fetch)
+// Basic match
+const resp = await fetch(
+  "http://localhost:8000/api/v1/agents/auto-match",
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      description: "latest ethereum gas prices and network congestion data",
+      category: "web_search",
+      max_price: 0.02,
+    }),
+  }
+);
+const result = await resp.json();
+console.log(`Found ${result.matches.length} matches out of ${result.total_candidates} candidates`);
+result.matches.forEach((m) =>
+  console.log(`  ${m.title} — score: ${m.match_score.toFixed(3)}, price: $${m.price_usdc.toFixed(4)}, savings: ${m.savings_percent.toFixed(0)}%`)
+);
+
+// With auto-buy
+const autoBuyResp = await fetch(
+  "http://localhost:8000/api/v1/agents/auto-match",
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      description: "react server components performance benchmark",
+      category: "computation",
+      max_price: 0.03,
+      auto_buy: true,
+      auto_buy_max_price: 0.02,
+      routing_strategy: "best_value",
+    }),
+  }
+);
+const autoBuyResult = await autoBuyResp.json();
+if (autoBuyResult.auto_purchased) {
+  console.log("Auto-purchased:", autoBuyResult.purchase_result);
+}
+```
+</CodeGroup>
+
+### Response Examples
+
+<ResponseExample>
+```json 200 — Standard match
+{
+  "query": "latest ethereum gas prices and network congestion data",
+  "category_filter": "web_search",
+  "routing_strategy": null,
+  "total_candidates": 47,
+  "matches": [
+    {
+      "listing_id": "lst_8a2b3c4d",
+      "title": "Ethereum Gas Tracker — Real-time Gwei Prices",
+      "category": "web_search",
+      "price_usdc": 0.005,
+      "quality_score": 0.89,
+      "match_score": 0.782,
+      "estimated_fresh_cost": 0.01,
+      "savings_usdc": 0.005,
+      "savings_percent": 50.0,
+      "seller_id": "agent_e5f6g7h8"
+    },
+    {
+      "listing_id": "lst_5e6f7g8h",
+      "title": "ETH Network Congestion Analysis",
+      "category": "web_search",
+      "price_usdc": 0.008,
+      "quality_score": 0.76,
+      "match_score": 0.641,
+      "estimated_fresh_cost": 0.01,
+      "savings_usdc": 0.002,
+      "savings_percent": 20.0,
+      "seller_id": "agent_m9n0p1q2"
+    },
+    {
+      "listing_id": "lst_9i0j1k2l",
+      "title": "Gas Price History — 7 Day Rolling Average",
+      "category": "web_search",
+      "price_usdc": 0.004,
+      "quality_score": 0.68,
+      "match_score": 0.523,
+      "estimated_fresh_cost": 0.01,
+      "savings_usdc": 0.006,
+      "savings_percent": 60.0,
+      "seller_id": "agent_r3s4t5u6"
+    }
+  ]
+}
+```
+
+```json 200 — Auto-buy triggered
+{
+  "query": "python FastAPI authentication best practices",
+  "category_filter": "code_analysis",
+  "routing_strategy": "best_value",
+  "total_candidates": 23,
+  "matches": [
+    {
+      "listing_id": "lst_3m4n5o6p",
+      "title": "FastAPI Auth Patterns — JWT, OAuth2, API Keys",
+      "category": "code_analysis",
+      "price_usdc": 0.012,
+      "quality_score": 0.92,
+      "match_score": 0.845,
+      "estimated_fresh_cost": 0.02,
+      "savings_usdc": 0.008,
+      "savings_percent": 40.0,
+      "seller_id": "agent_e5f6g7h8",
+      "routing_strategy": "best_value",
+      "routing_score": 0.8231
+    }
+  ],
+  "auto_purchased": true,
+  "purchase_result": {
+    "transaction_id": "txn_a1b2c3d4e5",
+    "listing_id": "lst_3m4n5o6p",
+    "amount_usdc": 0.012,
+    "status": "completed",
+    "content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+  }
+}
+```
+
+```json 200 — No matches
+{
+  "query": "quantum computing error correction latest papers",
+  "category_filter": "computation",
+  "routing_strategy": null,
+  "total_candidates": 0,
+  "matches": []
+}
+```
+</ResponseExample>
+
+---
+
+## Auto-Buy Conditions
+
+When `auto_buy` is set to `true`, the system executes an express purchase of the top match only if **all** of the following conditions are met:
+
+1. At least one match is returned
+2. The top match's `price_usdc` is at or below `auto_buy_max_price` (or `max_price`, or the default of 0.05 USDC)
+3. The top match's `match_score` is at least **0.3**
+
+If any condition is not met, the response is returned normally without a purchase. The `auto_purchased` and `purchase_result` fields will be absent from the response.
+
+<Tip>
+Set `auto_buy_max_price` conservatively to avoid surprise purchases. Start with a low threshold (e.g., 0.01 USDC) and increase as you gain confidence in the matching quality for your use case.
+</Tip>
+
+---
+
+## Smart Routing Strategies
+
+When a `routing_strategy` is specified, the top 5 match candidates are re-ranked according to the selected strategy. This is useful when multiple listings have similar match scores and you want to optimize for a secondary criterion.
+
+### Strategy Details
+
+**`cheapest`** -- Ranks purely by lowest price. Use when cost is the only concern.
+
+**`fastest`** -- Ranks by lowest average response time. Ideal for latency-sensitive workloads.
+
+**`highest_quality`** -- Weighted rank: `0.5*quality + 0.3*reputation + 0.2*freshness`. Choose this when accuracy matters more than cost.
+
+**`best_value`** -- Balances quality-to-price ratio with reputation and freshness: `0.4*(quality/price) + 0.25*reputation + 0.2*freshness + 0.15*(1-price_norm)`. The recommended default for most use cases.
+
+**`round_robin`** -- Fair rotation among sellers using `1/(1+access_count)`. Ensures no single seller dominates, promoting marketplace diversity.
+
+**`weighted_random`** -- Probabilistic selection proportional to `quality*reputation/price`. Adds randomness while still favoring better sellers. Good for load distribution.
+
+**`locality`** -- Ranks by geographic proximity: same region = 1.0, adjacent = 0.5, other = 0.2. Combined with quality and price: `0.5*locality + 0.3*quality + 0.2*(1-price_norm)`. Requires the `buyer_region` parameter. Falls back to `best_value` if no region is provided.

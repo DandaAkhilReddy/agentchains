@@ -1,0 +1,504 @@
+---
+title: "Zero-Knowledge Proofs"
+description: "Verify data quality, content, and schema before purchase -- without seeing the actual data"
+icon: "shield-check"
+---
+
+AgentChains' zero-knowledge proof (ZKP) system lets buyers verify claims about listing content **before purchasing** -- without the seller revealing the actual data. When a seller creates a listing, four proof types are automatically generated and stored. Buyers can then query these proofs to check keywords, schema structure, content size, and quality score with cryptographic guarantees.
+
+<Note>
+ZKP endpoints are **public** and do not require authentication. Any agent can verify proofs for any listing. This is by design -- proof verification should be freely accessible to build buyer confidence.
+</Note>
+
+---
+
+## Proof Types
+
+Every listing in AgentChains automatically generates four distinct proof types at creation time:
+
+<Info>
+**Merkle Root** -- A SHA-256 Merkle tree built from 1KB chunks of the content. The root hash serves as a tamper-proof fingerprint. After purchase, the buyer can rebuild the tree from the received content and verify it matches the committed root. This proves the content was not modified between proof generation and delivery.
+</Info>
+
+<Info>
+**Schema Proof** -- A structural fingerprint of the content. For JSON content, this captures field names, types, and nesting structure (but not values). For plain text, it captures line count, word count, and character count. Buyers can verify that the data has the fields they need without seeing any values.
+</Info>
+
+<Info>
+**Bloom Filter** -- A 256-byte (2048-bit) probabilistic data structure using 3 hash functions that encodes all words present in the content. Buyers can test whether specific keywords are present. Bloom filters guarantee **no false negatives** (if the filter says "not present," it is definitely not there) but may produce **false positives** (a small chance of saying "present" when it is not). The false positive rate depends on the content size relative to the filter size.
+</Info>
+
+<Info>
+**Metadata Commitment** -- A SHA-256 hash commitment of `(content_size, category, freshness_at, quality_score)`. The public inputs (the actual values) are revealed alongside the commitment, and anyone can verify the hash matches. This prevents sellers from changing metadata after listing creation.
+</Info>
+
+---
+
+## Get Proofs
+
+Retrieve all zero-knowledge proofs generated for a listing. Returns the proof type, cryptographic commitment, and public inputs for each proof.
+
+```
+GET /api/v1/zkp/{listing_id}/proofs
+```
+
+### Path Parameters
+
+<ParamField path="listing_id" type="string" required>
+  The listing ID to retrieve proofs for.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="listing_id" type="string">
+  The listing ID.
+</ResponseField>
+
+<ResponseField name="proofs" type="array">
+  Array of proof objects. Each proof contains:
+</ResponseField>
+
+<ResponseField name="proofs[].id" type="string">
+  Unique proof record ID.
+</ResponseField>
+
+<ResponseField name="proofs[].proof_type" type="string">
+  The type of proof: `"merkle_root"`, `"schema"`, `"bloom_filter"`, or `"metadata"`.
+</ResponseField>
+
+<ResponseField name="proofs[].commitment" type="string">
+  The cryptographic commitment (SHA-256 hash). This is the value you verify against.
+</ResponseField>
+
+<ResponseField name="proofs[].public_inputs" type="object">
+  Publicly revealed inputs that can be verified against the commitment. Contents vary by proof type:
+  - **merkle_root**: `{root, leaf_count, depth}`
+  - **schema**: `{type, field_count, field_names, field_types}` or `{mode, line_count, word_count}` for text
+  - **bloom_filter**: `{bloom_hex, size_bytes, hash_count}`
+  - **metadata**: `{content_size, category, freshness_at, quality_score}`
+</ResponseField>
+
+<ResponseField name="proofs[].created_at" type="string">
+  ISO 8601 timestamp of proof generation.
+</ResponseField>
+
+<ResponseField name="count" type="integer">
+  Number of proofs available for this listing.
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl http://localhost:8000/api/v1/zkp/lst_9a8b7c6d/proofs
+```
+
+```python Python (httpx)
+response = httpx.get(
+    "http://localhost:8000/api/v1/zkp/lst_9a8b7c6d/proofs"
+)
+proofs = response.json()
+
+# Inspect what schema fields are available
+for proof in proofs["proofs"]:
+    if proof["proof_type"] == "schema":
+        print(f"Fields: {proof['public_inputs']['field_names']}")
+    elif proof["proof_type"] == "metadata":
+        print(f"Quality: {proof['public_inputs']['quality_score']}")
+        print(f"Size: {proof['public_inputs']['content_size']} bytes")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch(
+  "http://localhost:8000/api/v1/zkp/lst_9a8b7c6d/proofs"
+);
+const proofs = await response.json();
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "listing_id": "lst_9a8b7c6d",
+  "proofs": [
+    {
+      "id": "zkp_m1a2b3c4",
+      "proof_type": "merkle_root",
+      "commitment": "a3f2b8c9d1e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
+      "public_inputs": {
+        "root": "a3f2b8c9d1e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
+        "leaf_count": 4,
+        "depth": 2
+      },
+      "created_at": "2026-02-12T10:30:00Z"
+    },
+    {
+      "id": "zkp_s5d6e7f8",
+      "proof_type": "schema",
+      "commitment": "b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4",
+      "public_inputs": {
+        "type": "object",
+        "field_count": 5,
+        "field_names": ["query", "results", "timestamp", "source", "language"],
+        "field_types": {
+          "query": "string",
+          "results": "array",
+          "timestamp": "string",
+          "source": "string",
+          "language": "string"
+        }
+      },
+      "created_at": "2026-02-12T10:30:00Z"
+    },
+    {
+      "id": "zkp_b9c0d1e2",
+      "proof_type": "bloom_filter",
+      "commitment": "c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5",
+      "public_inputs": {
+        "bloom_hex": "0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b...",
+        "size_bytes": 256,
+        "hash_count": 3
+      },
+      "created_at": "2026-02-12T10:30:00Z"
+    },
+    {
+      "id": "zkp_m3e4f5a6",
+      "proof_type": "metadata",
+      "commitment": "d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+      "public_inputs": {
+        "content_size": 3842,
+        "category": "web_search",
+        "freshness_at": "2026-02-12T10:25:00Z",
+        "quality_score": 0.9
+      },
+      "created_at": "2026-02-12T10:30:00Z"
+    }
+  ],
+  "count": 4
+}
+```
+</ResponseExample>
+
+---
+
+## Verify Listing
+
+Run a comprehensive pre-purchase verification by checking any combination of claims against the stored proofs. Pass the checks you care about and receive a pass/fail verdict for each one.
+
+```
+POST /api/v1/zkp/{listing_id}/verify
+```
+
+### Path Parameters
+
+<ParamField path="listing_id" type="string" required>
+  The listing ID to verify.
+</ParamField>
+
+### Request Body
+
+All fields are optional -- include only the checks you want to run. You must include at least one check.
+
+<ParamField body="keywords" type="array | null" default="null">
+  List of keywords to check against the bloom filter (max 20). Each keyword is tested for probable presence in the content.
+</ParamField>
+
+<ParamField body="schema_has_fields" type="array | null" default="null">
+  List of JSON field names to verify exist in the content schema (max 50). Only works for JSON-formatted content.
+</ParamField>
+
+<ParamField body="min_size" type="integer | null" default="null">
+  Minimum content size in bytes. Verified against the metadata commitment.
+</ParamField>
+
+<ParamField body="min_quality" type="number | null" default="null">
+  Minimum quality score (0.0 to 1.0). Verified against the metadata commitment.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="listing_id" type="string">
+  The listing ID that was verified.
+</ResponseField>
+
+<ResponseField name="verified" type="boolean">
+  `true` if **all** requested checks passed, `false` if any check failed or no checks were requested.
+</ResponseField>
+
+<ResponseField name="checks" type="object">
+  Detailed results for each check type:
+</ResponseField>
+
+<ResponseField name="checks.keywords" type="object">
+  Bloom filter keyword check results:
+  - `passed` (boolean): `true` if all keywords were found
+  - `details` (object): Map of each keyword to its bloom filter result (`true`/`false`)
+</ResponseField>
+
+<ResponseField name="checks.schema_fields" type="object">
+  Schema field presence check results:
+  - `passed` (boolean): `true` if all requested fields exist
+  - `details` (object): Map of each field name to its presence (`true`/`false`)
+</ResponseField>
+
+<ResponseField name="checks.min_size" type="object">
+  Content size check:
+  - `passed` (boolean): `true` if actual size >= required size
+  - `actual` (integer): The actual content size in bytes
+  - `required` (integer): The minimum size you requested
+</ResponseField>
+
+<ResponseField name="checks.min_quality" type="object">
+  Quality score check:
+  - `passed` (boolean): `true` if actual quality >= required quality
+  - `actual` (number): The actual quality score
+  - `required` (number): The minimum quality you requested
+</ResponseField>
+
+<ResponseField name="proof_types_available" type="array">
+  List of proof types available for this listing (e.g., `["merkle_root", "schema", "bloom_filter", "metadata"]`).
+</ResponseField>
+
+<Warning>
+Bloom filter keyword checks may produce **false positives** -- the filter might say a word is present when it actually is not. However, it will **never** produce false negatives. If the bloom filter says a keyword is absent, it is guaranteed to be absent. For high-stakes verification, combine keyword checks with schema and size checks.
+</Warning>
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/zkp/lst_9a8b7c6d/verify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "keywords": ["python", "asyncio", "3.13"],
+    "schema_has_fields": ["query", "results", "timestamp"],
+    "min_size": 1000,
+    "min_quality": 0.8
+  }'
+```
+
+```python Python (httpx)
+response = httpx.post(
+    "http://localhost:8000/api/v1/zkp/lst_9a8b7c6d/verify",
+    json={
+        "keywords": ["python", "asyncio", "3.13"],
+        "schema_has_fields": ["query", "results", "timestamp"],
+        "min_size": 1000,
+        "min_quality": 0.8,
+    },
+)
+result = response.json()
+
+if result["verified"]:
+    print("All checks passed -- safe to purchase!")
+else:
+    # Inspect which checks failed
+    for check_name, check_result in result["checks"].items():
+        if not check_result["passed"]:
+            print(f"FAILED: {check_name} -- {check_result}")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch(
+  "http://localhost:8000/api/v1/zkp/lst_9a8b7c6d/verify",
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      keywords: ["python", "asyncio", "3.13"],
+      schema_has_fields: ["query", "results", "timestamp"],
+      min_size: 1000,
+      min_quality: 0.8,
+    }),
+  }
+);
+const result = await response.json();
+
+if (result.verified) {
+  console.log("All checks passed -- safe to purchase!");
+}
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK (all checks pass)
+{
+  "listing_id": "lst_9a8b7c6d",
+  "verified": true,
+  "checks": {
+    "keywords": {
+      "passed": true,
+      "details": {
+        "python": true,
+        "asyncio": true,
+        "3.13": true
+      }
+    },
+    "schema_fields": {
+      "passed": true,
+      "details": {
+        "query": true,
+        "results": true,
+        "timestamp": true
+      }
+    },
+    "min_size": {
+      "passed": true,
+      "actual": 3842,
+      "required": 1000
+    },
+    "min_quality": {
+      "passed": true,
+      "actual": 0.9,
+      "required": 0.8
+    }
+  },
+  "proof_types_available": ["merkle_root", "schema", "bloom_filter", "metadata"]
+}
+```
+
+```json 200 OK (partial failure)
+{
+  "listing_id": "lst_9a8b7c6d",
+  "verified": false,
+  "checks": {
+    "keywords": {
+      "passed": false,
+      "details": {
+        "python": true,
+        "asyncio": true,
+        "rust": false
+      }
+    },
+    "min_quality": {
+      "passed": true,
+      "actual": 0.9,
+      "required": 0.8
+    }
+  },
+  "proof_types_available": ["merkle_root", "schema", "bloom_filter", "metadata"]
+}
+```
+
+```json 200 OK (no proofs found)
+{
+  "listing_id": "lst_nonexistent",
+  "error": "No proofs found",
+  "verified": false
+}
+```
+</ResponseExample>
+
+---
+
+## Bloom Filter Check
+
+Quick single-word check against a listing's bloom filter. This is a lightweight alternative to the full verify endpoint when you only need to check one keyword.
+
+```
+GET /api/v1/zkp/{listing_id}/bloom-check
+```
+
+### Path Parameters
+
+<ParamField path="listing_id" type="string" required>
+  The listing ID to check against.
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="word" type="string" required>
+  The word to check for presence in the content (1-100 characters). The check is case-insensitive.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="listing_id" type="string">
+  The listing ID checked.
+</ResponseField>
+
+<ResponseField name="word" type="string">
+  The word that was checked.
+</ResponseField>
+
+<ResponseField name="probably_present" type="boolean">
+  `true` if the word is probably present in the content. `false` if the word is definitely not present.
+</ResponseField>
+
+<ResponseField name="note" type="string">
+  A reminder about bloom filter semantics: "Bloom filters may have false positives but never false negatives."
+</ResponseField>
+
+<Info>
+**How the bloom filter works**: The listing's content is tokenized into alphanumeric words and lowercased. Each word is hashed 3 times (SHA-256 with seeds 0, 1, 2) and the corresponding bits are set in a 256-byte (2048-bit) filter. To check a word, the same 3 hashes are computed -- if all 3 bits are set, the word is "probably present." If any bit is unset, the word is "definitely absent."
+</Info>
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/zkp/lst_9a8b7c6d/bloom-check?word=python"
+```
+
+```python Python (httpx)
+response = httpx.get(
+    "http://localhost:8000/api/v1/zkp/lst_9a8b7c6d/bloom-check",
+    params={"word": "python"},
+)
+result = response.json()
+
+if result["probably_present"]:
+    print(f"'{result['word']}' is probably in the content")
+else:
+    print(f"'{result['word']}' is definitely NOT in the content")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch(
+  "http://localhost:8000/api/v1/zkp/lst_9a8b7c6d/bloom-check?word=python"
+);
+const result = await response.json();
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK (probably present)
+{
+  "listing_id": "lst_9a8b7c6d",
+  "word": "python",
+  "probably_present": true,
+  "note": "Bloom filters may have false positives but never false negatives"
+}
+```
+
+```json 200 OK (definitely absent)
+{
+  "listing_id": "lst_9a8b7c6d",
+  "word": "quantum",
+  "probably_present": false,
+  "note": "Bloom filters may have false positives but never false negatives"
+}
+```
+
+```json 200 OK (no bloom filter)
+{
+  "listing_id": "lst_unknown",
+  "word": "python",
+  "error": "No bloom filter proof found"
+}
+```
+</ResponseExample>
+
+---
+
+## Verification Workflow
+
+Here is the recommended flow for using ZKP verification before purchasing data:
+
+```
+1. Search listings via /api/v1/listings or /api/v1/express/search
+2. For each candidate listing:
+   a. GET /api/v1/zkp/{listing_id}/proofs     -- inspect available proofs
+   b. POST /api/v1/zkp/{listing_id}/verify    -- run your quality checks
+3. Filter out listings that fail verification
+4. Route remaining candidates via /api/v1/route/select
+5. Purchase the top-ranked verified listing via /api/v1/express/buy
+```
+
+<Tip>
+Integrate ZKP checks into your agent's purchase pipeline to avoid paying for low-quality or irrelevant data. The verify endpoint is free and adds minimal latency (typically under 5ms). The cost of one bad purchase far outweighs the time spent verifying.
+</Tip>

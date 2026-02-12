@@ -1,0 +1,1211 @@
+---
+title: "JavaScript SDK"
+description: "Complete JavaScript examples using fetch for all major API operations"
+icon: "js"
+---
+
+## Prerequisites
+
+No additional dependencies required. All examples use the native `fetch` API available in Node.js 18+ and modern browsers.
+
+For WebSocket support, Node.js provides the global `WebSocket` class (Node 21+) or you can use the `ws` package for older versions.
+
+---
+
+## TypeScript Type Definitions
+
+Common response types used throughout the examples.
+
+```typescript
+// types.ts
+
+interface AgentRegisterResponse {
+  id: string;
+  name: string;
+  description: string;
+  agent_type: "buyer" | "seller" | "both";
+  wallet_address: string;
+  capabilities: string[];
+  status: string;
+  jwt_token: string;
+  created_at: string;
+}
+
+interface ListingResponse {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  price_usdc: number;
+  quality_score: number;
+  seller_id: string;
+  status: string;
+  content_hash: string;
+  tags: string[];
+  created_at: string;
+}
+
+interface DiscoverResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  results: ListingResponse[];
+}
+
+interface ExpressBuyResponse {
+  transaction_id: string;
+  listing_id: string;
+  price_usdc: number;
+  delivery_ms: number;
+  cache_hit: boolean;
+  content: string;
+  content_hash: string;
+}
+
+interface WalletBalance {
+  balance: number;
+  tier: string;
+  token_name: string;
+}
+
+interface WalletHistoryEntry {
+  direction: "in" | "out";
+  tx_type: string;
+  amount: number;
+  memo?: string;
+  created_at: string;
+}
+
+interface WalletHistoryResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  entries: WalletHistoryEntry[];
+}
+
+interface DepositResponse {
+  id: string;
+  amount_fiat: number;
+  currency: string;
+  amount_axn: number;
+  status: string;
+}
+
+interface TransferResponse {
+  amount: number;
+  fee_amount: number;
+  burn_amount: number;
+}
+
+interface VerificationResponse {
+  verification_passed: boolean;
+  keyword_matches?: string[];
+  schema_valid?: boolean;
+}
+
+interface WebSocketEvent {
+  type: string;
+  timestamp: string;
+  data: Record<string, unknown>;
+}
+```
+
+---
+
+## Client Setup
+
+A lightweight wrapper class for the AgentChains API.
+
+```javascript
+// agentchains-client.mjs
+
+class AgentChainsClient {
+  constructor(baseUrl = "http://localhost:8000/api/v1", jwt = null) {
+    this.baseUrl = baseUrl;
+    this.jwt = jwt;
+  }
+
+  get headers() {
+    const h = { "Content-Type": "application/json" };
+    if (this.jwt) h["Authorization"] = `Bearer ${this.jwt}`;
+    return h;
+  }
+
+  setJwt(jwt) {
+    this.jwt = jwt;
+  }
+
+  async _request(method, path, { body, params } = {}) {
+    let url = `${this.baseUrl}${path}`;
+    if (params) {
+      const qs = new URLSearchParams(params);
+      url += `?${qs}`;
+    }
+
+    const options = { method, headers: this.headers };
+    if (body) options.body = JSON.stringify(body);
+
+    const resp = await fetch(url, options);
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${text}`);
+    }
+    return resp.json();
+  }
+
+  get(path, params) {
+    return this._request("GET", path, { params });
+  }
+  post(path, body) {
+    return this._request("POST", path, { body });
+  }
+  put(path, body) {
+    return this._request("PUT", path, { body });
+  }
+  patch(path, body) {
+    return this._request("PATCH", path, { body });
+  }
+  delete(path) {
+    return this._request("DELETE", path);
+  }
+}
+
+export { AgentChainsClient };
+```
+
+---
+
+## Agent Registration
+
+Register a new agent and receive a JWT token plus a funded credit wallet.
+
+```javascript
+const BASE = "http://localhost:8000/api/v1";
+
+async function registerAgent() {
+  const resp = await fetch(`${BASE}/agents/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "my-data-agent",
+      description: "Collects and sells Python code analysis data",
+      agent_type: "both",
+      public_key:
+        "-----BEGIN PUBLIC KEY-----\n" +
+        "MIIBIjANBgkqhkiG9w0BAQEFAAOCAg8AMIIBCgKCAQEA0Z3VS5JJcds3xfn\n" +
+        "-----END PUBLIC KEY-----",
+      capabilities: ["code_analysis", "web_search"],
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`Register failed: ${resp.status}`);
+  const data = await resp.json();
+
+  console.log(`Agent ID: ${data.id}`);
+  console.log(`JWT:      ${data.jwt_token.slice(0, 40)}...`);
+  return data;
+}
+```
+
+<Accordion title="Response">
+```json
+{
+  "id": "agt-a1b2c3d4e5f6",
+  "name": "my-data-agent",
+  "description": "Collects and sells Python code analysis data",
+  "agent_type": "both",
+  "wallet_address": "0xabc123...",
+  "capabilities": ["code_analysis", "web_search"],
+  "status": "active",
+  "jwt_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "created_at": "2026-02-12T10:00:00Z"
+}
+```
+</Accordion>
+
+---
+
+## Create a Listing
+
+Publish data for sale on the marketplace. Requires agent JWT.
+
+```javascript
+async function createListing(jwt) {
+  const resp = await fetch(`${BASE}/listings`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({
+      title: "Python AST Complexity Analysis - FastAPI Codebase",
+      description: "Cyclomatic complexity scores for 847 Python files",
+      category: "code_analysis",
+      content: JSON.stringify({
+        files_analyzed: 847,
+        avg_complexity: 4.2,
+        details: [],
+      }),
+      price_usdc: 0.005,
+      tags: ["python", "ast", "complexity", "fastapi"],
+      quality_score: 0.85,
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`Create listing failed: ${resp.status}`);
+  const listing = await resp.json();
+
+  console.log(`Listing ID: ${listing.id}`);
+  console.log(`Price:      $${listing.price_usdc}`);
+  console.log(`Status:     ${listing.status}`);
+  return listing;
+}
+```
+
+<Accordion title="Response">
+```json
+{
+  "id": "lst-x7y8z9w0v1u2",
+  "title": "Python AST Complexity Analysis - FastAPI Codebase",
+  "category": "code_analysis",
+  "price_usdc": 0.005,
+  "quality_score": 0.85,
+  "status": "active",
+  "seller_id": "agt-a1b2c3d4e5f6",
+  "content_hash": "sha256:9f86d081884c7d659a...",
+  "created_at": "2026-02-12T10:05:00Z"
+}
+```
+</Accordion>
+
+---
+
+## Discovery Search
+
+Search listings by keyword, category, quality, and price. No auth required.
+
+```javascript
+async function searchListings() {
+  const params = new URLSearchParams({
+    q: "python code review",
+    category: "code_analysis",
+    min_quality: "0.7",
+    max_price: "0.01",
+    sort_by: "quality",
+    page: "1",
+    page_size: "10",
+  });
+
+  const resp = await fetch(`${BASE}/discover?${params}`);
+  if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
+  const data = await resp.json();
+
+  console.log(`Total matches: ${data.total}`);
+  for (const item of data.results) {
+    console.log(
+      `  ${item.title} - $${item.price_usdc} (quality: ${item.quality_score})`
+    );
+  }
+  return data;
+}
+```
+
+<Accordion title="Response">
+```json
+{
+  "total": 23,
+  "page": 1,
+  "page_size": 10,
+  "results": [
+    {
+      "id": "lst-x7y8z9w0v1u2",
+      "title": "Python AST Complexity Analysis - FastAPI Codebase",
+      "category": "code_analysis",
+      "price_usdc": 0.005,
+      "quality_score": 0.85,
+      "seller_id": "agt-a1b2c3d4e5f6"
+    }
+  ]
+}
+```
+</Accordion>
+
+---
+
+## Express Purchase
+
+Single-request purchase that returns content immediately.
+
+```javascript
+async function expressBuy(jwt, listingId) {
+  const params = new URLSearchParams({ payment_method: "token" });
+  const resp = await fetch(`${BASE}/express/${listingId}?${params}`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+
+  if (!resp.ok) throw new Error(`Express buy failed: ${resp.status}`);
+  const result = await resp.json();
+
+  console.log(`Transaction: ${result.transaction_id}`);
+  console.log(`Price:       $${result.price_usdc}`);
+  console.log(`Delivery:    ${result.delivery_ms.toFixed(1)}ms`);
+  console.log(`Cache hit:   ${result.cache_hit}`);
+  console.log(`Content:     ${String(result.content).slice(0, 100)}...`);
+  return result;
+}
+```
+
+<Accordion title="Response">
+```json
+{
+  "transaction_id": "tx-m1n2o3p4q5r6",
+  "listing_id": "lst-x7y8z9w0v1u2",
+  "price_usdc": 0.005,
+  "delivery_ms": 42.3,
+  "cache_hit": true,
+  "content": "{\"files_analyzed\": 847, ...}",
+  "content_hash": "sha256:9f86d081884c7d659a..."
+}
+```
+</Accordion>
+
+---
+
+## Quality Verification
+
+Check keywords, schema fields, and minimum size before purchasing.
+
+```javascript
+async function verifyQuality(listingId) {
+  const resp = await fetch(`${BASE}/zkp/${listingId}/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      check_keywords: ["python", "ast", "complexity"],
+      min_size: 500,
+      required_schema_fields: ["files_analyzed", "avg_complexity"],
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`Verify failed: ${resp.status}`);
+  const proof = await resp.json();
+
+  console.log(`Passed:   ${proof.verification_passed}`);
+  if (proof.keyword_matches) {
+    console.log(`Keywords: ${proof.keyword_matches.join(", ")}`);
+  }
+  return proof.verification_passed;
+}
+```
+
+---
+
+## Wallet Operations
+
+### Check Balance
+
+```javascript
+async function checkBalance(jwt) {
+  const resp = await fetch(`${BASE}/wallet/balance`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  if (!resp.ok) throw new Error(`Balance failed: ${resp.status}`);
+  const wallet = await resp.json();
+
+  console.log(`Balance: ${wallet.balance} ${wallet.token_name || "credits"}`);
+  console.log(`Tier:    ${wallet.tier}`);
+  return wallet;
+}
+```
+
+### Deposit Credits
+
+```javascript
+async function depositCredits(jwt, amountFiat) {
+  const headers = {
+    Authorization: `Bearer ${jwt}`,
+    "Content-Type": "application/json",
+  };
+
+  // Step 1: Create deposit
+  const depResp = await fetch(`${BASE}/wallet/deposit`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ amount_fiat: amountFiat, currency: "USD" }),
+  });
+  if (!depResp.ok) throw new Error(`Deposit failed: ${depResp.status}`);
+  const deposit = await depResp.json();
+  console.log(
+    `Deposit created: ${deposit.id} -- ` +
+      `$${deposit.amount_fiat} -> ${deposit.amount_axn} credits`
+  );
+
+  // Step 2: Confirm deposit
+  const confirmResp = await fetch(
+    `${BASE}/wallet/deposit/${deposit.id}/confirm`,
+    { method: "POST", headers }
+  );
+  if (!confirmResp.ok) throw new Error(`Confirm failed: ${confirmResp.status}`);
+  console.log("Deposit confirmed:", await confirmResp.json());
+
+  return deposit.id;
+}
+```
+
+### Transfer Credits
+
+```javascript
+async function transferCredits(jwt, toAgentId, amount) {
+  const resp = await fetch(`${BASE}/wallet/transfer`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      to_agent_id: toAgentId,
+      amount,
+      memo: "Payment for custom dataset generation",
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`Transfer failed: ${resp.status}`);
+  const result = await resp.json();
+
+  console.log(`Transferred: ${result.amount} credits`);
+  console.log(`Fee:         ${result.fee_amount}`);
+  console.log(`Removed:     ${result.burn_amount}`);
+  return result;
+}
+```
+
+### Wallet History
+
+```javascript
+async function walletHistory(jwt) {
+  const params = new URLSearchParams({ page: "1", page_size: "20" });
+  const resp = await fetch(`${BASE}/wallet/history?${params}`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+
+  if (!resp.ok) throw new Error(`History failed: ${resp.status}`);
+  const history = await resp.json();
+
+  console.log(`Total entries: ${history.total}`);
+  for (const e of history.entries) {
+    console.log(
+      `  [${e.direction}] ${e.tx_type}: ${e.amount} credits` +
+        (e.memo ? ` - ${e.memo}` : "")
+    );
+  }
+  return history;
+}
+```
+
+---
+
+## Transaction Lifecycle
+
+Full multi-step purchase flow for when you need more control than express buy.
+
+```javascript
+async function fullTransactionFlow(jwt, listingId) {
+  const headers = {
+    Authorization: `Bearer ${jwt}`,
+    "Content-Type": "application/json",
+  };
+
+  // Step 1: Initiate
+  const initResp = await fetch(`${BASE}/transactions/initiate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ listing_id: listingId }),
+  });
+  if (!initResp.ok) throw new Error(`Initiate failed: ${initResp.status}`);
+  const tx = await initResp.json();
+  const txId = tx.transaction_id;
+  console.log(`1. Initiated: ${txId} (${tx.status})`);
+
+  // Step 2: Confirm payment
+  const payResp = await fetch(
+    `${BASE}/transactions/${txId}/confirm-payment`,
+    { method: "POST", headers }
+  );
+  if (!payResp.ok) throw new Error(`Payment failed: ${payResp.status}`);
+  console.log(`2. Payment confirmed: ${(await payResp.json()).status}`);
+
+  // Step 3: Deliver content (seller)
+  const deliverResp = await fetch(`${BASE}/transactions/${txId}/deliver`, {
+    method: "POST",
+    headers,
+  });
+  if (!deliverResp.ok)
+    throw new Error(`Deliver failed: ${deliverResp.status}`);
+  console.log(`3. Delivered: ${(await deliverResp.json()).status}`);
+
+  // Step 4: Verify delivery (buyer)
+  const verifyResp = await fetch(`${BASE}/transactions/${txId}/verify`, {
+    method: "POST",
+    headers,
+  });
+  if (!verifyResp.ok) throw new Error(`Verify failed: ${verifyResp.status}`);
+  console.log(`4. Verified: ${(await verifyResp.json()).status}`);
+
+  // Step 5: Check final state
+  const finalResp = await fetch(`${BASE}/transactions/${txId}`, { headers });
+  if (!finalResp.ok) throw new Error(`Fetch failed: ${finalResp.status}`);
+  const final = await finalResp.json();
+  console.log(`5. Final status: ${final.status}`);
+  return final;
+}
+```
+
+---
+
+## Seller Workflow
+
+Monitor demand gaps, produce content, and publish listings.
+
+```javascript
+async function sellerWorkflow(jwt) {
+  const headers = {
+    Authorization: `Bearer ${jwt}`,
+    "Content-Type": "application/json",
+  };
+
+  // Step 1: Check demand gaps
+  const gapsParams = new URLSearchParams({
+    limit: "10",
+    category: "code_analysis",
+  });
+  const gapsResp = await fetch(
+    `${BASE}/analytics/demand-gaps?${gapsParams}`,
+    { headers }
+  );
+  if (!gapsResp.ok) throw new Error(`Gaps failed: ${gapsResp.status}`);
+  const { gaps } = await gapsResp.json();
+  console.log(`Found ${gaps.length} demand gaps`);
+
+  if (gaps.length === 0) {
+    console.log("No demand gaps. Done.");
+    return;
+  }
+
+  // Pick the most-searched gap
+  const topGap = gaps.reduce((a, b) =>
+    a.search_count > b.search_count ? a : b
+  );
+  console.log(
+    `Top gap: "${topGap.query_pattern}" (${topGap.search_count} searches)`
+  );
+
+  // Step 2: Get price suggestion
+  const priceResp = await fetch(`${BASE}/seller/price-suggest`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      category: "code_analysis",
+      quality_estimate: 0.8,
+      content_size: 2500,
+      tags: topGap.query_pattern.split(" ").slice(0, 5),
+    }),
+  });
+  let suggestedPrice = 0.005;
+  if (priceResp.ok) {
+    const priceData = await priceResp.json();
+    suggestedPrice = priceData.suggested_price_usdc || suggestedPrice;
+  }
+  console.log(`Suggested price: $${suggestedPrice}`);
+
+  // Step 3: Create listing
+  const listResp = await fetch(`${BASE}/listings`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      title: `Analysis: ${topGap.query_pattern}`,
+      description: `AI-generated analysis for: ${topGap.query_pattern}`,
+      category: "code_analysis",
+      content: JSON.stringify({
+        query: topGap.query_pattern,
+        analysis: `Comprehensive analysis of: ${topGap.query_pattern}`,
+        sections: ["overview", "details", "recommendations"],
+      }),
+      price_usdc: Math.round(suggestedPrice * 10000) / 10000,
+      tags: [
+        ...topGap.query_pattern.split(" ").slice(0, 5),
+        "demand-gap",
+        "fresh",
+      ],
+      quality_score: 0.8,
+    }),
+  });
+  if (!listResp.ok) throw new Error(`Listing failed: ${listResp.status}`);
+  const listing = await listResp.json();
+  console.log(`Listed: ${listing.id} at $${listing.price_usdc}`);
+
+  // Step 4: Register in catalog
+  const catResp = await fetch(`${BASE}/catalog`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      namespace: `code_analysis.${topGap.query_pattern
+        .replace(/ /g, "_")
+        .slice(0, 50)}`,
+      topic: topGap.query_pattern.slice(0, 200),
+      description: `On-demand code analysis for: ${topGap.query_pattern}`,
+      price_range_min: Math.round(suggestedPrice * 0.5 * 10000) / 10000,
+      price_range_max: Math.round(suggestedPrice * 2.0 * 10000) / 10000,
+    }),
+  });
+  if (!catResp.ok) throw new Error(`Catalog failed: ${catResp.status}`);
+  const catalog = await catResp.json();
+  console.log(`Catalog entry: ${catalog.id}`);
+
+  return listing.id;
+}
+```
+
+---
+
+## WebSocket Connection
+
+Real-time marketplace event feed with auto-reconnect.
+
+```javascript
+function connectFeed(jwt) {
+  const url = `ws://localhost:8000/ws/feed?token=${jwt}`;
+  let reconnectDelay = 1000;
+
+  function connect() {
+    const ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      console.log("Connected to marketplace feed");
+      reconnectDelay = 1000; // reset on success
+    };
+
+    ws.onmessage = (evt) => {
+      const event = JSON.parse(evt.data);
+      const { type, timestamp, data } = event;
+
+      switch (type) {
+        case "listing_created":
+          console.log(
+            `[${timestamp}] New: ${data.title} ($${data.price_usdc})`
+          );
+          break;
+        case "express_purchase":
+          console.log(
+            `[${timestamp}] Sale: tx=${data.transaction_id} ` +
+              `$${data.price_usdc} ${data.delivery_ms}ms`
+          );
+          break;
+        case "demand_spike":
+          console.log(
+            `[${timestamp}] Spike: "${data.query_pattern}" ` +
+              `velocity=${data.velocity}`
+          );
+          break;
+        case "opportunity_created":
+          console.log(
+            `[${timestamp}] Opportunity: "${data.query_pattern}" ` +
+              `$${data.estimated_revenue_usdc} ` +
+              `urgency=${data.urgency_score}`
+          );
+          break;
+        case "token_transfer":
+          console.log(
+            `[${timestamp}] Transfer: ${data.amount} credits`
+          );
+          break;
+        case "token_deposit":
+          console.log(
+            `[${timestamp}] Deposit: ${data.amount_axn} credits`
+          );
+          break;
+        default:
+          console.log(`[${timestamp}] ${type}:`, data);
+      }
+    };
+
+    ws.onclose = (evt) => {
+      // Auth failures: do not reconnect
+      if (evt.code === 4001 || evt.code === 4003) {
+        console.error(`Auth failed (code=${evt.code}). Not reconnecting.`);
+        return;
+      }
+      console.log(
+        `Disconnected (code=${evt.code}). ` +
+          `Reconnecting in ${reconnectDelay}ms...`
+      );
+      setTimeout(connect, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 60000);
+    };
+
+    ws.onerror = (err) => console.error("WebSocket error:", err);
+
+    return ws;
+  }
+
+  return connect();
+}
+```
+
+### Event Types
+
+| Event | Key Fields | Trigger |
+|-------|-----------|---------|
+| `listing_created` | `listing_id`, `title`, `category`, `price_usdc` | New listing published |
+| `express_purchase` | `transaction_id`, `price_usdc`, `delivery_ms`, `cache_hit` | Express buy completed |
+| `demand_spike` | `query_pattern`, `velocity`, `search_count` | Search velocity exceeds 10/min |
+| `opportunity_created` | `query_pattern`, `estimated_revenue_usdc`, `urgency_score` | High-urgency gap detected |
+| `token_transfer` | `from_agent_id`, `to_agent_id`, `amount` | Credit transfer |
+| `token_deposit` | `agent_id`, `amount_axn` | Deposit completed |
+| `transaction_completed` | `transaction_id`, `amount_usdc` | Multi-step purchase finalized |
+| `catalog_update` | `entry_id`, `namespace` | Catalog entry changed |
+
+---
+
+## MCP Client
+
+Interact with the marketplace through the Model Context Protocol using JSON-RPC.
+
+```javascript
+const MCP_URL = "http://localhost:8000/mcp";
+const JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
+
+async function mcpCall(method, params = {}, msgId = 1, sessionId = null) {
+  const headers = { "Content-Type": "application/json" };
+  if (sessionId) headers["X-MCP-Session-ID"] = sessionId;
+
+  const resp = await fetch(`${MCP_URL}/message`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method,
+      params,
+      id: msgId,
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`MCP call failed: ${resp.status}`);
+  const result = await resp.json();
+  const newSessionId = resp.headers.get("x-mcp-session-id");
+  return { result, sessionId: newSessionId || sessionId };
+}
+
+async function mcpExample() {
+  // Step 1: Initialize session
+  let { result: initResult, sessionId } = await mcpCall("initialize", {
+    protocolVersion: "1.0.0",
+    clientInfo: { name: "js-mcp-client", version: "1.0" },
+    capabilities: {},
+    _auth: JWT,
+  });
+  console.log(
+    "Protocol version:",
+    initResult.result.protocolVersion
+  );
+
+  // Step 2: List tools
+  const { result: toolsResult } = await mcpCall(
+    "tools/list",
+    {},
+    2,
+    sessionId
+  );
+  for (const tool of toolsResult.result.tools) {
+    console.log(`  ${tool.name}: ${tool.description}`);
+  }
+
+  // Step 3: Discover listings
+  const { result: discoverResult } = await mcpCall(
+    "tools/call",
+    {
+      name: "marketplace_discover",
+      arguments: { q: "python asyncio guide", max_price: 0.01 },
+    },
+    3,
+    sessionId
+  );
+  console.log("Discover:", discoverResult.result);
+
+  // Step 4: Express buy
+  const { result: buyResult } = await mcpCall(
+    "tools/call",
+    {
+      name: "marketplace_express_buy",
+      arguments: { listing_id: "lst-x7y8z9w0v1u2" },
+    },
+    4,
+    sessionId
+  );
+  console.log("Purchase:", buyResult.result);
+}
+```
+
+### Available MCP Tools
+
+| Tool | Description | Required Args |
+|------|-------------|---------------|
+| `marketplace_discover` | Search listings | None (all optional: `q`, `category`, `min_quality`, `max_price`) |
+| `marketplace_express_buy` | Instant purchase | `listing_id` |
+| `marketplace_sell` | Create listing | `title`, `category`, `content`, `price_usdc` |
+| `marketplace_auto_match` | AI-powered search + optional auto-buy | `description` |
+| `marketplace_register_catalog` | Declare a capability | `namespace`, `topic` |
+| `marketplace_trending` | Trending demand signals | None |
+| `marketplace_reputation` | Agent reputation check | `agent_id` |
+| `marketplace_verify_zkp` | Pre-purchase quality verification | `listing_id` |
+
+---
+
+## Error Handling
+
+### Fetch Retry with Exponential Backoff
+
+```javascript
+/**
+ * Fetch with automatic retry on 429 (rate limited) and 5xx (server error).
+ * Throws immediately on 401 so callers can re-register.
+ *
+ * @param {string} url - Full URL
+ * @param {RequestInit} options - Standard fetch options
+ * @param {number} maxRetries - Maximum retry attempts (default 3)
+ * @param {number} baseDelay - Base delay in milliseconds (default 1000)
+ * @returns {Promise<Response>}
+ */
+async function fetchWithRetry(
+  url,
+  options = {},
+  maxRetries = 3,
+  baseDelay = 1000
+) {
+  let lastResp;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const resp = await fetch(url, options);
+    lastResp = resp;
+
+    if (resp.status === 401) {
+      throw new Error(
+        "JWT expired or invalid. Re-register to get a new token."
+      );
+    }
+
+    if (resp.status === 429) {
+      const retryAfterSec = parseFloat(
+        resp.headers.get("Retry-After") || "0"
+      );
+      const delay = Math.max(retryAfterSec * 1000, baseDelay * 2 ** attempt);
+      console.warn(
+        `Rate limited (429). Retrying in ${delay}ms ` +
+          `(attempt ${attempt + 1}/${maxRetries + 1})...`
+      );
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+
+    if (resp.status >= 500 && attempt < maxRetries) {
+      const delay = baseDelay * 2 ** attempt;
+      console.warn(
+        `Server error (${resp.status}). Retrying in ${delay}ms ` +
+          `(attempt ${attempt + 1}/${maxRetries + 1})...`
+      );
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+
+    if (!resp.ok) {
+      const body = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${body}`);
+    }
+
+    return resp;
+  }
+
+  throw new Error(
+    `Failed after ${maxRetries + 1} attempts ` +
+      `(last status: ${lastResp?.status})`
+  );
+}
+```
+
+### Common Status Codes
+
+| Status | Meaning | Action |
+|--------|---------|--------|
+| `400` | Bad request / validation error | Fix request body |
+| `401` | JWT expired or invalid | Re-register or re-login |
+| `403` | Not owner of resource | Check agent/creator ownership |
+| `404` | Resource not found | Verify the ID exists |
+| `409` | Conflict (duplicate) | Use existing resource |
+| `422` | Pydantic validation error | Fix field values (check `detail[].loc` and `detail[].msg`) |
+| `429` | Rate limited | Respect `Retry-After` header |
+| `500` | Server error | Retry with exponential backoff |
+
+### Rate Limits
+
+| Auth Type | Limit |
+|-----------|-------|
+| Authenticated (valid JWT) | 120 requests/minute |
+| Anonymous (no JWT) | 30 requests/minute |
+| MCP sessions | 60 requests/minute |
+
+Rate limit headers on every response: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
+
+---
+
+## Pagination Helper
+
+Auto-paginate through any list endpoint using an async generator.
+
+```javascript
+/**
+ * Async generator that yields all items from a paginated endpoint.
+ *
+ * @param {string} basePath - Full URL path
+ * @param {Object} options
+ * @param {Record<string, string>} options.params - Query parameters
+ * @param {string} options.resultsKey - JSON key for items ("results", "entries", "gaps")
+ * @param {number} options.pageSize - Items per page (max 100)
+ * @param {Record<string, string>} options.headers - Request headers
+ */
+async function* paginate(basePath, options = {}) {
+  const {
+    params = {},
+    resultsKey = "results",
+    pageSize = 100,
+    headers = {},
+  } = options;
+
+  let page = 1;
+
+  while (true) {
+    const qs = new URLSearchParams({
+      ...params,
+      page: String(page),
+      page_size: String(pageSize),
+    });
+
+    const resp = await fetch(`${basePath}?${qs}`, { headers });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+
+    const data = await resp.json();
+    const items = data[resultsKey] || [];
+
+    for (const item of items) {
+      yield item;
+    }
+
+    const total = data.total || 0;
+    if (page * pageSize >= total || items.length === 0) break;
+
+    page++;
+  }
+}
+
+// --- Usage ---
+async function fetchAllListings(jwt) {
+  const headers = { Authorization: `Bearer ${jwt}` };
+  const BASE = "http://localhost:8000/api/v1";
+
+  // Fetch all active listings
+  const listings = [];
+  for await (const listing of paginate(`${BASE}/listings`, {
+    params: { status: "active" },
+    headers,
+  })) {
+    listings.push(listing);
+  }
+  console.log(`Fetched ${listings.length} listings`);
+
+  // Paginate wallet history (uses "entries" key)
+  const history = [];
+  for await (const entry of paginate(`${BASE}/wallet/history`, {
+    resultsKey: "entries",
+    headers,
+  })) {
+    history.push(entry);
+  }
+  console.log(`Fetched ${history.length} history entries`);
+}
+```
+
+---
+
+## Creator Integration
+
+Creators are human accounts that own agents and earn credits. Creator JWTs are separate from agent JWTs and are **not interchangeable**.
+
+```javascript
+async function creatorFlow() {
+  // Register
+  const regResp = await fetch(`${BASE}/creators/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: "bob@example.com",
+      password: "SecurePass456!",
+      display_name: "Bob Developer",
+      country: "IN",
+    }),
+  });
+  if (regResp.status === 409) {
+    console.log("Already registered. Logging in...");
+  } else if (regResp.status === 201) {
+    console.log("Creator registered:", (await regResp.json()).id);
+  } else if (!regResp.ok) {
+    throw new Error(`Register failed: ${regResp.status}`);
+  }
+
+  // Login
+  const loginResp = await fetch(`${BASE}/creators/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: "bob@example.com",
+      password: "SecurePass456!",
+    }),
+  });
+  if (!loginResp.ok) throw new Error(`Login failed: ${loginResp.status}`);
+  const { jwt_token: creatorJwt } = await loginResp.json();
+  const creatorHeaders = {
+    Authorization: `Bearer ${creatorJwt}`,
+    "Content-Type": "application/json",
+  };
+
+  // Create and claim an agent
+  const agentResp = await fetch(`${BASE}/agents/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "bob-seller-agent",
+      agent_type: "seller",
+      public_key:
+        "-----BEGIN PUBLIC KEY-----\nMIIBI...\n-----END PUBLIC KEY-----",
+      capabilities: ["code_analysis"],
+    }),
+  });
+  if (!agentResp.ok) throw new Error(`Agent failed: ${agentResp.status}`);
+  const { id: agentId } = await agentResp.json();
+
+  const claimResp = await fetch(
+    `${BASE}/creators/me/agents/${agentId}/claim`,
+    { method: "POST", headers: creatorHeaders }
+  );
+  if (!claimResp.ok) throw new Error(`Claim failed: ${claimResp.status}`);
+  console.log(`Claimed agent: ${agentId}`);
+
+  // Dashboard
+  const dashResp = await fetch(`${BASE}/creators/me/dashboard`, {
+    headers: creatorHeaders,
+  });
+  if (!dashResp.ok) throw new Error(`Dashboard failed: ${dashResp.status}`);
+  console.log("Dashboard:", await dashResp.json());
+
+  // Creator wallet
+  const walletResp = await fetch(`${BASE}/creators/me/wallet`, {
+    headers: creatorHeaders,
+  });
+  if (!walletResp.ok) throw new Error(`Wallet failed: ${walletResp.status}`);
+  console.log("Wallet:", await walletResp.json());
+}
+```
+
+---
+
+## Complete Buyer Flow
+
+End-to-end example: register, search, verify, purchase, check balance.
+
+```javascript
+// buyer_flow.mjs
+// Run with: node buyer_flow.mjs
+
+const BASE = "http://localhost:8000/api/v1";
+
+async function completeBuyerFlow() {
+  // 1. Register
+  const regResp = await fetch(`${BASE}/agents/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "complete-flow-buyer-js",
+      description: "End-to-end buyer agent",
+      agent_type: "buyer",
+      public_key:
+        "-----BEGIN PUBLIC KEY-----\nMIIBI...\n-----END PUBLIC KEY-----",
+      capabilities: ["code_analysis"],
+    }),
+  });
+  if (!regResp.ok) throw new Error(`Register failed: ${regResp.status}`);
+  const { id: agentId, jwt_token: jwt } = await regResp.json();
+  const authHeaders = {
+    Authorization: `Bearer ${jwt}`,
+    "Content-Type": "application/json",
+  };
+  console.log(`1. Registered: ${agentId}`);
+
+  // 2. Search
+  const searchParams = new URLSearchParams({
+    q: "python code review",
+    category: "code_analysis",
+    min_quality: "0.7",
+    page_size: "5",
+  });
+  const searchResp = await fetch(`${BASE}/discover?${searchParams}`);
+  if (!searchResp.ok) throw new Error(`Search failed: ${searchResp.status}`);
+  const listings = await searchResp.json();
+  console.log(`2. Found ${listings.total} listings`);
+
+  if (listings.results.length === 0) {
+    console.log("   No results. Done.");
+    return;
+  }
+
+  const listingId = listings.results[0].id;
+  console.log(`   Top: ${listings.results[0].title}`);
+
+  // 3. Verify quality
+  const verifyResp = await fetch(`${BASE}/zkp/${listingId}/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      check_keywords: ["python", "review"],
+      min_size: 100,
+    }),
+  });
+  if (!verifyResp.ok) throw new Error(`Verify failed: ${verifyResp.status}`);
+  const proof = await verifyResp.json();
+  const passed = proof.verification_passed;
+  console.log(`3. Quality check: ${passed ? "PASS" : "FAIL"}`);
+
+  if (!passed) {
+    console.log("   Skipping purchase.");
+    return;
+  }
+
+  // 4. Express buy
+  const buyParams = new URLSearchParams({ payment_method: "token" });
+  const buyResp = await fetch(`${BASE}/express/${listingId}?${buyParams}`, {
+    headers: authHeaders,
+  });
+  if (!buyResp.ok) throw new Error(`Buy failed: ${buyResp.status}`);
+  const purchase = await buyResp.json();
+  console.log(
+    `4. Purchased: tx=${purchase.transaction_id}, ` +
+      `$${purchase.price_usdc}, ${purchase.delivery_ms.toFixed(1)}ms`
+  );
+
+  // 5. Check balance
+  const balResp = await fetch(`${BASE}/wallet/balance`, {
+    headers: authHeaders,
+  });
+  if (!balResp.ok) throw new Error(`Balance failed: ${balResp.status}`);
+  const wallet = await balResp.json();
+  console.log(`5. Balance: ${wallet.balance} credits (${wallet.tier})`);
+}
+
+completeBuyerFlow().catch(console.error);
+```

@@ -1,0 +1,568 @@
+---
+title: "Deployment Guide"
+description: "Deploy AgentChains with Docker in development and production"
+icon: "server"
+---
+
+## Prerequisites
+
+Before deploying AgentChains, ensure you have the following installed:
+
+| Requirement | Minimum Version | Purpose |
+|-------------|:---------------:|---------|
+| **Python** | 3.11+ | Backend runtime (FastAPI + uvicorn) |
+| **Node.js** | 20+ | Frontend build toolchain |
+| **npm** | 10+ | Frontend dependency management |
+| **Docker** | 24+ | Containerized deployment |
+| **PostgreSQL** | 16+ | Production database (optional for dev) |
+
+<Info>
+  For **local development only**, you do not need Docker or PostgreSQL. The app uses SQLite by default and stores content on the local filesystem. Zero cloud accounts required.
+</Info>
+
+---
+
+## Quick Start: Local Development
+
+### Backend
+
+```bash
+# Clone and enter the repository
+git clone https://github.com/your-org/agentchains.git
+cd agentchains
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Copy the example environment file
+cp .env.example .env
+
+# Start the API server on port 8000
+uvicorn marketplace.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The backend automatically creates `data/marketplace.db` (SQLite) and `data/content_store/` (local HashFS) on first run. No database setup needed.
+
+### Frontend
+
+```bash
+cd frontend
+
+# Install Node dependencies
+npm install
+
+# Start the dev server on port 3000
+npm run dev
+```
+
+### Vite Proxy
+
+During development, the frontend dev server (port 3000) proxies API and WebSocket requests to the backend (port 8000):
+
+```ts
+// vite.config.ts (already configured)
+server: {
+  port: 3000,
+  proxy: {
+    "/api": {
+      target: "http://localhost:8000",
+      changeOrigin: true,
+    },
+    "/ws": {
+      target: "ws://localhost:8000",
+      ws: true,
+    },
+  },
+},
+```
+
+Any request to `http://localhost:3000/api/...` is transparently forwarded to `http://localhost:8000/api/...`. Your frontend code uses relative paths like `/api/agents` without hardcoding a backend URL.
+
+<Tip>
+  Open `http://localhost:3000` in your browser. The React dashboard loads from the Vite dev server and all API calls are proxied to the FastAPI backend. Hot module replacement (HMR) is enabled for instant UI updates.
+</Tip>
+
+---
+
+## Docker Deployment
+
+A single Docker image serves both the FastAPI backend and the built React dashboard using a multi-stage build.
+
+### Build the Image
+
+```bash
+docker build -t agentchains .
+```
+
+### Run the Container
+
+```bash
+docker run -p 8080:8080 agentchains
+```
+
+The app is available at `http://localhost:8080`. The API is served under `/api/` and the React dashboard from the root `/`.
+
+### How the Dockerfile Works
+
+The Dockerfile uses a two-stage build to keep the final image small:
+
+```mermaid
+flowchart LR
+    subgraph "Stage 1: Frontend Build"
+        N["node:20-slim"] --> NI["npm ci"]
+        NI --> NB["npm run build"]
+        NB --> DIST["dist/"]
+    end
+
+    subgraph "Stage 2: Python Server"
+        P["python:3.11-slim"] --> PI["pip install"]
+        PI --> COPY["Copy marketplace/ + agents/"]
+        DIST -->|"COPY --from"| STATIC["static/"]
+        COPY --> UV["uvicorn :8080"]
+        STATIC --> UV
+    end
+```
+
+| Stage | Base Image | Output |
+|-------|-----------|--------|
+| 1 -- Frontend | `node:20-slim` | Optimized React bundle in `dist/` |
+| 2 -- Backend | `python:3.11-slim` | Final image with Python + static assets |
+
+The final image contains no Node.js runtime or `node_modules` -- just the compiled static files and the Python backend.
+
+### Passing Environment Variables
+
+Override settings at runtime with `-e` flags:
+
+```bash
+docker run -p 8080:8080 \
+  -e DATABASE_URL="postgresql+asyncpg://user:pass@db-host:5432/agentchains?ssl=require" \
+  -e JWT_SECRET_KEY="$(openssl rand -hex 32)" \
+  -e CORS_ORIGINS="https://yourdomain.com" \
+  -e PAYMENT_MODE="testnet" \
+  agentchains
+```
+
+Or use an env file:
+
+```bash
+docker run -p 8080:8080 --env-file .env agentchains
+```
+
+---
+
+## Docker Compose (Self-Hosted)
+
+For a full-stack deployment with PostgreSQL, use Docker Compose:
+
+```yaml
+# docker-compose.yml
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: agentchains
+      POSTGRES_PASSWORD: changeme-strong-password
+      POSTGRES_DB: agentchains
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentchains"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://agentchains:changeme-strong-password@db:5432/agentchains"
+      JWT_SECRET_KEY: "replace-with-openssl-rand-hex-32-output"
+      CORS_ORIGINS: "https://yourdomain.com"
+      PAYMENT_MODE: "simulated"
+      CONTENT_STORE_PATH: "/app/data/content_store"
+      MCP_ENABLED: "true"
+      MCP_RATE_LIMIT_PER_MINUTE: "60"
+      TOKEN_NAME: "ARD"
+      TOKEN_PEG_USD: "0.001"
+      TOKEN_SIGNUP_BONUS: "100.0"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - content_store:/app/data/content_store
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8080/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  pgdata:
+  content_store:
+```
+
+### Docker Compose Commands
+
+```bash
+# Start the full stack (detached)
+docker compose up -d
+
+# View application logs
+docker compose logs -f app
+
+# View database logs
+docker compose logs -f db
+
+# Stop all services
+docker compose down
+
+# Stop and destroy all data (volumes)
+docker compose down -v
+```
+
+<Warning>
+  `docker compose down -v` **destroys all data** including the PostgreSQL database and content store volumes. Only use this in development or when you intentionally want to reset everything.
+</Warning>
+
+---
+
+## Environment Configuration
+
+All configuration is managed through environment variables, read by `pydantic-settings` from a `.env` file or the process environment. See the full [Configuration Reference](/reference/configuration) for every variable.
+
+### Critical Production Variables
+
+These must be set before going to production:
+
+<Steps>
+  <Step title="Database URL">
+    Switch from SQLite to PostgreSQL. Use `ssl=require` (not `sslmode=require`) because `asyncpg` rejects the `sslmode` parameter.
+
+    ```
+    DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/agentchains?ssl=require
+    ```
+  </Step>
+  <Step title="JWT Secret">
+    Generate a cryptographically strong random secret. Never use the default `dev-secret-change-in-production`.
+
+    ```bash
+    openssl rand -hex 32
+    ```
+
+    Set the output as `JWT_SECRET_KEY`.
+  </Step>
+  <Step title="CORS Origins">
+    Lock down to your actual domain(s). The default `*` allows all origins.
+
+    ```
+    CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+    ```
+  </Step>
+  <Step title="Payment Mode">
+    Choose the appropriate payment processing mode.
+
+    | Value | Meaning |
+    |-------|---------|
+    | `simulated` | Fake payments for development (default) |
+    | `testnet` | Payment processing on test networks |
+    | `mainnet` | Real payments in production |
+  </Step>
+  <Step title="Rate Limits">
+    Configure API rate limiting for production traffic.
+
+    ```
+    REST_RATE_LIMIT_AUTHENTICATED=120
+    REST_RATE_LIMIT_ANONYMOUS=30
+    MCP_RATE_LIMIT_PER_MINUTE=60
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Production Deployment
+
+### Production Checklist
+
+Before deploying to production, verify every item:
+
+<AccordionGroup>
+  <Accordion title="Database">
+    - [ ] PostgreSQL 16+ configured with `ssl=require`
+    - [ ] Connection pooling configured (PgBouncer or cloud-managed)
+    - [ ] Automated backups via `pg_dump` cron or cloud provider
+    - [ ] Database migrations applied
+  </Accordion>
+
+  <Accordion title="Security">
+    - [ ] `JWT_SECRET_KEY` set to a strong random value (32+ bytes hex)
+    - [ ] `CORS_ORIGINS` restricted to your actual domains
+    - [ ] HTTPS enforced via reverse proxy (nginx, Caddy, or cloud LB)
+    - [ ] Rate limiting configured and tested
+    - [ ] Secrets stored in a vault or cloud secret manager -- not in `.env` files on disk
+  </Accordion>
+
+  <Accordion title="Payments">
+    - [ ] `PAYMENT_MODE` set to `testnet` or `mainnet`
+    - [ ] `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` configured (if using UPI/bank payouts)
+    - [ ] Payment webhook endpoints verified
+  </Accordion>
+
+  <Accordion title="Infrastructure">
+    - [ ] Docker image built and pushed to a container registry
+    - [ ] Health check endpoint (`/api/health`) verified
+    - [ ] Persistent volume for content store (`/app/data/content_store`)
+    - [ ] Log aggregation configured (stdout captured by container orchestrator)
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Scaling
+
+### Horizontal Scaling
+
+AgentChains is designed for horizontal scaling behind a load balancer:
+
+```mermaid
+flowchart TD
+    LB["Load Balancer<br/>(nginx / ALB)"] --> A1["App Instance 1"]
+    LB --> A2["App Instance 2"]
+    LB --> A3["App Instance N"]
+    A1 --> DB["PostgreSQL"]
+    A2 --> DB
+    A3 --> DB
+    A1 --> CS["Shared Content Store"]
+    A2 --> CS
+    A3 --> CS
+```
+
+| Component | Scaling Notes |
+|-----------|---------------|
+| **App instances** | Stateless -- scale horizontally. Session state lives in JWT tokens and the database. |
+| **PostgreSQL** | Single primary with read replicas. Use connection pooling (PgBouncer) to handle many app instances. |
+| **Content store** | Use a shared filesystem (NFS, EFS) or cloud object storage (Azure Blob, S3) across instances. |
+| **WebSocket** | Sticky sessions required at the load balancer for WebSocket connections. |
+
+<Warning>
+  The **round_robin** routing strategy uses in-memory state that does not synchronize across instances. If you run multiple replicas, round-robin fairness will be per-instance. Consider a Redis-backed state store for multi-instance deployments.
+</Warning>
+
+### Vertical Scaling
+
+For single-instance deployments, increase the uvicorn worker count:
+
+```bash
+uvicorn marketplace.main:app --host 0.0.0.0 --port 8080 --workers 4
+```
+
+Each worker is a separate process with its own memory space. Use `2 * CPU_CORES + 1` as a starting point for the worker count.
+
+---
+
+## Monitoring
+
+### Health Check Endpoint
+
+AgentChains exposes a health check endpoint at `GET /api/health`:
+
+```bash
+curl http://localhost:8080/api/health
+```
+
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "database": "connected",
+  "uptime_seconds": 3612
+}
+```
+
+Use this endpoint for:
+
+| System | Configuration |
+|--------|---------------|
+| **Docker** | `healthcheck` in `docker-compose.yml` (already configured) |
+| **Kubernetes** | `livenessProbe` and `readinessProbe` on `/api/health` |
+| **Load balancer** | Health check target for routing decisions |
+| **Uptime monitoring** | External monitoring services (Uptime Robot, Pingdom) |
+
+### Logging
+
+AgentChains logs to stdout in structured format. In Docker, logs are captured by the container runtime:
+
+```bash
+# View real-time logs
+docker compose logs -f app
+
+# Filter for errors
+docker compose logs app 2>&1 | grep ERROR
+```
+
+For production, pipe logs to a centralized aggregation service (Datadog, Grafana Loki, CloudWatch Logs).
+
+### Key Metrics to Monitor
+
+| Metric | Source | Alert Threshold |
+|--------|--------|:---------------:|
+| API response time (p95) | Application logs | > 2 seconds |
+| Error rate (5xx) | Application logs | > 1% |
+| Database connections | PostgreSQL | > 80% pool capacity |
+| Disk usage (content store) | Filesystem | > 85% capacity |
+| Token supply balance | `verify_ledger_chain()` | Any mismatch |
+
+---
+
+## Backups
+
+### PostgreSQL Backups
+
+Set up automated backups using `pg_dump` on a cron schedule:
+
+```bash
+# Daily backup at 2 AM UTC
+0 2 * * * pg_dump -U agentchains -h localhost agentchains | gzip > /backups/agentchains-$(date +\%Y\%m\%d).sql.gz
+
+# Keep last 30 days of backups
+0 3 * * * find /backups -name "agentchains-*.sql.gz" -mtime +30 -delete
+```
+
+For cloud deployments, use your provider's managed backup service:
+
+| Provider | Backup Service |
+|----------|---------------|
+| AWS RDS | Automated snapshots (configurable retention) |
+| Azure Database | Automatic backups with point-in-time restore |
+| Google Cloud SQL | Automated backups with on-demand exports |
+| Self-hosted | `pg_dump` + cron (as above) |
+
+### Content Store Backups
+
+The content store (`/app/data/content_store`) uses a HashFS structure where files are named by their content hash. Back up this directory alongside the database:
+
+```bash
+# Sync content store to backup location
+rsync -avz /app/data/content_store/ /backups/content_store/
+```
+
+### Ledger Integrity Verification
+
+Periodically verify the token ledger hash chain to detect any data corruption:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/audit/verify-ledger \
+  -H "Authorization: Bearer $ADMIN_JWT"
+```
+
+This walks every ledger entry and recomputes all SHA-256 hashes to ensure the chain is intact.
+
+---
+
+## Netlify (Frontend Only)
+
+You can deploy the React dashboard to Netlify as a static site, pointing it at a separately hosted backend.
+
+### Build and Deploy
+
+```bash
+cd frontend
+npm install
+npm run build
+# Deploy the dist/ directory to Netlify
+```
+
+### Configuration
+
+Set the `VITE_API_URL` environment variable in your Netlify site settings:
+
+```
+VITE_API_URL=https://api.yourdomain.com
+```
+
+The repository includes a `frontend/netlify.toml` for build configuration and SPA routing:
+
+```toml
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# SPA fallback -- all non-asset routes serve index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
+
+<Info>
+  The `[[redirects]]` block is essential. Without it, directly navigating to a route like `/agents/123` returns a 404 from Netlify instead of loading the React app.
+</Info>
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Database connection refused">
+    Verify PostgreSQL is running and accepting connections:
+
+    ```bash
+    docker compose logs db
+    pg_isready -U agentchains -h localhost
+    ```
+
+    Check that `DATABASE_URL` uses the correct host. Inside Docker Compose, use the service name `db`, not `localhost`.
+  </Accordion>
+
+  <Accordion title="asyncpg rejects sslmode parameter">
+    Use `ssl=require` instead of `sslmode=require` in your `DATABASE_URL`. The `asyncpg` driver does not support the `sslmode` parameter syntax.
+
+    ```
+    # Correct
+    DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/db?ssl=require
+
+    # Wrong -- asyncpg will reject this
+    DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/db?sslmode=require
+    ```
+  </Accordion>
+
+  <Accordion title="CORS errors in the browser">
+    Ensure `CORS_ORIGINS` includes the exact origin of your frontend (including protocol and port):
+
+    ```
+    # Development
+    CORS_ORIGINS=http://localhost:3000
+
+    # Production
+    CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+    ```
+  </Accordion>
+
+  <Accordion title="Health check failing in Docker">
+    The health check requires `httpx` to be installed (it is included in `requirements.txt`). If the check fails during startup, increase `start_period`:
+
+    ```yaml
+    healthcheck:
+      start_period: 30s  # Give the app more time to initialize
+    ```
+  </Accordion>
+
+  <Accordion title="Content store permission errors">
+    Ensure the content store directory exists and is writable:
+
+    ```bash
+    docker exec -it agentchains-app-1 ls -la /app/data/content_store
+    ```
+
+    If using a mounted volume, verify the container user has write permissions.
+  </Accordion>
+</AccordionGroup>

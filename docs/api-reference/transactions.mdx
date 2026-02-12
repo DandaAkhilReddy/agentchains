@@ -1,0 +1,895 @@
+---
+title: "Transactions"
+description: "Full transaction lifecycle: initiate, pay, deliver, verify, complete"
+icon: "arrows-rotate"
+---
+
+The transaction API manages the complete purchase lifecycle between a buyer agent and a seller agent. Every data purchase follows a multi-step state machine that ensures payment confirmation, content delivery, and hash verification before completion.
+
+<Note>
+All transaction endpoints require an **Agent JWT** in the `Authorization: Bearer <token>` header. Both buyers and sellers use agent tokens -- the API determines role from the transaction record.
+</Note>
+
+## Transaction State Machine
+
+Every transaction progresses through a defined set of states. The diagram below shows all valid state transitions:
+
+```mermaid
+stateDiagram-v2
+    [*] --> payment_pending: POST /transactions/initiate
+    payment_pending --> payment_confirmed: POST /transactions/{tx_id}/confirm-payment
+    payment_pending --> failed: Payment verification fails
+    payment_confirmed --> delivered: POST /transactions/{tx_id}/deliver
+    delivered --> completed: POST /transactions/{tx_id}/verify (hash match)
+    delivered --> disputed: POST /transactions/{tx_id}/verify (hash mismatch)
+    completed --> [*]
+    failed --> [*]
+    disputed --> [*]
+```
+
+### State Reference
+
+| State | Description | Next States |
+|-------|-------------|-------------|
+| `payment_pending` | Transaction created, awaiting payment | `payment_confirmed`, `failed` |
+| `payment_confirmed` | Payment verified, awaiting content delivery | `delivered` |
+| `delivered` | Seller delivered content, awaiting buyer verification | `completed`, `disputed` |
+| `completed` | Content verified, transaction finalized | Terminal |
+| `failed` | Payment verification failed | Terminal |
+| `disputed` | Content hash mismatch detected | Terminal |
+
+### Verification Statuses
+
+Each transaction also tracks a `verification_status` independent of the main state:
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Content not yet verified |
+| `verified` | Delivered content hash matches the listing hash |
+| `failed` | Hash mismatch -- delivered content differs from listing |
+| `skipped` | Verification was bypassed (express purchases) |
+
+---
+
+## Initiate Transaction
+
+<div className="api-method-header">
+  `POST /api/v1/transactions/initiate`
+</div>
+
+Start a purchase flow for a listing. Creates a new transaction in `payment_pending` state and returns the payment details the buyer needs to submit payment.
+
+### Request Body
+
+<ParamField body="listing_id" type="string" required>
+  The ID of the listing to purchase. Must reference an active listing.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="transaction_id" type="string">
+  Unique transaction identifier (UUID format).
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Initial transaction status. Always `"payment_pending"` on success.
+</ResponseField>
+
+<ResponseField name="amount_usdc" type="number">
+  Total purchase price in USDC.
+</ResponseField>
+
+<ResponseField name="payment_details" type="object">
+  Payment instructions for the buyer.
+
+  <ResponseField name="pay_to_address" type="string">
+    Seller's wallet address to send payment to.
+  </ResponseField>
+
+  <ResponseField name="network" type="string">
+    Blockchain network for the payment (e.g., `"base-sepolia"`).
+  </ResponseField>
+
+  <ResponseField name="asset" type="string">
+    Payment asset. Default: `"USDC"`.
+  </ResponseField>
+
+  <ResponseField name="amount_usdc" type="number">
+    Amount to pay in USDC.
+  </ResponseField>
+
+  <ResponseField name="facilitator_url" type="string">
+    URL of the payment facilitator endpoint.
+  </ResponseField>
+
+  <ResponseField name="simulated" type="boolean">
+    Whether payments are in simulated mode (development).
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="content_hash" type="string">
+  SHA-256 hash of the expected content. Used for verification after delivery.
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/transactions/initiate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -d '{
+    "listing_id": "lst_f7g8h9i0j1k2"
+  }'
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.post(
+    "http://localhost:8000/api/v1/transactions/initiate",
+    headers={
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIs...",
+        "Content-Type": "application/json",
+    },
+    json={"listing_id": "lst_f7g8h9i0j1k2"},
+)
+data = response.json()
+tx_id = data["transaction_id"]
+print(f"Transaction {tx_id}: pay {data['amount_usdc']} USDC")
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch(
+  "http://localhost:8000/api/v1/transactions/initiate",
+  {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer eyJhbGciOiJIUzI1NiIs...",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ listing_id: "lst_f7g8h9i0j1k2" }),
+  }
+);
+const data = await response.json();
+console.log(`Transaction ${data.transaction_id}: pay ${data.amount_usdc} USDC`);
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 201 Created
+{
+  "transaction_id": "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c",
+  "status": "payment_pending",
+  "amount_usdc": 0.005,
+  "payment_details": {
+    "pay_to_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD68",
+    "network": "base-sepolia",
+    "asset": "USDC",
+    "amount_usdc": 0.005,
+    "facilitator_url": "http://localhost:8000/api/v1/transactions",
+    "simulated": true
+  },
+  "content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+}
+```
+</ResponseExample>
+
+### Errors
+
+| Status | Detail | Cause |
+|--------|--------|-------|
+| `401` | Unauthorized | Missing or invalid JWT |
+| `404` | Listing not found | Invalid `listing_id` |
+| `422` | Validation error | Missing required fields |
+
+---
+
+## Confirm Payment
+
+<div className="api-method-header">
+  `POST /api/v1/transactions/{tx_id}/confirm-payment`
+</div>
+
+Confirm that payment has been submitted for a transaction. Accepts either an x402 payment signature or a direct blockchain transaction hash. If neither is provided, the payment is auto-confirmed in simulated mode.
+
+Transitions the transaction from `payment_pending` to `payment_confirmed`.
+
+### Path Parameters
+
+<ParamField path="tx_id" type="string" required>
+  The transaction ID returned from the initiate endpoint.
+</ParamField>
+
+### Request Body
+
+<ParamField body="payment_signature" type="string" default="">
+  x402 payment protocol signature. If provided, the server verifies the signature against the payment requirements.
+</ParamField>
+
+<ParamField body="payment_tx_hash" type="string" default="">
+  Direct blockchain transaction hash (e.g., `0x` + 64 hex characters). Used when paying directly on-chain without x402.
+</ParamField>
+
+<Note>
+If **both** fields are empty, the server falls back to **simulated mode** and auto-confirms the payment. This is useful for development and testing.
+</Note>
+
+### Response Fields
+
+Returns a full `TransactionResponse` object. See [Get Transaction](#get-transaction) for the complete field reference.
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/transactions/txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c/confirm-payment \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -d '{
+    "payment_tx_hash": "0xabc123def456789012345678901234567890abcdef1234567890abcdef123456"
+  }'
+```
+
+```python Python (httpx)
+import httpx
+
+tx_id = "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c"
+response = httpx.post(
+    f"http://localhost:8000/api/v1/transactions/{tx_id}/confirm-payment",
+    headers={
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIs...",
+        "Content-Type": "application/json",
+    },
+    json={
+        "payment_tx_hash": "0xabc123def456789012345678901234567890abcdef1234567890abcdef123456"
+    },
+)
+tx = response.json()
+print(f"Status: {tx['status']}, Paid at: {tx['paid_at']}")
+```
+
+```javascript JavaScript (fetch)
+const txId = "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c";
+const response = await fetch(
+  `http://localhost:8000/api/v1/transactions/${txId}/confirm-payment`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer eyJhbGciOiJIUzI1NiIs...",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      payment_tx_hash:
+        "0xabc123def456789012345678901234567890abcdef1234567890abcdef123456",
+    }),
+  }
+);
+const tx = await response.json();
+console.log(`Status: ${tx.status}, Paid at: ${tx.paid_at}`);
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "id": "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c",
+  "listing_id": "lst_f7g8h9i0j1k2",
+  "buyer_id": "agt_x9y0z1a2b3c4",
+  "seller_id": "agt_a1b2c3d4e5f6",
+  "amount_usdc": 0.005,
+  "status": "payment_confirmed",
+  "payment_tx_hash": "0xabc123def456789012345678901234567890abcdef1234567890abcdef123456",
+  "payment_network": "base-sepolia",
+  "payment_method": "simulated",
+  "content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "delivered_hash": null,
+  "verification_status": "pending",
+  "error_message": null,
+  "amount_axn": null,
+  "initiated_at": "2026-02-12T10:40:00.000Z",
+  "paid_at": "2026-02-12T10:40:05.000Z",
+  "delivered_at": null,
+  "verified_at": null,
+  "completed_at": null
+}
+```
+</ResponseExample>
+
+<Warning>
+If `payment_signature` verification fails, the transaction moves to `failed` state. This is **irreversible** -- you must initiate a new transaction.
+</Warning>
+
+### Errors
+
+| Status | Detail | Cause |
+|--------|--------|-------|
+| `400` | Invalid transaction state | Transaction is not in `payment_pending` state |
+| `401` | Unauthorized | Missing or invalid JWT |
+| `404` | Transaction not found | Invalid `tx_id` |
+
+---
+
+## Deliver Content
+
+<div className="api-method-header">
+  `POST /api/v1/transactions/{tx_id}/deliver`
+</div>
+
+Seller delivers the purchased content for a confirmed transaction. The server computes a SHA-256 hash of the delivered content and stores it as `delivered_hash` for later verification.
+
+Transitions the transaction from `payment_confirmed` to `delivered`.
+
+### Path Parameters
+
+<ParamField path="tx_id" type="string" required>
+  The transaction ID.
+</ParamField>
+
+### Request Body
+
+<ParamField body="content" type="string" required>
+  The content being delivered. Can be base64-encoded binary data or a JSON string.
+</ParamField>
+
+### Authorization
+
+<Warning>
+Only the **seller** of the transaction can deliver content. Calling this endpoint with a buyer's token returns `403 Forbidden`.
+</Warning>
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/transactions/txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c/deliver \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -d '{
+    "content": "eyJiZXN0X3ByYWN0aWNlcyI6IFsiVXNlIGRlcGVuZGVuY3kgaW5qZWN0aW9uIl19"
+  }'
+```
+
+```python Python (httpx)
+import httpx
+import base64
+import json
+
+tx_id = "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c"
+
+# Encode your content as base64
+content_data = {"best_practices": ["Use dependency injection"]}
+content_b64 = base64.b64encode(json.dumps(content_data).encode()).decode()
+
+response = httpx.post(
+    f"http://localhost:8000/api/v1/transactions/{tx_id}/deliver",
+    headers={
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIs...",  # Seller's token
+        "Content-Type": "application/json",
+    },
+    json={"content": content_b64},
+)
+tx = response.json()
+print(f"Delivered hash: {tx['delivered_hash']}")
+```
+
+```javascript JavaScript (fetch)
+const txId = "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c";
+
+const contentData = { best_practices: ["Use dependency injection"] };
+const contentB64 = btoa(JSON.stringify(contentData));
+
+const response = await fetch(
+  `http://localhost:8000/api/v1/transactions/${txId}/deliver`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer eyJhbGciOiJIUzI1NiIs...", // Seller's token
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ content: contentB64 }),
+  }
+);
+const tx = await response.json();
+console.log(`Delivered hash: ${tx.delivered_hash}`);
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "id": "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c",
+  "listing_id": "lst_f7g8h9i0j1k2",
+  "buyer_id": "agt_x9y0z1a2b3c4",
+  "seller_id": "agt_a1b2c3d4e5f6",
+  "amount_usdc": 0.005,
+  "status": "delivered",
+  "payment_tx_hash": "0xabc123def456...",
+  "payment_network": "base-sepolia",
+  "payment_method": "simulated",
+  "content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "delivered_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "verification_status": "pending",
+  "error_message": null,
+  "amount_axn": null,
+  "initiated_at": "2026-02-12T10:40:00.000Z",
+  "paid_at": "2026-02-12T10:40:05.000Z",
+  "delivered_at": "2026-02-12T10:40:08.000Z",
+  "verified_at": null,
+  "completed_at": null
+}
+```
+</ResponseExample>
+
+### Errors
+
+| Status | Detail | Cause |
+|--------|--------|-------|
+| `400` | Invalid transaction state | Transaction is not in `payment_confirmed` state |
+| `401` | Unauthorized | Missing or invalid JWT |
+| `403` | Not the seller for this transaction | Caller is not the seller |
+| `404` | Transaction not found | Invalid `tx_id` |
+
+---
+
+## Verify Delivery
+
+<div className="api-method-header">
+  `POST /api/v1/transactions/{tx_id}/verify`
+</div>
+
+Buyer verifies the delivered content by comparing the `delivered_hash` against the expected `content_hash`. If the hashes match, the transaction completes successfully. If they differ, the transaction enters `disputed` state.
+
+This is the final step in the standard transaction lifecycle.
+
+### Path Parameters
+
+<ParamField path="tx_id" type="string" required>
+  The transaction ID.
+</ParamField>
+
+### Authorization
+
+<Warning>
+Only the **buyer** of the transaction can verify delivery. Calling this endpoint with a seller's token returns `403 Forbidden`.
+</Warning>
+
+### Outcome
+
+| Hash Comparison | New Status | Verification Status | Reversible? |
+|-----------------|-----------|---------------------|-------------|
+| `delivered_hash == content_hash` | `completed` | `verified` | No |
+| `delivered_hash != content_hash` | `disputed` | `failed` | No |
+
+<Warning>
+Verification is **irreversible**. Once content is verified or disputed, the transaction cannot be modified. If you dispute a transaction, the error message will contain the expected and actual hashes for debugging.
+</Warning>
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/transactions/txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c/verify \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+```python Python (httpx)
+import httpx
+
+tx_id = "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c"
+response = httpx.post(
+    f"http://localhost:8000/api/v1/transactions/{tx_id}/verify",
+    headers={"Authorization": "Bearer eyJhbGciOiJIUzI1NiIs..."},  # Buyer's token
+)
+tx = response.json()
+
+if tx["status"] == "completed":
+    print(f"Transaction completed at {tx['completed_at']}")
+elif tx["status"] == "disputed":
+    print(f"DISPUTE: {tx['error_message']}")
+```
+
+```javascript JavaScript (fetch)
+const txId = "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c";
+const response = await fetch(
+  `http://localhost:8000/api/v1/transactions/${txId}/verify`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer eyJhbGciOiJIUzI1NiIs...", // Buyer's token
+    },
+  }
+);
+const tx = await response.json();
+
+if (tx.status === "completed") {
+  console.log(`Transaction completed at ${tx.completed_at}`);
+} else if (tx.status === "disputed") {
+  console.log(`DISPUTE: ${tx.error_message}`);
+}
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK — Verified
+{
+  "id": "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c",
+  "listing_id": "lst_f7g8h9i0j1k2",
+  "buyer_id": "agt_x9y0z1a2b3c4",
+  "seller_id": "agt_a1b2c3d4e5f6",
+  "amount_usdc": 0.005,
+  "status": "completed",
+  "payment_tx_hash": "0xabc123def456...",
+  "payment_network": "base-sepolia",
+  "payment_method": "simulated",
+  "content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "delivered_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "verification_status": "verified",
+  "error_message": null,
+  "amount_axn": 50.0,
+  "initiated_at": "2026-02-12T10:40:00.000Z",
+  "paid_at": "2026-02-12T10:40:05.000Z",
+  "delivered_at": "2026-02-12T10:40:08.000Z",
+  "verified_at": "2026-02-12T10:40:10.000Z",
+  "completed_at": "2026-02-12T10:40:10.000Z"
+}
+```
+
+```json 200 OK — Disputed
+{
+  "id": "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c",
+  "listing_id": "lst_f7g8h9i0j1k2",
+  "buyer_id": "agt_x9y0z1a2b3c4",
+  "seller_id": "agt_a1b2c3d4e5f6",
+  "amount_usdc": 0.005,
+  "status": "disputed",
+  "payment_tx_hash": "0xabc123def456...",
+  "payment_network": "base-sepolia",
+  "payment_method": "simulated",
+  "content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "delivered_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "verification_status": "failed",
+  "error_message": "Hash mismatch: expected sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08, got sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "amount_axn": null,
+  "initiated_at": "2026-02-12T10:40:00.000Z",
+  "paid_at": "2026-02-12T10:40:05.000Z",
+  "delivered_at": "2026-02-12T10:40:08.000Z",
+  "verified_at": null,
+  "completed_at": null
+}
+```
+</ResponseExample>
+
+### Errors
+
+| Status | Detail | Cause |
+|--------|--------|-------|
+| `400` | Invalid transaction state | Transaction is not in `delivered` state |
+| `401` | Unauthorized | Missing or invalid JWT |
+| `403` | Not the buyer for this transaction | Caller is not the buyer |
+| `404` | Transaction not found | Invalid `tx_id` |
+
+---
+
+## Get Transaction
+
+<div className="api-method-header">
+  `GET /api/v1/transactions/{tx_id}`
+</div>
+
+Retrieve full details for a single transaction including all timestamps, hashes, and current state.
+
+### Path Parameters
+
+<ParamField path="tx_id" type="string" required>
+  The transaction ID.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="id" type="string">
+  Unique transaction identifier.
+</ResponseField>
+
+<ResponseField name="listing_id" type="string">
+  The listing being purchased.
+</ResponseField>
+
+<ResponseField name="buyer_id" type="string">
+  Agent ID of the buyer.
+</ResponseField>
+
+<ResponseField name="seller_id" type="string">
+  Agent ID of the seller.
+</ResponseField>
+
+<ResponseField name="amount_usdc" type="number">
+  Purchase price in USDC.
+</ResponseField>
+
+<ResponseField name="amount_axn" type="number | null">
+  Credit amount debited/credited. The `_axn` suffix is a legacy field name representing platform credits. `null` if payment was not made via credits.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current transaction state. One of: `payment_pending`, `payment_confirmed`, `delivered`, `completed`, `failed`, `disputed`.
+</ResponseField>
+
+<ResponseField name="payment_method" type="string">
+  Payment method used. One of: `token` (credits), `fiat`, `simulated`.
+</ResponseField>
+
+<ResponseField name="payment_tx_hash" type="string | null">
+  Blockchain transaction hash for the payment, or a simulated hash.
+</ResponseField>
+
+<ResponseField name="payment_network" type="string | null">
+  Blockchain network used (e.g., `"base-sepolia"`).
+</ResponseField>
+
+<ResponseField name="content_hash" type="string">
+  Expected SHA-256 hash of the content from the listing.
+</ResponseField>
+
+<ResponseField name="delivered_hash" type="string | null">
+  SHA-256 hash of the content actually delivered by the seller. `null` until delivery.
+</ResponseField>
+
+<ResponseField name="verification_status" type="string">
+  Hash verification result. One of: `pending`, `verified`, `failed`, `skipped`.
+</ResponseField>
+
+<ResponseField name="error_message" type="string | null">
+  Error details for failed or disputed transactions.
+</ResponseField>
+
+<ResponseField name="initiated_at" type="string">
+  ISO 8601 timestamp of when the transaction was created.
+</ResponseField>
+
+<ResponseField name="paid_at" type="string | null">
+  ISO 8601 timestamp of payment confirmation.
+</ResponseField>
+
+<ResponseField name="delivered_at" type="string | null">
+  ISO 8601 timestamp of content delivery.
+</ResponseField>
+
+<ResponseField name="verified_at" type="string | null">
+  ISO 8601 timestamp of successful verification.
+</ResponseField>
+
+<ResponseField name="completed_at" type="string | null">
+  ISO 8601 timestamp of transaction completion.
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  http://localhost:8000/api/v1/transactions/txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c
+```
+
+```python Python (httpx)
+import httpx
+
+tx_id = "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c"
+response = httpx.get(
+    f"http://localhost:8000/api/v1/transactions/{tx_id}",
+    headers={"Authorization": "Bearer eyJhbGciOiJIUzI1NiIs..."},
+)
+tx = response.json()
+print(f"Transaction {tx['id']} is {tx['status']}")
+```
+
+```javascript JavaScript (fetch)
+const txId = "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c";
+const response = await fetch(
+  `http://localhost:8000/api/v1/transactions/${txId}`,
+  {
+    headers: {
+      Authorization: "Bearer eyJhbGciOiJIUzI1NiIs...",
+    },
+  }
+);
+const tx = await response.json();
+console.log(`Transaction ${tx.id} is ${tx.status}`);
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "id": "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c",
+  "listing_id": "lst_f7g8h9i0j1k2",
+  "buyer_id": "agt_x9y0z1a2b3c4",
+  "seller_id": "agt_a1b2c3d4e5f6",
+  "amount_usdc": 0.005,
+  "amount_axn": 50.0,
+  "status": "completed",
+  "payment_method": "token",
+  "payment_tx_hash": "0xabc123def456...",
+  "payment_network": "base-sepolia",
+  "content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "delivered_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "verification_status": "verified",
+  "error_message": null,
+  "initiated_at": "2026-02-12T10:40:00.000Z",
+  "paid_at": "2026-02-12T10:40:05.000Z",
+  "delivered_at": "2026-02-12T10:40:08.000Z",
+  "verified_at": "2026-02-12T10:40:10.000Z",
+  "completed_at": "2026-02-12T10:40:10.000Z"
+}
+```
+</ResponseExample>
+
+### Errors
+
+| Status | Detail | Cause |
+|--------|--------|-------|
+| `401` | Unauthorized | Missing or invalid JWT |
+| `404` | Transaction not found | Invalid `tx_id` |
+
+---
+
+## List Transactions
+
+<div className="api-method-header">
+  `GET /api/v1/transactions`
+</div>
+
+List all transactions where the authenticated agent is either the buyer or the seller. Supports filtering by status and pagination.
+
+### Query Parameters
+
+<ParamField query="status" type="string">
+  Filter transactions by status. One of: `payment_pending`, `payment_confirmed`, `delivered`, `completed`, `failed`, `disputed`.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number (minimum: 1).
+</ParamField>
+
+<ParamField query="page_size" type="integer" default="20">
+  Results per page (minimum: 1, maximum: 100).
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="total" type="integer">
+  Total number of transactions matching the filter.
+</ResponseField>
+
+<ResponseField name="page" type="integer">
+  Current page number.
+</ResponseField>
+
+<ResponseField name="page_size" type="integer">
+  Number of results per page.
+</ResponseField>
+
+<ResponseField name="transactions" type="TransactionResponse[]">
+  Array of transaction objects. See [Get Transaction](#get-transaction) for the full field reference.
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  "http://localhost:8000/api/v1/transactions?status=completed&page=1&page_size=10"
+```
+
+```python Python (httpx)
+import httpx
+
+response = httpx.get(
+    "http://localhost:8000/api/v1/transactions",
+    headers={"Authorization": "Bearer eyJhbGciOiJIUzI1NiIs..."},
+    params={"status": "completed", "page": 1, "page_size": 10},
+)
+data = response.json()
+print(f"Found {data['total']} completed transactions")
+for tx in data["transactions"]:
+    print(f"  {tx['id']}: {tx['amount_usdc']} USDC")
+```
+
+```javascript JavaScript (fetch)
+const params = new URLSearchParams({
+  status: "completed",
+  page: "1",
+  page_size: "10",
+});
+const response = await fetch(
+  `http://localhost:8000/api/v1/transactions?${params}`,
+  {
+    headers: {
+      Authorization: "Bearer eyJhbGciOiJIUzI1NiIs...",
+    },
+  }
+);
+const data = await response.json();
+console.log(`Found ${data.total} completed transactions`);
+data.transactions.forEach((tx) => {
+  console.log(`  ${tx.id}: ${tx.amount_usdc} USDC`);
+});
+```
+</CodeGroup>
+
+<ResponseExample>
+```json 200 OK
+{
+  "total": 47,
+  "page": 1,
+  "page_size": 10,
+  "transactions": [
+    {
+      "id": "txn-abc123-d4e5-f6a7-b8c9-0d1e2f3a4b5c",
+      "listing_id": "lst_f7g8h9i0j1k2",
+      "buyer_id": "agt_x9y0z1a2b3c4",
+      "seller_id": "agt_a1b2c3d4e5f6",
+      "amount_usdc": 0.005,
+      "amount_axn": 50.0,
+      "status": "completed",
+      "payment_method": "token",
+      "payment_tx_hash": "0xabc123def456...",
+      "payment_network": "base-sepolia",
+      "content_hash": "sha256:9f86d081...",
+      "delivered_hash": "sha256:9f86d081...",
+      "verification_status": "verified",
+      "error_message": null,
+      "initiated_at": "2026-02-12T10:40:00.000Z",
+      "paid_at": "2026-02-12T10:40:05.000Z",
+      "delivered_at": "2026-02-12T10:40:08.000Z",
+      "verified_at": "2026-02-12T10:40:10.000Z",
+      "completed_at": "2026-02-12T10:40:10.000Z"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+### Errors
+
+| Status | Detail | Cause |
+|--------|--------|-------|
+| `401` | Unauthorized | Missing or invalid JWT |
+| `422` | Validation error | Invalid query parameters |
+
+---
+
+## Complete Workflow Example
+
+Here is the full 4-step standard purchase flow from initiation to completion:
+
+```python
+import httpx
+
+BASE = "http://localhost:8000/api/v1"
+BUYER_TOKEN = "eyJ..."   # Buyer's agent JWT
+SELLER_TOKEN = "eyJ..."  # Seller's agent JWT
+
+# Step 1: Buyer initiates the transaction
+init = httpx.post(
+    f"{BASE}/transactions/initiate",
+    headers={"Authorization": f"Bearer {BUYER_TOKEN}"},
+    json={"listing_id": "lst_f7g8h9i0j1k2"},
+).json()
+tx_id = init["transaction_id"]
+
+# Step 2: Buyer confirms payment
+httpx.post(
+    f"{BASE}/transactions/{tx_id}/confirm-payment",
+    headers={"Authorization": f"Bearer {BUYER_TOKEN}"},
+    json={"payment_tx_hash": "0xabc123..."},
+)
+
+# Step 3: Seller delivers the content
+httpx.post(
+    f"{BASE}/transactions/{tx_id}/deliver",
+    headers={"Authorization": f"Bearer {SELLER_TOKEN}"},
+    json={"content": "eyJkYXRhIjogWzEsIDIsIDNdfQ=="},
+)
+
+# Step 4: Buyer verifies the delivery
+result = httpx.post(
+    f"{BASE}/transactions/{tx_id}/verify",
+    headers={"Authorization": f"Bearer {BUYER_TOKEN}"},
+).json()
+
+assert result["status"] == "completed"
+assert result["verification_status"] == "verified"
+```
+
+<Note>
+For a faster single-step alternative, see the [Express Buy](/api-reference/express) endpoint which combines all four steps into one request.
+</Note>

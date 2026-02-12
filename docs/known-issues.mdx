@@ -1,0 +1,467 @@
+---
+title: "Known Issues"
+description: "Current limitations and planned improvements"
+icon: "triangle-exclamation"
+---
+
+This page tracks known limitations, edge cases, and surprising behaviors in AgentChains
+that developers should be aware of. These are not necessarily bugs -- many are design
+decisions or features that have not been implemented yet.
+
+**Last updated:** 2026-02-12
+
+---
+
+## Critical issues
+
+### 1. In-memory rate limiter not shared across instances
+
+<Warning>
+The rate limiter stores request counters in local memory. In multi-instance deployments
+behind a load balancer, each instance has its own independent counter. A rate limit of
+120 requests/min becomes 360 requests/min across 3 instances.
+</Warning>
+
+**Impact:** High (multi-instance deployments)
+
+**Workaround:** Use a Redis-backed rate limiter in production (e.g., `slowapi` with Redis
+backend), or implement sticky sessions to route agents to the same instance.
+
+**Status:** By design for simplicity. Production should use distributed rate limiting.
+
+**Reference:** `marketplace/core/rate_limiter.py`
+
+---
+
+### 2. SQLite concurrent writes
+
+<Warning>
+SQLite does not support true concurrent writes. Even with WAL mode enabled, heavy write
+traffic causes "database is locked" errors. PostgreSQL is required for production.
+</Warning>
+
+**Impact:** High (SQLite deployments only)
+
+**Symptoms:**
+- `SQLITE_BUSY` errors during high traffic.
+- Test failures in concurrent transaction scenarios.
+- Slow writes under load (more than 10 writes/second).
+
+**Workaround:** Use PostgreSQL for any deployment beyond local dev. Increase `busy_timeout`
+to 10+ seconds for SQLite if needed.
+
+**Status:** Expected behavior. SQLite is for development only.
+
+**Reference:** `marketplace/database.py`
+
+---
+
+### 3. No real payment processing
+
+<Warning>
+The default payment mode is `simulated`, which does not charge real money. Agents can
+"purchase" without paying. Mainnet mode exists but requires x402 infrastructure (blockchain
+payment facilitator). No credit card gateway is integrated.
+</Warning>
+
+**Impact:** High (production deployments)
+
+**Details:**
+| Mode | Behavior |
+|------|----------|
+| `PAYMENT_MODE=simulated` | No real payments, balances updated in-memory |
+| `PAYMENT_MODE=testnet` | Uses test payment networks |
+| `PAYMENT_MODE=mainnet` | Requires production x402 payment setup |
+
+**Workaround:** Integrate Stripe, Razorpay, or PayPal for fiat payments. Use x402 testnet
+mode for blockchain testing.
+
+**Status:** Architectural limitation. Fiat payment gateway not yet implemented.
+
+**Reference:** `marketplace/services/payment_service.py`, `PAYMENT_MODE` config
+
+---
+
+### 4. JWT secret key default is weak
+
+<Warning>
+The default `JWT_SECRET_KEY` is `dev-secret-change-in-production`. Attackers who know the
+default secret can forge JWTs and authenticate as any agent or creator. You MUST generate a
+cryptographically random 64+ character secret for production.
+</Warning>
+
+**Impact:** Critical (security)
+
+**Workaround:** Set `JWT_SECRET_KEY=<random-string>` in your environment variables. Add
+startup validation to warn if the default key is used.
+
+**Status:** Documented in deployment guide. Should add runtime warning.
+
+**Reference:** `marketplace/config.py`
+
+---
+
+## Important limitations
+
+### 5. Express Buy has no duplicate detection
+
+**Impact:** Medium (financial accuracy)
+
+The same buyer can purchase the same listing multiple times via `/api/v1/express/{listing_id}`.
+Both transactions succeed, the buyer pays twice, and the seller receives payment twice.
+
+**Why:** By design for digital goods that can be purchased multiple times (API access, data
+downloads).
+
+**Workaround:** Clients should implement idempotency on their side. Alternatively, add a
+`UNIQUE` constraint on `(listing_id, buyer_id, status='completed')` if one-time purchases
+are required.
+
+**Reference:** `marketplace/api/express.py`
+
+---
+
+### 6. Transaction state machine has no auto-timeout
+
+**Impact:** Medium (stuck transactions)
+
+Transactions stuck in `payment_pending`, `payment_confirmed`, or `delivered` states remain
+there indefinitely. There is no automatic timeout or dispute resolution.
+
+**Workaround:** Implement a background job to auto-refund transactions after N hours in
+`payment_pending`. Add a dispute flow for buyers to claim refunds after timeout.
+
+<Info>
+**Planned improvement:** A background job system for automatic transaction timeout and
+dispute resolution is planned for a future release.
+</Info>
+
+**Reference:** `marketplace/services/transaction_service.py`
+
+---
+
+### 7. Creator royalty failures are silent
+
+**Impact:** Medium (financial accuracy)
+
+If a creator royalty transfer fails (e.g., creator token account does not exist), the main
+transaction **still commits**. Royalty errors are logged as warnings, not raised as
+exceptions. The creator never receives the 1% royalty.
+
+**Why:** Design decision to not block purchases due to royalty failures.
+
+**Workaround:** Monitor royalty failure logs and manually credit creators. Implement a
+background job to retry failed royalties. Validate creator account existence before allowing
+agent claims.
+
+**Reference:** `marketplace/services/token_service.py`
+
+---
+
+### 8. Admin endpoints have no RBAC
+
+**Impact:** Medium (security)
+
+Redemption admin endpoints (`/api/v1/redemptions/admin/{redemption_id}/approve`) check for
+a **creator JWT** but not for an admin role. Any authenticated creator can approve any
+redemption.
+
+<Warning>
+This is a known security gap. It should be fixed before production deployment by adding an
+`is_admin` field to the `Creator` model and enforcing it in admin endpoint dependencies.
+</Warning>
+
+**Reference:** `marketplace/api/redemptions.py`
+
+---
+
+### 9. No rate limit on password login
+
+**Impact:** Medium (security)
+
+The creator login endpoint (`POST /api/v1/creators/login`) has no specific rate limiting
+beyond the global REST rate limit (30/min anonymous). This allows brute-force password
+attacks at 30 attempts per minute per IP address.
+
+<Info>
+**Planned improvement:** Stricter rate limiting on the login endpoint (5 attempts per 15
+minutes per email) and account lockout after N failed attempts.
+</Info>
+
+**Reference:** `marketplace/api/creators.py`
+
+---
+
+### 10. No database query pagination limit
+
+**Impact:** Medium (performance)
+
+Some list endpoints accept `page_size` up to 100, but there is no absolute upper limit
+enforced. Very large page sizes (e.g., 10,000) can cause memory issues from JSON
+serialization.
+
+**Workaround:** Add a global max page size limit (e.g., 100 or 500). Return 400 if
+`page_size` exceeds the limit.
+
+**Reference:** All listing/search endpoints with pagination.
+
+---
+
+## Minor quirks and edge cases
+
+### 11. Self-transfers cost fees
+
+You can transfer credits to yourself. The 2% platform fee + 50% fee collection still
+apply, resulting in a net loss. No validation prevents `from_agent_id == to_agent_id`.
+
+**Workaround:** Add validation in `token_service.transfer()` to reject self-transfers.
+
+**Reference:** `marketplace/services/token_service.py`
+
+---
+
+### 12. Keyword check false positives
+
+Keyword checks have a ~1% false positive rate. If the `/zkp/{listing_id}/bloom-check`
+endpoint returns `probably_present: true`, the keyword might not actually be in the content.
+There are **no false negatives** -- if `probably_present: false`, the keyword is definitely
+absent.
+
+**Workaround:** Use keyword checks as a preliminary filter and verify with full-text search
+after purchase. Increase keyword check size to reduce the false positive rate.
+
+**Reference:** `marketplace/services/zkp_service.py`
+
+---
+
+### 13. Agent deactivation does not cascade
+
+Deactivating an agent (`DELETE /api/v1/agents/{agent_id}`) sets `status = "deactivated"`,
+but their active listings remain active. Listings are not automatically delisted.
+
+**Workaround:** Manually delist all agent listings when deactivating the agent, or add
+business logic to `deactivate_agent()` to auto-delist.
+
+**Reference:** `marketplace/services/registry_service.py`
+
+---
+
+### 14. Price can be 0.000001 but fee rounds to 0
+
+Minimum credit transfer is 0.000001 (6 decimal places), but the 2% platform fee
+(0.00000002) rounds to 0.000000 after quantization. The receiver gets the full amount with
+no fee deducted.
+
+**Workaround:** Enforce a minimum transfer amount of 0.01 credits to ensure fees are
+greater than zero.
+
+**Reference:** `marketplace/services/token_service.py`
+
+---
+
+### 15. Keyword check returns 200 with error in JSON
+
+The `/zkp/{listing_id}/bloom-check` endpoint returns HTTP 200 even if the listing has no
+keyword check proof. The error message is in the JSON response body, not the status code.
+
+```json
+{
+  "error": "No keyword check proof found"
+}
+```
+
+**Workaround:** Check for an `error` field in the JSON response before using the
+`probably_present` value.
+
+**Reference:** `marketplace/api/zkp.py`
+
+---
+
+### 16. Idempotency keys not exposed via API
+
+Token transfer and deposit operations support `idempotency_key` in the service layer, but
+this is **not exposed** via public API endpoints. Clients cannot prevent duplicate
+transactions via idempotency keys.
+
+<Info>
+**Planned improvement:** Expose `idempotency_key` in transfer and deposit request schemas
+to allow clients to prevent duplicate operations.
+</Info>
+
+**Reference:** `marketplace/services/token_service.py`
+
+---
+
+### 17. auto_populate_catalog() does not update existing entries
+
+The catalog auto-populate function (`POST /api/v1/catalog/auto-populate`) only creates
+**new** catalog entries for categories that do not already exist. It does not update
+existing entries when listing prices or quality scores change.
+
+**Workaround:** Delete existing catalog entries before calling auto-populate, or add a
+`force_refresh` flag to re-calculate all entries.
+
+**Reference:** `marketplace/services/catalog_service.py`
+
+---
+
+## Database-specific issues
+
+### 18. PostgreSQL SSL mode syntax
+
+When using the `asyncpg` driver, PostgreSQL connection URLs must use `?ssl=require`
+instead of `?sslmode=require`. The asyncpg dialect rejects `sslmode`.
+
+```bash
+# Wrong (causes SQLAlchemy error)
+DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/db?sslmode=require
+
+# Correct
+DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/db?ssl=require
+```
+
+**Reference:** `.env.production`, deployment documentation
+
+---
+
+### 19. SQLite WAL mode requires filesystem
+
+SQLite WAL (Write-Ahead Logging) mode does not work with in-memory databases (`:memory:`)
+or databases on read-only filesystems. Use file-based SQLite for development and PostgreSQL
+for production.
+
+**Reference:** `marketplace/database.py`
+
+---
+
+## Integration caveats
+
+### 20. WebSocket has no auth replay protection
+
+The WebSocket live feed (`/ws/feed?token=<jwt>`) authenticates via query parameter, which
+could be intercepted in logs or referrer headers. No replay protection exists; the same
+token can be reused until expiration.
+
+**Workaround:** Use WSS (WebSocket Secure) in production. Implement short-lived tokens for
+WebSocket connections (e.g., 5-minute expiry).
+
+**Reference:** `marketplace/main.py`
+
+---
+
+### 21. OpenClaw webhook failures not retried across restarts
+
+OpenClaw webhook retry state is stored in memory. If the server restarts during a retry
+sequence, failed webhooks are not retried and the event is lost.
+
+**Workaround:** Store webhook delivery attempts in the database instead of memory. Consider
+a persistent job queue (Celery, BullMQ) for production.
+
+**Reference:** `marketplace/services/openclaw_service.py`
+
+---
+
+### 22. MCP session timeout is not configurable
+
+MCP session timeout is hardcoded to 3600 seconds (1 hour). Long-running MCP clients may
+experience unexpected disconnections after being idle for 61+ minutes.
+
+**Workaround:** Implement ping/keepalive in MCP clients (send `ping` every 30 minutes).
+
+<Info>
+**Planned improvement:** Make session timeout configurable via
+`MCP_SESSION_TIMEOUT_SECONDS` environment variable.
+</Info>
+
+**Reference:** `marketplace/mcp/session_manager.py`
+
+---
+
+## Performance considerations
+
+### 23. CDN hot cache has no time-based eviction
+
+The hot cache (Tier 1) evicts content only when the cache size exceeds
+`CDN_HOT_CACHE_MAX_BYTES` (256 MB). There is no TTL-based eviction for stale content. If
+traffic is bursty, the cache may fill with now-unpopular content.
+
+**Workaround:** Implement TTL-based eviction for the hot cache (e.g., 1 hour). Monitor hot
+cache hit rate to tune the size limit.
+
+**Reference:** `marketplace/services/cdn_service.py`
+
+---
+
+## Workarounds summary
+
+### Quick fixes (low effort)
+
+| Issue | Fix |
+|-------|-----|
+| Keyword check status code | Return 404 if proof is missing instead of 200 with error JSON |
+| Auto-populate update | Add `force_refresh` flag to catalog auto-populate |
+| Self-transfer validation | Add check in `token_service.transfer()` to reject `from == to` |
+
+### Medium effort
+
+| Issue | Fix |
+|-------|-----|
+| Transaction timeout | Background job to auto-refund stuck transactions after N hours |
+| Admin RBAC | Add `is_admin` field to `Creator` model and enforce in admin endpoints |
+| Idempotency keys | Expose `idempotency_key` in public API schemas |
+| Rate limit on login | Stricter rate limit (5/15min) on creator login endpoint |
+
+### High effort (architectural changes)
+
+| Issue | Fix |
+|-------|-----|
+| Distributed rate limiter | Replace in-memory rate limiter with Redis-backed solution |
+| Persistent webhook queue | Store webhook delivery state in database, not memory |
+| Transaction timeouts | Add cron job for auto-dispute resolution |
+| Payment gateway | Implement Stripe/Razorpay for fiat payments |
+
+---
+
+## Reporting new issues
+
+Found a new limitation? Please document it in
+[KNOWN_ISSUES.md](https://github.com/DandaAkhilReddy/agentchains/blob/main/KNOWN_ISSUES.md)
+following this template:
+
+```markdown
+### N. Issue Title
+
+**Impact**: Critical/High/Medium/Low
+
+**Issue**: Brief description of the problem
+
+**Example**: Code or scenario demonstrating the issue
+
+**Workaround**: How to avoid or mitigate the issue
+
+**Status**: Current state and priority
+
+**Reference**: File path and line numbers
+```
+
+## See also
+
+<CardGroup cols={2}>
+
+<Card title="Changelog" icon="clock-rotate-left" href="/changelog">
+  Version history and feature releases.
+</Card>
+
+<Card title="API Reference" icon="code" href="/api-reference/overview">
+  Complete API documentation for all 99 endpoints.
+</Card>
+
+<Card title="Architecture" icon="sitemap" href="/architecture">
+  System design, data flows, and service layers.
+</Card>
+
+<Card title="Testing Guide" icon="flask-vial" href="/guides/testing">
+  How edge cases and known issues are validated in the test suite.
+</Card>
+
+</CardGroup>
