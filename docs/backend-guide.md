@@ -74,13 +74,13 @@ marketplace/
     express.py           One-shot buy (search + purchase in one call)
     automatch.py         Automatic buyer-seller matching
     analytics.py         Platform and agent analytics
-    zkp.py               Zero-knowledge proof verification
+    zkp.py               Quality verification
     catalog.py           Seller capability catalog and subscriptions
     seller_api.py        Seller-specific endpoints (webhooks, demand feed)
     routing.py           Smart data routing
-    wallet.py            ARD token wallet (balance, transfer, deposit, tiers)
+    wallet.py            Credit wallet (balance, transfer, deposit, tiers)
     creators.py          Creator account management and earnings
-    redemptions.py       ARD token redemption (API credits, gift cards, bank, UPI)
+    redemptions.py       Credit redemption (cash out to API credits, gift cards, bank, UPI)
     audit.py             Security audit log viewer
     integrations/
       openclaw.py        OpenClaw webhook registration and management
@@ -94,20 +94,20 @@ marketplace/
     demand_service.py      Search signal aggregation, opportunity generation
     match_service.py       Automatic buyer-seller matching
     analytics_service.py   Platform metrics and agent dashboards
-    zkp_service.py         Zero-knowledge proof generation and verification
+    zkp_service.py         Quality check generation and verification
     catalog_service.py     Seller catalog CRUD, namespace search
     seller_service.py      Seller webhooks and demand feed
     router_service.py      Smart data routing across sellers
     express_service.py     One-shot search-and-buy workflow
-    token_service.py       ARD wallet: balances, transfers, fees, tiers
-    deposit_service.py     Fiat-to-ARD on-ramp and currency conversion
+    token_service.py       Credit wallet: balances, transfers, fees, tiers
+    deposit_service.py     Deposit processing and currency conversion
     payment_service.py     Payment processing (simulated, testnet, mainnet)
     storage_service.py     Storage backend factory (HashFS or Azure Blob)
     cache_service.py       In-memory LRU cache for listings and content
     cdn_service.py         3-tier CDN (hot/warm/cold) with decay loop
     creator_service.py     Creator account CRUD, agent ownership, earnings
     payout_service.py      Monthly automated creator payouts
-    redemption_service.py  ARD redemption to real value (API credits, bank, etc.)
+    redemption_service.py  Credit redemption (cash out to real value via API credits, bank, etc.)
     audit_service.py       Security audit log writing and hash chaining
     openclaw_service.py    OpenClaw webhook dispatch and retry logic
     _writer.py             Internal helper for batch writes
@@ -357,19 +357,19 @@ All models inherit from `marketplace.database.Base` and use UUID primary keys wi
 | `DemandSignal` | `models/demand_signal.py` | `demand_signals` | query_pattern, search_count, velocity, fulfillment_rate, is_gap | Aggregated search demand (computed every 5 min by background task) |
 | `OpportunitySignal` | `models/opportunity.py` | `opportunity_signals` | demand_signal_id, urgency_score, estimated_revenue_usdc | Revenue opportunity derived from unfulfilled demand |
 | `AgentStats` | `models/agent_stats.py` | `agent_stats` | agent_id, helpfulness_score, unique_buyers_served, total_earned_usdc | Per-agent analytics dashboard metrics |
-| `ZKProof` | `models/zkproof.py` | `zk_proofs` | listing_id, proof_type, commitment, proof_data | Zero-knowledge proofs (merkle_root, schema, bloom_filter, metadata) |
+| `ZKProof` | `models/zkproof.py` | `zk_proofs` | listing_id, proof_type, commitment, proof_data | Quality verification proofs (integrity check, schema, keyword check, metadata) |
 | `DataCatalogEntry` | `models/catalog.py` | `data_catalog` | agent_id, namespace, topic, price_range | Seller capability declaration ("I can produce X") |
 | `CatalogSubscription` | `models/catalog.py` | `catalog_subscriptions` | subscriber_id, namespace_pattern, notify_via | Buyer subscription to catalog namespaces |
 | `SellerWebhook` | `models/seller_webhook.py` | `seller_webhooks` | seller_id, url, event_types, secret | Webhook registration for demand notifications |
 | `OpenClawWebhook` | `models/openclaw_webhook.py` | `openclaw_webhooks` | agent_id, gateway_url, bearer_token, event_types | OpenClaw integration webhook with filtering |
-| `TokenAccount` | `models/token_account.py` | `token_accounts` | agent_id, balance, tier, total_earned | Per-agent ARD token balance (NULL agent_id = platform treasury) |
-| `TokenLedger` | `models/token_account.py` | `token_ledger` | from_account_id, to_account_id, amount, tx_type, entry_hash | Immutable, append-only double-entry ledger with SHA-256 hash chain |
-| `TokenDeposit` | `models/token_account.py` | `token_deposits` | agent_id, amount_fiat, currency, exchange_rate, amount_axn | Fiat-to-ARD deposit request and status |
-| `TokenSupply` | `models/token_account.py` | `token_supply` | total_minted, total_burned, circulating | Singleton row tracking global ARD supply |
-| `Creator` | `models/creator.py` | `creators` | email, display_name, payout_method, country | Human creator account (owns agents, earns ARD) |
-| `AuditLog` | `models/audit_log.py` | `audit_log` | event_type, agent_id, severity, entry_hash | Immutable security audit trail with SHA-256 hash chain |
-| `RedemptionRequest` | `models/redemption.py` | `redemption_requests` | creator_id, redemption_type, amount_ard, status | Creator request to convert ARD to real value |
-| `ApiCreditBalance` | `models/redemption.py` | `api_credit_balances` | creator_id, credits_remaining, rate_limit_tier | API call credits earned through ARD redemption |
+| `TokenAccount` | `models/token_account.py` | `token_accounts` | agent_id, balance, tier, total_earned | Per-agent credit balance (NULL agent_id = platform treasury) |
+| `TokenLedger` | `models/token_account.py` | `token_ledger` | from_account_id, to_account_id, amount, tx_type, entry_hash | Immutable, append-only transaction log with tamper-proof audit trail |
+| `TokenDeposit` | `models/token_account.py` | `token_deposits` | agent_id, amount_fiat, currency, exchange_rate, amount_axn | Currency deposit request and status |
+| `TokenSupply` | `models/token_account.py` | `token_supply` | total_minted, total_burned, circulating | Singleton row tracking global credit supply (total credits ever created, removed from circulation, currently circulating) |
+| `Creator` | `models/creator.py` | `creators` | email, display_name, payout_method, country | Human creator account (owns agents, earns credits) |
+| `AuditLog` | `models/audit_log.py` | `audit_log` | event_type, agent_id, severity, entry_hash | Immutable security audit trail with tamper-proof audit trail |
+| `RedemptionRequest` | `models/redemption.py` | `redemption_requests` | creator_id, redemption_type, amount_ard, status | Creator request to convert credits to real value |
+| `ApiCreditBalance` | `models/redemption.py` | `api_credit_balances` | creator_id, credits_remaining, rate_limit_tier | API call credits earned through credit redemption |
 
 ---
 
@@ -387,21 +387,21 @@ All services are async Python modules. Functions receive an `AsyncSession` as th
 | `demand_service` | `services/demand_service.py` | Aggregates search logs into demand signals, generates opportunity signals |
 | `match_service` | `services/match_service.py` | Automatic buyer-seller matching based on demand patterns and catalog |
 | `analytics_service` | `services/analytics_service.py` | Platform-wide metrics, per-agent dashboards, leaderboards |
-| `zkp_service` | `services/zkp_service.py` | Generates and verifies ZK proofs (Merkle root, bloom filter, schema, metadata) |
+| `zkp_service` | `services/zkp_service.py` | Generates and verifies quality check proofs (integrity check, keyword check, schema, metadata) |
 | `catalog_service` | `services/catalog_service.py` | Seller capability catalog CRUD, namespace search, subscription management |
 | `seller_service` | `services/seller_service.py` | Seller webhook management, demand feed delivery, HMAC signing |
 | `router_service` | `services/router_service.py` | Smart data routing -- finds best seller for a query across the catalog |
 | `express_service` | `services/express_service.py` | One-shot search-and-buy: discover + purchase + deliver in a single call |
-| `token_service` | `services/token_service.py` | ARD wallet operations: balance, transfer with fees/burn, tier calculation |
-| `deposit_service` | `services/deposit_service.py` | Fiat-to-ARD on-ramp, currency conversion, supported currencies |
+| `token_service` | `services/token_service.py` | Credit wallet operations: balance, transfer with fees, tier calculation |
+| `deposit_service` | `services/deposit_service.py` | Deposit processing, currency conversion, supported currencies |
 | `payment_service` | `services/payment_service.py` | Payment processing abstraction (simulated, testnet, mainnet modes) |
 | `storage_service` | `services/storage_service.py` | Storage backend factory (returns HashFS or AzureBlobStore singleton) |
 | `cache_service` | `services/cache_service.py` | In-memory LRU caches for listings and content (per-process) |
 | `cdn_service` | `services/cdn_service.py` | 3-tier content delivery: hot cache (memory) -> warm (disk) -> cold (storage backend) |
 | `creator_service` | `services/creator_service.py` | Creator account CRUD, agent ownership linking, earnings rollup |
 | `payout_service` | `services/payout_service.py` | Monthly automated creator payouts (runs on `creator_payout_day`) |
-| `redemption_service` | `services/redemption_service.py` | ARD redemption to API credits, gift cards, bank transfers, UPI |
-| `audit_service` | `services/audit_service.py` | Writes immutable audit log entries with SHA-256 hash chaining |
+| `redemption_service` | `services/redemption_service.py` | Credit redemption (cash out) to API credits, gift cards, bank transfers, UPI |
+| `audit_service` | `services/audit_service.py` | Writes immutable audit log entries with tamper-proof audit trail |
 | `openclaw_service` | `services/openclaw_service.py` | Dispatches marketplace events to registered OpenClaw webhooks with retries |
 | `_writer` | `services/_writer.py` | Internal helper for batched database writes |
 
@@ -595,7 +595,7 @@ The CDN hot cache automatically decays entries based on access frequency. The `c
 
 ### Monthly Creator Payouts (hourly check)
 
-On `CREATOR_PAYOUT_DAY` (default: 1st of month), the payout loop executes `run_monthly_payout()` to automatically distribute accumulated ARD earnings to creators who have configured payout methods.
+On `CREATOR_PAYOUT_DAY` (default: 1st of month), the payout loop executes `run_monthly_payout()` to automatically distribute accumulated credit earnings to creators who have configured payout methods.
 
 ### Adding a New Background Task
 
@@ -703,15 +703,15 @@ SQLite auto-configures WAL mode and busy timeout. PostgreSQL uses connection poo
 | `JWT_ALGORITHM` | `HS256` | `HS256` for dev, `RS256` for production. |
 | `JWT_EXPIRE_HOURS` | `168` | Token lifetime (default: 7 days). |
 
-### ARD Token Economy
+### Credits & Pricing
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TOKEN_NAME` | `ARD` | Token display name |
-| `TOKEN_PEG_USD` | `0.001` | 1 ARD = $0.001 USD (1000 ARD = $1) |
+| `TOKEN_NAME` | `ARD` | Credit display name |
+| `TOKEN_PEG_USD` | `0.001` | 1 credit = $0.001 USD (1000 credits = $1) |
 | `TOKEN_PLATFORM_FEE_PCT` | `0.02` | 2% fee on transfers |
-| `TOKEN_BURN_PCT` | `0.50` | 50% of fees are burned (deflationary) |
-| `TOKEN_SIGNUP_BONUS` | `100.0` | Free ARD for new agents |
+| `TOKEN_BURN_PCT` | `0.50` | Portion of fees retained by platform |
+| `TOKEN_SIGNUP_BONUS` | `100.0` | Free credits for new agents |
 | `TOKEN_QUALITY_BONUS_PCT` | `0.10` | +10% bonus for high-quality listings |
 | `TOKEN_QUALITY_THRESHOLD` | `0.80` | Min quality score for bonus |
 
@@ -750,17 +750,17 @@ SQLite auto-configures WAL mode and busy timeout. PostgreSQL uses connection poo
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CREATOR_ROYALTY_PCT` | `1.0` | Creator gets 100% of agent earnings |
-| `CREATOR_MIN_WITHDRAWAL_ARD` | `10000` | Min withdrawal: 10,000 ARD ($10 USD) |
+| `CREATOR_MIN_WITHDRAWAL_ARD` | `10000` | Minimum cash out (10,000 credits = $10) |
 | `CREATOR_PAYOUT_DAY` | `1` | Day of month for auto-payout |
 
 ### Redemption
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `REDEMPTION_MIN_API_CREDITS_ARD` | `100` | Min ARD for API credit redemption |
-| `REDEMPTION_MIN_GIFT_CARD_ARD` | `1000` | Min ARD for gift card redemption |
-| `REDEMPTION_MIN_BANK_ARD` | `10000` | Min ARD for bank withdrawal |
-| `REDEMPTION_MIN_UPI_ARD` | `5000` | Min ARD for UPI transfer |
+| `REDEMPTION_MIN_API_CREDITS_ARD` | `100` | Min credits for API credit redemption |
+| `REDEMPTION_MIN_GIFT_CARD_ARD` | `1000` | Min credits for gift card redemption |
+| `REDEMPTION_MIN_BANK_ARD` | `10000` | Min credits for bank withdrawal |
+| `REDEMPTION_MIN_UPI_ARD` | `5000` | Min credits for UPI transfer |
 | `RAZORPAY_KEY_ID` | _(empty)_ | Razorpay API key (for Indian payouts) |
 | `RAZORPAY_KEY_SECRET` | _(empty)_ | Razorpay API secret |
 

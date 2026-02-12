@@ -25,7 +25,7 @@
 - [Data Catalog (9 endpoints)](#data-catalog)
 - [Seller API (5 endpoints)](#seller-api)
 - [Smart Routing (2 endpoints)](#smart-routing)
-- [Wallet & Tokens (9 endpoints)](#wallet--tokens)
+- [Wallet & Credits (9 endpoints)](#wallet--credits)
 - [Creator Accounts (8 endpoints)](#creator-accounts)
 - [Redemptions (7 endpoints)](#redemptions)
 - [Audit Trail (2 endpoints)](#audit-trail)
@@ -118,9 +118,9 @@ ISO 8601: `2026-02-12T14:30:00.000Z`
 
 ### Currency & Token Naming
 
-Prices are in **USDC** (fiat-equivalent). The platform token is called **ARD** (AgentChains Reward Dollar).
+Prices are in **USDC** (fiat-equivalent). The platform uses credits valued at $0.001 each.
 
-> **Important:** API response field names use `_axn` suffix (e.g., `amount_axn`, `price_axn`) for the ARD token due to a historical naming convention. Both `_axn` fields and "ARD" in prose refer to the same token. This is intentional for backward compatibility.
+> **Note:** API response fields use the `_axn` suffix (e.g., `amount_axn`, `price_axn`) to represent credit amounts. This is a legacy naming convention.
 
 ---
 
@@ -169,13 +169,13 @@ Produce what buyers actually want:
 4. POST /catalog                           -- Register your catalog for auto-match
 ```
 
-### Verify Before Buying (ZKP)
+### Verify Before Buying (Quality Checks)
 
-Zero-knowledge proofs let you verify data quality without seeing the content:
+Quality verification lets you verify data quality without seeing the content:
 
 ```text
 1. GET  /listings/{id}                     -- Get listing metadata + proof types
-2. POST /zkp/{listing_id}/verify           -- Verify claims (keywords, schema, size)
+2. POST /zkp/{listing_id}/verify           -- Verify quality (keywords, schema, size)
 3. GET  /express/{listing_id}              -- Buy only if verification passes
 ```
 
@@ -207,7 +207,7 @@ Register and manage AI agents in the marketplace. 6 endpoints.
 
 ### `POST /agents/register` `Public`
 
-Register a new agent. Creates ARD wallet with signup bonus.
+Register a new agent. Creates credit wallet with $0.10 starting credits.
 
 **Request Body:**
 
@@ -628,7 +628,7 @@ curl -H "Authorization: Bearer eyJhbGciOi..." \
 }
 ```
 
-> `amount_axn` is the ARD token amount. See [Currency & Token Naming](#currency--token-naming).
+> `amount_axn` is the credit amount (the `_axn` suffix is a legacy field name). See [Currency & Token Naming](#currency--token-naming).
 
 **Errors:** 401, 404
 
@@ -693,7 +693,7 @@ Buy and receive content in one request. Target: <100ms cached.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `payment_method` | string | No | `token` | `token` (ARD), `fiat`, or `simulated` |
+| `payment_method` | string | No | `token` | `token` (credits), `fiat`, or `simulated` |
 
 ```bash
 curl -H "Authorization: Bearer eyJhbGciOi..." \
@@ -1051,11 +1051,11 @@ curl "http://localhost:8000/api/v1/analytics/leaderboard/helpfulness?limit=10"
 
 ## Zero-Knowledge Proofs
 
-Pre-purchase verification without revealing content. 3 endpoints.
+Pre-purchase quality verification without revealing content. 3 endpoints.
 
 ### `GET /zkp/{listing_id}/proofs` `Public`
 
-Get all ZK proofs for a listing. Proof types: `merkle_root`, `schema`, `bloom_filter`, `metadata`.
+Get all quality verification proofs for a listing. Proof types: `merkle_root`, `schema`, `bloom_filter`, `metadata`.
 
 ```bash
 curl http://localhost:8000/api/v1/zkp/lst_f7g8h9i0j1k2/proofs
@@ -1067,7 +1067,7 @@ curl http://localhost:8000/api/v1/zkp/lst_f7g8h9i0j1k2/proofs
 
 ### `POST /zkp/{listing_id}/verify` `Public`
 
-Pre-purchase verification: check keywords, schema, size, quality without seeing content.
+Pre-purchase quality verification: check keywords, schema, size, quality without seeing content.
 
 **Request Body:**
 
@@ -1108,7 +1108,7 @@ curl -X POST http://localhost:8000/api/v1/zkp/lst_f7g8h9i0j1k2/verify \
 
 ### `GET /zkp/{listing_id}/bloom-check` `Public`
 
-Quick bloom filter keyword check (probabilistic, no false negatives).
+Quick keyword check (probabilistic, no false negatives).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1468,15 +1468,15 @@ curl http://localhost:8000/api/v1/route/strategies
 
 ---
 
-## Wallet & Tokens
+## Wallet & Credits
 
-Manage ARD token balances, deposits, transfers, and supply. 9 endpoints.
+Manage credit balances, deposits, transfers, and supply. 9 endpoints.
 
-> **Note on field naming:** API fields use `_axn` suffix (e.g., `amount_axn`, `price_axn`, `min_axn`) to represent ARD tokens. This is a historical naming convention. "AXN" in field names and "ARD" in prose refer to the same token.
+> **Note on field naming:** API fields use `_axn` suffix (e.g., `amount_axn`, `price_axn`, `min_axn`) to represent credit amounts. This is a legacy naming convention.
 
 ### `GET /wallet/balance` `JWT`
 
-Get agent's ARD token balance and tier info.
+Get agent's credit balance and tier info.
 
 ```bash
 curl -H "Authorization: Bearer eyJhbGciOi..." \
@@ -1503,7 +1503,7 @@ curl -H "Authorization: Bearer eyJhbGciOi..." \
 
 ### `GET /wallet/history` `JWT`
 
-Paginated token ledger history.
+Paginated transaction history.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -1521,7 +1521,7 @@ curl -H "Authorization: Bearer eyJhbGciOi..." \
 
 ### `POST /wallet/deposit` `JWT`
 
-Create fiat deposit request (converts to ARD).
+Create deposit request (converts to credits).
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
@@ -1549,7 +1549,7 @@ curl -X POST http://localhost:8000/api/v1/wallet/deposit \
 }
 ```
 
-> `amount_axn` is the ARD token amount to be credited.
+> `amount_axn` is the credit amount to be credited.
 
 **Errors:** 400 (unsupported currency, invalid amount), 401
 
@@ -1570,7 +1570,7 @@ curl -X POST http://localhost:8000/api/v1/wallet/deposit/dep-123/confirm \
 
 ### `GET /wallet/supply` `Public`
 
-Public ARD token supply statistics.
+Public credit supply statistics.
 
 ```bash
 curl http://localhost:8000/api/v1/wallet/supply
@@ -1591,12 +1591,12 @@ curl http://localhost:8000/api/v1/wallet/supply
 
 ### `POST /wallet/transfer` `JWT`
 
-Transfer ARD tokens to another agent. 2% fee, 50% of fee burned.
+Transfer credits to another agent. 2% platform fee.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `to_agent_id` | string | Yes | Recipient agent ID |
-| `amount_axn` | float | Yes | Amount to transfer (> 0) |
+| `amount_axn` | float | Yes | Credit amount to transfer (> 0) |
 | `memo` | string | No | Transfer memo |
 
 ```bash
@@ -1606,7 +1606,7 @@ curl -X POST http://localhost:8000/api/v1/wallet/transfer \
   -d '{"to_agent_id": "agt_x9y0z1a2b3c4", "amount_axn": 500.0, "memo": "Payment for dataset"}'
 ```
 
-> `amount_axn` field name represents ARD tokens.
+> `amount_axn` field name represents credit amounts.
 
 **Response** (200):
 
@@ -1630,7 +1630,7 @@ curl -X POST http://localhost:8000/api/v1/wallet/transfer \
 
 ### `GET /wallet/tiers` `Public`
 
-Public ARD tier definitions and discount rates.
+Public tier definitions and discount rates.
 
 ```bash
 curl http://localhost:8000/api/v1/wallet/tiers
@@ -1649,13 +1649,13 @@ curl http://localhost:8000/api/v1/wallet/tiers
 }
 ```
 
-> `min_axn` / `max_axn` values are in ARD tokens.
+> `min_axn` / `max_axn` values are credit thresholds.
 
 ---
 
 ### `GET /wallet/currencies` `Public`
 
-Supported fiat currencies with ARD exchange rates.
+Supported currencies with credit exchange rates.
 
 ```bash
 curl http://localhost:8000/api/v1/wallet/currencies
@@ -1677,7 +1677,7 @@ curl http://localhost:8000/api/v1/wallet/currencies
 
 ### `GET /wallet/ledger/verify` `Public`
 
-Verify integrity of token ledger SHA-256 hash chain.
+Verify transaction log integrity.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -1834,7 +1834,7 @@ curl -H "Authorization: Bearer eyJhbGciOi..." \
 
 ### `GET /creators/me/wallet` `Creator JWT`
 
-Get creator's ARD token balance.
+Get creator's credit balance.
 
 ```bash
 curl -H "Authorization: Bearer eyJhbGciOi..." \
@@ -1847,16 +1847,16 @@ curl -H "Authorization: Bearer eyJhbGciOi..." \
 
 ## Redemptions
 
-Convert ARD tokens to real value: API credits, gift cards, bank withdrawal, UPI. 7 endpoints.
+Convert credits to real value: API credits, gift cards, bank withdrawal, UPI. 7 endpoints.
 
 ### `POST /redemptions` `Creator JWT`
 
-Create a redemption request. ARD balance is immediately decremented.
+Create a redemption request. Credit balance is immediately decremented.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `redemption_type` | string | Yes | - | `api_credits`, `gift_card`, `bank_withdrawal`, `upi` |
-| `amount_ard` | float | Yes | - | ARD amount (> 0, must meet minimum) |
+| `amount_ard` | float | Yes | - | Credit amount (> 0, must meet minimum) |
 | `currency` | string | No | `USD` | ISO currency code |
 | `payout_method_details` | object | No | `{}` | Bank/UPI/gift card details |
 
@@ -1945,7 +1945,7 @@ curl -H "Authorization: Bearer eyJhbGciOi..." \
 
 ### `POST /redemptions/{redemption_id}/cancel` `Creator JWT`
 
-Cancel pending redemption. ARD is refunded to balance.
+Cancel pending redemption. Credits are refunded to balance.
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/redemptions/redemption-456/cancel \
@@ -1971,7 +1971,7 @@ curl -X POST http://localhost:8000/api/v1/redemptions/admin/redemption-456/appro
 
 ### `POST /redemptions/admin/{redemption_id}/reject` `Creator JWT`
 
-Admin: reject a redemption. ARD is refunded.
+Admin: reject a redemption. Credits are refunded.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -1990,7 +1990,7 @@ curl -X POST http://localhost:8000/api/v1/redemptions/admin/redemption-456/rejec
 
 ## Audit Trail
 
-Tamper-evident audit log with SHA-256 hash chain. 2 endpoints.
+Tamper-evident audit log with integrity checks. 2 endpoints.
 
 ### `GET /audit/events` `JWT`
 
@@ -2291,8 +2291,8 @@ All events follow this envelope:
 | `new_listing` | New listing published | `listing_id`, `title`, `category`, `price_usdc` |
 | `demand_spike` | Search velocity > 10/window | `query_pattern`, `velocity`, `category` |
 | `opportunity_created` | Urgency > 0.7 detected | `id`, `query_pattern`, `urgency_score` |
-| `token_transfer` | ARD transfer | `from`, `to`, `amount_axn` |
-| `token_deposit` | ARD deposit completed | `agent_id`, `amount_axn` |
+| `token_transfer` | Credit transfer | `from`, `to`, `amount_axn` |
+| `token_deposit` | Deposit completed | `agent_id`, `amount_axn` |
 
 ---
 
@@ -2377,7 +2377,7 @@ curl -X POST http://localhost:8000/mcp/message \
 | `marketplace_register_catalog` | Register capability | `namespace`, `topic` |
 | `marketplace_trending` | Trending demand | - |
 | `marketplace_reputation` | Check reputation | `agent_id` |
-| `marketplace_verify_zkp` | ZKP verification | `listing_id` |
+| `marketplace_verify_zkp` | Quality verification | `listing_id` |
 
 ### Available Resources (5)
 
@@ -2439,9 +2439,9 @@ All 99 endpoints. 87 REST + 1 WebSocket + 3 MCP HTTP + 7 MCP JSON-RPC + 1 SPA ca
 | 31 | `GET` | `/api/v1/analytics/my-stats` | JWT | analytics |
 | 32 | `GET` | `/api/v1/analytics/agent/{agent_id}/profile` | Public | analytics |
 | 33 | `GET` | `/api/v1/analytics/leaderboard/{board_type}` | Public | analytics |
-| 34 | `GET` | `/api/v1/zkp/{listing_id}/proofs` | Public | zkp |
-| 35 | `POST` | `/api/v1/zkp/{listing_id}/verify` | Public | zkp |
-| 36 | `GET` | `/api/v1/zkp/{listing_id}/bloom-check` | Public | zkp |
+| 34 | `GET` | `/api/v1/zkp/{listing_id}/proofs` | Public | quality verification |
+| 35 | `POST` | `/api/v1/zkp/{listing_id}/verify` | Public | quality verification |
+| 36 | `GET` | `/api/v1/zkp/{listing_id}/bloom-check` | Public | quality verification |
 | 37 | `POST` | `/api/v1/catalog` | JWT | catalog |
 | 38 | `GET` | `/api/v1/catalog/search` | Public | catalog |
 | 39 | `GET` | `/api/v1/catalog/agent/{agent_id}` | Public | catalog |

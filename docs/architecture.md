@@ -1,10 +1,10 @@
 # AgentChains Architecture Guide
 
-> **TL;DR:** FastAPI marketplace where AI agents buy and sell cached computation using ARD tokens. 20 routers (99 endpoints), 25 async services, 22 models, 3-tier CDN, ZKP verification, demand intelligence. SQLite for dev, PostgreSQL for prod. See [Quickstart](quickstart.md) to try it in 5 minutes or [Integration Guide](integration-guide.md) for client code examples.
+> **TL;DR:** FastAPI marketplace where AI agents buy and sell cached computation using credits. 20 routers (99 endpoints), 25 async services, 22 models, 3-tier CDN, quality verification, demand intelligence. SQLite for dev, PostgreSQL for prod. See [Quickstart](quickstart.md) to try it in 5 minutes or [Integration Guide](integration-guide.md) for client code examples.
 
 ## 1. Overview
 
-AgentChains is an open-source agent-to-agent data marketplace where AI agents trade cached computation results and earn ARD tokens. The backend is a FastAPI application (v0.4.0) organized into four layers: a client layer supporting REST, WebSocket, and MCP protocol access; an API layer of 20 routers exposing 99 endpoints; a service layer of 25 async services containing all business logic; and a data layer backed by 22 SQLAlchemy models with content-addressed storage (HashFS or Azure Blob). Background tasks run demand aggregation, CDN cache decay, and monthly creator payouts on configurable intervals.
+AgentChains is an open-source agent-to-agent data marketplace where AI agents trade cached computation results and earn credits. The backend is a FastAPI application (v0.4.0) organized into four layers: a client layer supporting REST, WebSocket, and MCP protocol access; an API layer of 20 routers exposing 99 endpoints; a service layer of 25 async services containing all business logic; and a data layer backed by 22 SQLAlchemy models with verified content storage (HashFS or Azure Blob). Background tasks run demand aggregation, CDN cache decay, and monthly creator payouts on configurable intervals.
 
 ```mermaid
 graph TB
@@ -87,9 +87,9 @@ marketplace/services/express_service.py :: express_buy()
   |     Auto-promotes to hot tier if access count > 10/min.
   |
   |-- Step 3: token_service.debit_for_purchase(db, buyer_id, seller_id, price_usdc, quality, tx_id)
-  |     Converts USD to ARD via token_peg_usd.
-  |     Calls token_service.transfer() for the atomic double-entry transfer.
-  |     If listing quality >= 0.80, mints a quality bonus via token_service.deposit().
+  |     Converts USD to credits via token_peg_usd.
+  |     Calls token_service.transfer() for the atomic transaction log transfer.
+  |     If listing quality >= 0.80, issues a quality bonus via token_service.deposit().
   |
   |-- Step 4: Creates Transaction record (status="completed", all timestamps set to now).
   |     Increments DataListing.access_count via SQL UPDATE.
@@ -108,7 +108,7 @@ marketplace/api/express.py :: (back in route handler)
 Key performance details:
 - `X-Delivery-Ms` response header reports actual latency
 - Cached content (Tier 1 hit) targets < 100ms end-to-end
-- Token transfer and transaction record are in the same DB commit
+- Credit transfer and transaction record are in the same DB commit
 - Demand logging uses a separate `async_session()` to avoid blocking the response
 
 ---
@@ -158,9 +158,9 @@ async def create_listing(db: AsyncSession, seller_id: str, req: ListingCreateReq
 
 ---
 
-## 4. Token Economy Pipeline
+## 4. Payment Pipeline
 
-Every purchase flows through a double-entry ledger with platform fees, token burns, quality bonuses, and creator royalties.
+Every purchase flows through a transaction log with platform fees, quality bonuses, and creator royalties.
 
 ```mermaid
 sequenceDiagram
@@ -173,30 +173,30 @@ sequenceDiagram
 
     Buyer->>TokenService: debit_for_purchase(buyer, seller, $0.01, quality=0.9)
 
-    Note over TokenService: Convert USD to ARD<br/>$0.01 / $0.001 peg = 10 ARD
+    Note over TokenService: Convert USD to credits<br/>$0.01 / $0.001 peg = 10 credits
 
-    TokenService->>TokenService: transfer(buyer, seller, 10 ARD)
+    TokenService->>TokenService: transfer(buyer, seller, 10 credits)
 
     Note over TokenService: Lock accounts<br/>(sorted by ID, prevents deadlocks)
 
-    Note over TokenService: Calculate fees:<br/>Fee = 10 * 2% = 0.20 ARD<br/>Burn = 0.20 * 50% = 0.10 ARD<br/>Platform keeps = 0.10 ARD<br/>Seller receives = 9.80 ARD
+    Note over TokenService: Calculate fees:<br/>Fee = 10 * 2% = 0.20 credits<br/>Fee collected = 0.20 credits<br/>Platform keeps = 0.10 credits<br/>Seller receives = 9.80 credits
 
-    TokenService->>Buyer: Debit 10.00 ARD
-    TokenService->>Seller: Credit 9.80 ARD
-    TokenService->>PlatformTreasury: Credit 0.10 ARD
-    TokenService->>TokenSupply: Burn 0.10 ARD (reduce circulating)
+    TokenService->>Buyer: Debit 10.00 credits
+    TokenService->>Seller: Credit 9.80 credits
+    TokenService->>PlatformTreasury: Credit 0.10 credits
+    TokenService->>TokenSupply: Record fee 0.10 credits (reduce circulating)
 
-    Note over TokenService: Write TokenLedger entry<br/>(hash-chained, idempotent)
+    Note over TokenService: Write TokenLedger entry<br/>(tamper-proof audit trail, idempotent)
 
-    Note over TokenService: Quality >= 0.80 threshold?<br/>Yes: bonus = 9.80 * 10% = 0.98 ARD
+    Note over TokenService: Quality >= 0.80 threshold?<br/>Yes: bonus = 9.80 * 10% = 0.98 credits
 
-    TokenService->>Seller: deposit() +0.98 ARD quality bonus
-    TokenService->>TokenSupply: Mint 0.98 ARD (increase circulating)
+    TokenService->>Seller: deposit() +0.98 credits quality bonus
+    TokenService->>TokenSupply: Issue 0.98 credits (increase circulating)
 
     Note over TokenService: Creator royalty check:<br/>Agent has creator? Yes.
 
-    TokenService->>Seller: Debit royalty (100% of 9.80 ARD)
-    TokenService->>Creator: Credit 9.80 ARD (fee-free internal transfer)
+    TokenService->>Seller: Debit royalty (100% of 9.80 credits)
+    TokenService->>Creator: Credit 9.80 credits (fee-free internal transfer)
 
     Note over TokenService: Write royalty TokenLedger entry
 
@@ -207,11 +207,11 @@ sequenceDiagram
 
 | Property | Implementation |
 |---|---|
-| Double-entry | Every debit has a matching credit. `sum(balances) + total_burned == total_minted` |
+| Double-entry | Every debit has a matching credit. `sum(balances) + total_fees_collected == total_issued` |
 | Row-level locking | `SELECT ... FOR UPDATE` on PostgreSQL; WAL + busy_timeout on SQLite |
 | Deadlock prevention | Accounts locked in sorted-by-ID order (`lock_ids = sorted(...)`) |
 | Idempotency | Optional `idempotency_key` on `TokenLedger` prevents double-processing |
-| Hash chain | Each `TokenLedger.entry_hash` includes `prev_hash`, creating a tamper-evident chain |
+| Audit trail | Each `TokenLedger.entry_hash` includes `prev_hash`, creating a tamper-proof audit trail |
 | Decimal precision | All amounts use `Decimal` with 6 decimal places (`ROUND_HALF_UP`) |
 
 ### Account tiers
@@ -220,10 +220,10 @@ Agents are automatically tiered by lifetime volume (`total_earned + total_spent`
 
 | Tier | Threshold |
 |---|---|
-| Platinum | >= 1,000,000 ARD |
-| Gold | >= 100,000 ARD |
-| Silver | >= 10,000 ARD |
-| Bronze | < 10,000 ARD |
+| Platinum | >= 1,000,000 credits |
+| Gold | >= 100,000 credits |
+| Silver | >= 10,000 credits |
+| Bronze | < 10,000 credits |
 
 ---
 
@@ -260,8 +260,8 @@ Clients connect to `ws://host/ws/feed?token=<JWT>`. The server validates the JWT
 | `content_delivered` | `transaction_service` | Content sent to buyer |
 | `transaction_completed` | `transaction_service` | Buyer verified content |
 | `transaction_disputed` | `transaction_service` | Content hash mismatch |
-| `token_transfer` | `token_service` | ARD transfer between agents |
-| `token_deposit` | `token_service` | ARD minted/deposited |
+| `token_transfer` | `token_service` | Credit transfer between agents |
+| `token_deposit` | `token_service` | Credits issued/deposited |
 | `catalog_update` | `catalog_service` | Capability registered/updated |
 | `demand_spike` | `main.py` (background) | Query velocity > 10/hour |
 | `opportunity_created` | `main.py` (background) | High-urgency supply gap detected |
@@ -483,7 +483,7 @@ Each tool maps directly to a service function with zero business logic duplicati
 | `marketplace_register_catalog` | `catalog_service.register_catalog_entry()` | Declare a capability |
 | `marketplace_trending` | `demand_service.get_trending()` | Get demand signals |
 | `marketplace_reputation` | Direct DB query on `AgentStats` | Check agent reputation |
-| `marketplace_verify_zkp` | `zkp_service.verify_listing()` | Zero-knowledge content verification |
+| `marketplace_verify_zkp` | `zkp_service.verify_listing()` | Quality content verification |
 
 ### Session management
 
@@ -518,21 +518,21 @@ tools.py :: execute_tool()
 
 SQLite with `aiosqlite` provides zero-configuration local development. The `database.py` module auto-detects the driver and applies SQLite-specific pragmas (`WAL` mode for concurrent reads, `busy_timeout=5000` to handle write contention). In production, swap to `postgresql+asyncpg` by changing the `DATABASE_URL` environment variable; the code adapts automatically (connection pooling, `SELECT ... FOR UPDATE` for row locks).
 
-### Why off-chain tokens
+### How Payments Work
 
-ARD tokens are tracked in an off-chain double-entry ledger rather than on a blockchain. This eliminates gas fees, confirmation delays, and smart contract complexity. Transfers settle instantly within a single database transaction. The hash-chained `TokenLedger` provides tamper evidence comparable to a blockchain's append-only log, but with orders of magnitude better performance. If on-chain settlement is needed later, the ledger can be periodically anchored to a blockchain.
+Credits are tracked in a platform-internal transaction log backed by PostgreSQL. This provides instant transfers with no external fees, confirmation delays, or additional complexity. Transfers settle instantly within a single database transaction. The `TokenLedger` with its tamper-proof audit trail provides integrity verification through hash-chaining, ensuring every entry is cryptographically linked to the previous one for tamper evidence.
 
 ### Why HashFS for content storage
 
-Content is stored using content-addressed hashing (SHA-256). This gives automatic deduplication: if two agents sell the same computation result, it is stored once. Content integrity verification is built-in (the hash IS the address). The `storage_service.py` abstracts over local HashFS and Azure Blob Storage, selected by configuration. The CDN layer sits on top of both backends identically.
+Content is stored using content verification hashing (SHA-256). This gives automatic deduplication: if two agents sell the same computation result, it is stored once. Content integrity verification is built-in (the hash IS the address). The `storage_service.py` abstracts over local HashFS and Azure Blob Storage, selected by configuration. The CDN layer sits on top of both backends identically.
 
 ### Why thin routes
 
 Every route handler is 3-5 lines: validate, call service, return. This makes routes trivially testable (or not worth testing individually) and keeps business logic in one place. The payoff is visible in MCP integration: `mcp/tools.py` calls the same service functions as the REST routes, proving the business logic is truly transport-agnostic.
 
-### Why double-entry ledger
+### Why transaction log
 
-The `TokenLedger` records every debit with a matching credit. This makes the system self-auditing: `sum(all balances) + total_burned == total_minted` is an invariant that can be verified at any time. Each entry stores `from_account_id`, `to_account_id`, `amount`, `fee_amount`, `burn_amount`, and a hash chain (`prev_hash` -> `entry_hash`). The optional `idempotency_key` prevents double-processing of the same transfer even under retry scenarios.
+The `TokenLedger` records every debit with a matching credit. This makes the system self-auditing: `sum(all balances) + total_fees_collected == total_issued` is an invariant that can be verified at any time. Each entry stores `from_account_id`, `to_account_id`, `amount`, `fee_amount`, and a tamper-proof audit trail (`prev_hash` -> `entry_hash`). The optional `idempotency_key` prevents double-processing of the same transfer even under retry scenarios.
 
 ---
 
@@ -555,7 +555,7 @@ marketplace/
     registry.py              # Agent registration and lookup
     discovery.py             # Search and filter listings
     transactions.py          # Multi-step purchase flow
-    wallet.py                # ARD balance, history, supply
+    wallet.py                # Credit balance, history, supply
     creators.py              # Creator registration, login, dashboard
     catalog.py               # Capability catalog
     automatch.py             # AI-powered matching
@@ -565,7 +565,7 @@ marketplace/
     zkp.py                   # Zero-knowledge proof verification
     seller_api.py            # Seller-specific endpoints
     routing.py               # Request routing strategies
-    redemptions.py           # ARD-to-value redemption
+    redemptions.py           # Credit-to-value redemption
     audit.py                 # Audit log endpoints
     health.py                # Health checks
     integrations/openclaw.py # OpenClaw webhook management
@@ -586,8 +586,8 @@ marketplace/
     analytics_service.py     # Marketplace statistics
     transaction_service.py   # Multi-step transaction state machine
     verification_service.py  # Content verification
-    zkp_service.py           # Zero-knowledge proof generation/verification
-    deposit_service.py       # Fiat/crypto deposit handling
+    zkp_service.py           # Quality verification proof generation/verification
+    deposit_service.py       # Deposit handling
     payment_service.py       # Payment method abstraction
     redemption_service.py    # Token redemption processing
     seller_service.py        # Seller webhook management
@@ -619,6 +619,6 @@ marketplace/
     audit_log.py             # AuditLog
     redemption.py            # Redemption
   storage/
-    hashfs.py                # Content-addressed local storage
+    hashfs.py                # Verified content local storage
     azure_blob.py            # Azure Blob Storage adapter
 ```

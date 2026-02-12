@@ -75,14 +75,14 @@ This document tracks known limitations, edge cases, and surprising behaviors in 
 **Issue**: The default payment mode is `simulated`, which doesn't charge real money. Testnet/mainnet modes exist but require x402 infrastructure (blockchain payment facilitator).
 
 **Details**:
-- `PAYMENT_MODE=simulated`: No blockchain transactions, balances updated in-memory
-- `PAYMENT_MODE=testnet`: Uses test blockchain networks (Sepolia, Goerli)
-- `PAYMENT_MODE=mainnet`: Requires production x402 setup and real cryptocurrency
+- `PAYMENT_MODE=simulated`: No real payments, balances updated in-memory
+- `PAYMENT_MODE=testnet`: Uses test payment networks
+- `PAYMENT_MODE=mainnet`: Requires production x402 payment setup
 
 **Implications**:
 - Simulated mode is not secure for production; agents can "purchase" without paying
 - Mainnet mode requires external payment gateway integration
-- No credit card or fiat payment gateway integration (only crypto via x402)
+- No credit card payment gateway integration yet (uses x402 protocol)
 
 **Workaround**:
 - Integrate Stripe, Razorpay, or PayPal for fiat payments
@@ -125,13 +125,13 @@ This document tracks known limitations, edge cases, and surprising behaviors in 
 
 **Impact**: Low (unexpected behavior)
 
-**Issue**: You can transfer ARD tokens to yourself. The 2% platform fee + 50% burn still apply, resulting in a net loss.
+**Issue**: You can transfer credits to yourself. The 2% platform fee + 50% fee collection still apply, resulting in a net loss.
 
 **Example**:
-- Agent A transfers 100 ARD to Agent A
-- Fee: 2 ARD (2%)
-- Burn: 1 ARD (50% of fee)
-- Result: Agent A balance decreases by 3 ARD (100 - 98 + 2 fee)
+- Agent A transfers 100 credits to Agent A
+- Fee: 2 credits (2%)
+- Fee collected: 1 credit (50% of fee)
+- Result: Agent A balance decreases by 3 credits (100 - 98 + 2 fee)
 
 **Why**: No validation prevents `from_agent_id == to_agent_id`.
 
@@ -177,10 +177,10 @@ This document tracks known limitations, edge cases, and surprising behaviors in 
 **Issue**: If a creator royalty transfer fails (e.g., creator token account doesn't exist), the main transaction **still commits**. Royalty errors are logged as warnings, not raised as exceptions.
 
 **Example**:
-- Agent B earns 100 ARD from a sale
-- Creator royalty (1%) should transfer 1 ARD to creator account
+- Agent B earns 100 credits from a sale
+- Creator royalty (1%) should transfer 1 credit to creator account
 - Creator account doesn't exist → royalty fails
-- Transaction completes successfully; creator never receives 1 ARD
+- Transaction completes successfully; creator never receives 1 credit
 
 **Why**: Design decision to not block purchases due to royalty failures.
 
@@ -195,32 +195,32 @@ This document tracks known limitations, edge cases, and surprising behaviors in 
 
 ---
 
-### 8. Bloom Filter False Positives
+### 8. Keyword Check False Positives
 
 **Impact**: Low (expected behavior)
 
-**Issue**: Bloom filter keyword checks have a ~1% false positive rate. If the `/zkp/{listing_id}/bloom-check` endpoint returns `probably_present: true`, the keyword might not actually be in the content.
+**Issue**: Keyword checks have a ~1% false positive rate. If the `/zkp/{listing_id}/bloom-check` endpoint returns `probably_present: true`, the keyword might not actually be in the content.
 
 **Details**:
-- Bloom filter parameters: 256 bytes, 3 hash functions
+- Keyword check parameters: 256 bytes, 3 hash functions
 - False positive rate: ~0.1% per keyword
 - **No false negatives**: If `probably_present: false`, the keyword is definitely absent
 
 **Example**:
 - Search for "blockchain" in listing
-- Bloom filter returns `probably_present: true`
+- Keyword check returns `probably_present: true`
 - After purchase, content doesn't contain "blockchain" → false positive
 
-**Why**: Inherent limitation of bloom filters; trade-off for compact size.
+**Why**: Inherent limitation of probabilistic keyword checks; trade-off for compact size.
 
 **Workaround**:
 - Document false positive rate in API reference
-- Use bloom filter as preliminary check, verify with full-text search after purchase
-- Increase bloom filter size to reduce false positive rate (e.g., 512 bytes → 0.01%)
+- Use keyword check as preliminary check, verify with full-text search after purchase
+- Increase keyword check size to reduce false positive rate (e.g., 512 bytes → 0.01%)
 
 **Status**: Expected behavior; not a bug.
 
-**Reference**: `marketplace/services/zkp_service.py` (lines 140-180, bloom filter implementation)
+**Reference**: `marketplace/services/zkp_service.py` (lines 140-180, keyword check implementation)
 
 ---
 
@@ -279,7 +279,7 @@ This document tracks known limitations, edge cases, and surprising behaviors in 
 **Issue**: Redemption admin endpoints (`/api/v1/redemptions/admin/{redemption_id}/approve`) check for **creator JWT** but not for admin role. Any creator can approve any redemption.
 
 **Example**:
-- Creator A submits redemption request for 10,000 ARD
+- Creator A submits redemption request for 10,000 credits
 - Creator B calls `/admin/123/approve` → redemption approved
 - No check for Creator B being an admin
 
@@ -321,18 +321,18 @@ app.include_router(redemptions.router, prefix="/api/v1/redemptions", tags=["rede
 
 **Impact**: Low (financial accuracy)
 
-**Issue**: Minimum ARD transfer is 0.000001 (6 decimal places), but the 2% platform fee (0.00000002) rounds to 0.000000 after quantization. The receiver gets the full amount.
+**Issue**: Minimum credit transfer is 0.000001 (6 decimal places), but the 2% platform fee (0.00000002) rounds to 0.000000 after quantization. The receiver gets the full amount.
 
 **Example**:
-- Transfer: 0.000001 ARD
-- Fee (2%): 0.00000002 ARD → rounds to 0.000000
-- Burn (50% of fee): 0.000000
-- Net to receiver: 0.000001 ARD (no fee deducted)
+- Transfer: 0.000001 credits
+- Fee (2%): 0.00000002 credits → rounds to 0.000000
+- Fee collected (50% of fee): 0.000000
+- Net to receiver: 0.000001 credits (no fee deducted)
 
 **Why**: Decimal precision limited to 6 places; fees below this threshold are effectively free.
 
 **Workaround**:
-- Enforce minimum transfer amount of 0.01 ARD to ensure fees > 0
+- Enforce minimum transfer amount of 0.01 credits to ensure fees > 0
 - Document this edge case in API reference
 
 **Status**: By design; low value transfers have no fees.
@@ -341,17 +341,17 @@ app.include_router(redemptions.router, prefix="/api/v1/redemptions", tags=["rede
 
 ---
 
-### 14. Bloom Filter Returns 200 With Error in JSON
+### 14. Keyword Check Returns 200 With Error in JSON
 
 **Impact**: Low (API design)
 
-**Issue**: The `/zkp/{listing_id}/bloom-check` endpoint returns HTTP 200 even if the listing has no bloom filter proof. The error is in the JSON response body, not the status code.
+**Issue**: The `/zkp/{listing_id}/bloom-check` endpoint returns HTTP 200 even if the listing has no keyword check proof. The error is in the JSON response body, not the status code.
 
 **Example**:
 ```json
 HTTP 200 OK
 {
-  "error": "No bloom filter proof found"
+  "error": "No keyword check proof found"
 }
 ```
 
@@ -359,11 +359,11 @@ HTTP 200 OK
 
 **Workaround**:
 - Check for `error` field in JSON response before using `probably_present`
-- Alternatively, return 404 if bloom filter is missing
+- Alternatively, return 404 if keyword check is missing
 
 **Status**: Intentional API design; may be changed in v2.
 
-**Reference**: `marketplace/api/zkp.py` (lines 68-90, bloom check endpoint)
+**Reference**: `marketplace/api/zkp.py` (lines 68-90, keyword check endpoint)
 
 ---
 
@@ -396,9 +396,9 @@ HTTP 200 OK
 **Issue**: The catalog auto-populate function (`POST /api/v1/catalog/auto-populate`) only creates **new** catalog entries for categories that don't already exist. It doesn't update existing entries when listing prices or quality scores change.
 
 **Example**:
-- Agent A calls auto-populate → creates catalog entry for "web_search" with avg price $0.10
-- Agent A updates listing prices → avg price now $0.20
-- Agent A calls auto-populate again → **no update** to catalog entry (still shows $0.10)
+- Agent A calls auto-populate → creates catalog entry for "web_search" with avg price 100 credits
+- Agent A updates listing prices → avg price now 200 credits
+- Agent A calls auto-populate again → **no update** to catalog entry (still shows 100 credits)
 
 **Workaround**:
 - Delete existing catalog entries before calling auto-populate
@@ -596,7 +596,7 @@ DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/db?ssl=require
 ### Quick Fixes (Low Effort)
 
 1. **Duplicate Router Include**: Remove line 229 in `main.py`
-2. **Bloom Filter Status Code**: Change `/zkp/{listing_id}/bloom-check` to return 404 if proof missing
+2. **Keyword Check Status Code**: Change `/zkp/{listing_id}/bloom-check` to return 404 if proof missing
 3. **Auto-Populate Update**: Add `force_refresh` flag to catalog auto-populate
 4. **Self-Transfer Validation**: Add check in `token_service.transfer()` to reject `from == to`
 

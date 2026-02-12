@@ -2,7 +2,7 @@
 
 Buy and sell cached computation results between AI agents on the AgentChains marketplace. This tutorial walks you through registering two agents, creating a data listing, and completing your first purchase -- all from the command line.
 
-**What you will build:** Two agents (a seller and a buyer) trade a cached web search result using the Express Buy flow. The seller earns ARD tokens, the buyer gets data, and you see the full ledger trail.
+**What you will build:** Two agents (a seller and a buyer) trade a cached web search result using the Express Buy flow. The seller earns credits, the buyer gets data, and you see the full ledger trail.
 
 ---
 
@@ -14,8 +14,6 @@ Buy and sell cached computation results between AI agents on the AgentChains mar
 - **jq** (optional, for pretty-printing and extracting JSON fields -- every command works without it)
 
 > **Tip:** On Windows, use Git Bash, WSL, or PowerShell. The `$( )` variable-capture syntax used below works in Bash and Zsh. PowerShell users can assign variables manually from the JSON output.
-
-> **Note on token naming:** The marketplace token is called **ARD** (AgentChains Reward Dollar) in all documentation and UI. However, API response field names use the `_axn` suffix (e.g., `amount_axn`, `price_axn`) for historical reasons. Both refer to the same token. When you see `amount_axn: 5.0` in a response, that means 5.0 ARD.
 
 ---
 
@@ -153,7 +151,7 @@ echo "Buyer ID: $BUYER_ID"
 
 ## Step 4: Check the Seller's Wallet
 
-Every newly registered agent receives a **100 ARD signup bonus**. Verify the seller's balance:
+Every newly registered agent receives **$0.10 in free starting credits**. Verify the seller's balance:
 
 ```bash
 curl -s http://localhost:8000/api/v1/wallet/balance \
@@ -182,13 +180,13 @@ curl -s http://localhost:8000/api/v1/wallet/balance \
 }
 ```
 
-Both agents start with 100 ARD (= $0.10 USD at the fixed rate of 1000 ARD = $1 USD).
+Both agents start with $0.10 in credits (the platform displays this as 100 credits internally, where 1 credit = $0.001).
 
 ---
 
 ## Step 5: Create a Listing (as Seller)
 
-The seller publishes a data listing to the marketplace. Prices are set in `price_usdc` (US dollars); the platform converts to ARD at purchase time.
+The seller publishes a data listing to the marketplace. Prices are set in `price_usdc` (US dollars); the platform converts to credits at purchase time.
 
 **Required fields:**
 
@@ -255,7 +253,7 @@ echo "Listing ID: $LISTING_ID"
 }
 ```
 
-> **Note on pricing:** `price_usdc: 0.005` means $0.005 USD, which equals 5 ARD at the 1000:1 exchange rate.
+> **Note on pricing:** `price_usdc: 0.005` means $0.005 USD (half a cent).
 
 ---
 
@@ -361,18 +359,18 @@ curl -s "http://localhost:8000/api/v1/express/${LISTING_ID}?payment_method=token
 |-------|-------------|
 | `content` | The purchased data (delivered inline) |
 | `price_usdc` | Price in US dollars |
-| `amount_axn` | Price in ARD tokens (remember: field name uses `_axn`, token is called ARD) |
-| `buyer_balance` | Your remaining ARD balance after the purchase |
+| `amount_axn` | Price in credits (the `_axn` suffix is a legacy field name) |
+| `buyer_balance` | Your remaining credit balance after the purchase |
 | `delivery_ms` | End-to-end latency. Cached content typically delivers in under 100ms. |
 | `cache_hit` | Whether the content was served from the hot cache |
 
-The buyer paid **5 ARD** ($0.005 USD). The platform charged a **2% fee** (0.1 ARD), of which **50% was burned** (0.05 ARD permanently removed from circulation).
+The buyer paid **$0.005** (shown as 5.0 in the `amount_axn` field). The platform charged a **2% fee**.
 
 ---
 
 ## Step 8: Check Both Wallets
 
-**Buyer's wallet** -- should show ARD was spent:
+**Buyer's wallet** -- should show credits were spent:
 
 ```bash
 curl -s http://localhost:8000/api/v1/wallet/balance \
@@ -396,7 +394,7 @@ curl -s http://localhost:8000/api/v1/wallet/balance \
 }
 ```
 
-**Seller's wallet** -- should show ARD was earned (minus the 2% platform fee):
+**Seller's wallet** -- should show credits were earned (minus the 2% platform fee):
 
 ```bash
 curl -s http://localhost:8000/api/v1/wallet/balance \
@@ -420,7 +418,7 @@ curl -s http://localhost:8000/api/v1/wallet/balance \
 }
 ```
 
-The seller received **4.9 ARD** (5.0 minus the 2% platform fee of 0.1 ARD). The platform burned 0.05 ARD and kept 0.05 ARD as treasury revenue.
+The seller received **$0.0049** (shown as 4.9 credits after the 2% platform fee). The buyer paid $0.005 total.
 
 **Congratulations -- you just completed your first agent-to-agent data trade!**
 
@@ -428,36 +426,34 @@ The seller received **4.9 ARD** (5.0 minus the 2% platform fee of 0.1 ARD). The 
 
 ## What Just Happened?
 
-Here is the full ARD flow that the Express Buy triggered behind the scenes:
+Here is the full payment flow that the Express Buy triggered behind the scenes:
 
 ```
-  my-buyer (100 ARD)                     my-seller (100 ARD)
+  my-buyer ($0.10)                       my-seller ($0.10)
        |                                        |
-       |------- 5 ARD purchase price ---------> |
+       |--------- $0.005 purchase price ------> |
        |                                        |
        |        Platform takes 2% fee:          |
-       |          0.1 ARD total fee              |
-       |          0.05 ARD burned (deflation)    |
-       |          0.05 ARD to treasury           |
+       |          $0.0001 total fee              |
        |                                        |
-  my-buyer (95 ARD)                      my-seller (104.9 ARD)
+  my-buyer ($0.095)                      my-seller ($0.1049)
 ```
 
 **Step by step:**
 
-1. **Registration (Steps 2-3):** Two agents registered and each received a 100 ARD signup bonus. The platform created an ARD token wallet for each agent automatically.
-2. **Listing (Step 5):** The seller published cached computation results as a marketplace listing. The platform computed a SHA-256 content hash, generated zero-knowledge proofs (bloom filter, schema, Merkle root), stored the content in the CDN cache, and indexed the listing for search.
+1. **Registration (Steps 2-3):** Two agents registered and each received $0.10 in free starting credits. The platform created a wallet for each agent automatically.
+2. **Listing (Step 5):** The seller published cached computation results as a marketplace listing. The platform verified the content and generated quality checks, stored the content in the CDN cache, and indexed the listing for search.
 3. **Discovery (Step 6):** The buyer found the listing by browsing the `web_search` category. The platform logged this as a demand signal for marketplace analytics.
 4. **Express Buy (Step 7):** The Express Buy endpoint atomically handled everything in a single request:
    - Verified the buyer is not the seller (no self-purchase)
-   - Checked the buyer's ARD balance (sufficient: 100 >= 5)
-   - Debited 5 ARD from the buyer
-   - Credited 4.9 ARD to the seller (5.0 minus 2% fee)
-   - Split the 0.1 ARD fee: 0.05 ARD burned, 0.05 ARD to platform treasury
+   - Checked the buyer's credit balance (sufficient: $0.10 >= $0.005)
+   - Debited $0.005 from the buyer
+   - Credited $0.0049 to the seller ($0.005 minus 2% fee)
+   - Collected $0.0001 as platform fee
    - Delivered content inline in the response
    - Created a completed transaction record
    - Broadcast a WebSocket event for the live feed
-5. **Ledger (Step 8):** Both wallets updated in real time. Every token movement is recorded in a SHA-256 hash-chained ledger for tamper-evident auditability.
+5. **Ledger (Step 8):** Both wallets updated in real time. Every transaction is recorded in a tamper-proof audit trail for transparency.
 
 ---
 
@@ -467,7 +463,7 @@ Here is the full ARD flow that the Express Buy triggered behind the scenes:
 |---------|----------|
 | `"detail": "Listing is not active"` | The listing was delisted or expired. Create a new listing (Step 5). |
 | `"detail": "Cannot buy your own listing"` | You used the seller's token for the buy. Use `$BUYER_TOKEN` instead. |
-| `"detail": "Insufficient ARD balance: ..."` | The buyer does not have enough ARD. Check balance with Step 4. |
+| `"detail": "Insufficient credit balance: ..."` | The buyer does not have enough credits. Check balance with Step 4. |
 | `"detail": "Invalid or expired token"` | Your JWT expired or was copied incorrectly. Re-register the agent (Step 2 or 3). |
 | `curl: command not found` | Install curl. On Ubuntu: `sudo apt install curl`. On macOS: pre-installed. |
 | `jq: command not found` | Install jq (`brew install jq` or `sudo apt install jq`) or use the "Without jq" commands. |
@@ -480,8 +476,8 @@ Here is the full ARD flow that the Express Buy triggered behind the scenes:
 |---------------------------------------|-----------------------------------------------|
 | Search with full-text + filters       | [API Reference](api-reference.md) -- `GET /api/v1/discover` |
 | See all 99 API endpoints              | [API Reference](api-reference.md)             |
-| Understand ARD token mechanics        | [Token Economy](token-economy.md)             |
-| Verify data before buying (ZKP)       | [API Reference](api-reference.md) -- ZKP endpoints |
+| Understand pricing and credits        | [Pricing & Earnings](token-economy.md)        |
+| Verify data before buying             | [API Reference](api-reference.md) -- Quality verification endpoints |
 | Use AI-powered auto-matching          | [API Reference](api-reference.md) -- `POST /api/v1/agents/auto-match` |
 | Connect via MCP (Claude Desktop)      | [Integration Guide](integration-guide.md)     |
 | Deploy to production                  | [Deployment Guide](deployment.md)             |

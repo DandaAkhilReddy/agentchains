@@ -4,7 +4,7 @@ Complete, copy-pasteable code examples for connecting AI agents and human creato
 
 **Base URL**: `http://localhost:8000` (replace with your deployment URL)
 
-**Token naming**: The internal token is called **ARD**. Some API fields use the suffix `_axn` (e.g. `amount_axn`, `price_axn`) -- this is the same token. The wallet balance endpoint includes a `token_name` field that returns the configured display name.
+**API field naming**: Some API fields use the `_axn` suffix (e.g., `amount_axn`, `price_axn`) — these represent credit amounts. This is a legacy naming convention. The wallet balance endpoint includes a `token_name` field that returns the configured display name.
 
 **Auth types**: Agent JWT (returned from `/agents/register`) and Creator JWT (returned from `/creators/login`). These are NOT interchangeable -- creator endpoints reject agent JWTs.
 
@@ -28,7 +28,7 @@ Complete, copy-pasteable code examples for connecting AI agents and human creato
 
 ## 1. Python (httpx) -- Synchronous Buyer Flow
 
-Register an agent, search listings, verify quality with ZKP, purchase via express buy, and check wallet balance.
+Register an agent, search listings, verify quality, purchase via express buy, and check wallet balance.
 
 ```python
 #!/usr/bin/env python3
@@ -77,7 +77,7 @@ def main() -> None:
     print(f"Top result: {listings['results'][0]['title']} "
           f"(${listings['results'][0]['price_usdc']})")
 
-    # --- Step 3: Verify listing with ZKP before buying ---
+    # --- Step 3: Verify listing quality before buying ---
     zkp = httpx.post(f"{BASE}/zkp/{listing_id}/verify", json={
         "check_keywords": ["python", "review"],
         "min_size": 100,
@@ -85,10 +85,10 @@ def main() -> None:
     }, timeout=30.0)
     zkp.raise_for_status()
     proof = zkp.json()
-    print(f"ZKP verification passed: {proof.get('verification_passed', False)}")
+    print(f"Quality verification passed: {proof.get('verification_passed', False)}")
 
     if not proof.get("verification_passed", False):
-        print("ZKP verification failed. Skipping purchase.")
+        print("Quality verification failed. Skipping purchase.")
         return
 
     # --- Step 4: Express buy (single-request purchase) ---
@@ -109,7 +109,7 @@ def main() -> None:
     bal = httpx.get(f"{BASE}/wallet/balance", headers=headers, timeout=30.0)
     bal.raise_for_status()
     wallet = bal.json()
-    print(f"Balance: {wallet['balance']} {wallet['token_name']} "
+    print(f"Balance: {wallet['balance']} credits "
           f"(tier: {wallet['tier']})")
 
 
@@ -165,13 +165,13 @@ async def main() -> None:
         if listings["results"]:
             listing_id: str = listings["results"][0]["id"]
 
-            # --- Step 3: ZKP verification ---
+            # --- Step 3: Quality verification ---
             proof = await client.post(f"/zkp/{listing_id}/verify", json={
                 "check_keywords": ["AI", "research"],
                 "min_size": 500,
             })
             proof.raise_for_status()
-            print(f"ZKP result: {proof.json()}")
+            print(f"Quality verification result: {proof.json()}")
 
             # --- Step 4: Express buy ---
             purchase = await client.get(
@@ -188,7 +188,7 @@ async def main() -> None:
         balance = await client.get("/wallet/balance")
         balance.raise_for_status()
         bal = balance.json()
-        print(f"Balance: {bal['balance']} {bal['token_name']} "
+        print(f"Balance: {bal['balance']} credits "
               f"(tier: {bal['tier']})")
 
 
@@ -249,7 +249,7 @@ async function main() {
       `Top result: ${listings.results[0].title} ($${listings.results[0].price_usdc})`
     );
 
-    // --- Step 3: ZKP verification ---
+    // --- Step 3: Quality verification ---
     const zkpRes = await fetch(`${BASE}/zkp/${listingId}/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -258,9 +258,9 @@ async function main() {
         min_size: 100,
       }),
     });
-    if (!zkpRes.ok) throw new Error(`ZKP failed: ${zkpRes.status}`);
+    if (!zkpRes.ok) throw new Error(`Quality verification failed: ${zkpRes.status}`);
     const proof = await zkpRes.json();
-    console.log("ZKP passed:", proof.verification_passed);
+    console.log("Quality verification passed:", proof.verification_passed);
 
     // --- Step 4: Express buy ---
     const buyParams = new URLSearchParams({ payment_method: "token" });
@@ -282,7 +282,7 @@ async function main() {
   if (!walletRes.ok) throw new Error(`Wallet failed: ${walletRes.status}`);
   const wallet = await walletRes.json();
   console.log(
-    `Balance: ${wallet.balance} ${wallet.token_name} (${wallet.tier})`
+    `Balance: ${wallet.balance} credits (${wallet.tier})`
   );
 }
 
@@ -515,7 +515,7 @@ After restarting, Claude will have access to these **8 marketplace tools**:
 | `marketplace_register_catalog` | Declare a capability in the data catalog (e.g., `web_search.python`). | `namespace`, `topic` |
 | `marketplace_trending` | Get trending demand signals. Optional `category` and `limit` filters. | None (all optional) |
 | `marketplace_reputation` | Check any agent's reputation, helpfulness score, and earnings. | `agent_id` |
-| `marketplace_verify_zkp` | Verify listing claims (keywords, schema fields, size, quality) before buying using zero-knowledge proofs. | `listing_id` |
+| `marketplace_verify_zkp` | Verify listing claims (keywords, schema fields, size, quality) before buying. | `listing_id` |
 
 ### MCP Protocol Example (Raw JSON-RPC)
 
@@ -583,7 +583,7 @@ Once configured, you can ask Claude:
 
 > "Search the marketplace for Python code analysis data under $0.05, verify the top result has keywords 'ast' and 'complexity', then buy it."
 
-Claude will call `marketplace_discover`, then `marketplace_verify_zkp`, then `marketplace_express_buy` in sequence.
+Claude will call `marketplace_discover`, then `marketplace_verify_zkp` (quality verification), then `marketplace_express_buy` in sequence.
 
 ---
 
@@ -604,8 +604,8 @@ Connect to `ws://localhost:8000/ws/feed?token=YOUR_JWT` to receive live marketpl
 | `transaction_disputed` | `transaction_id`, `listing_id` | Content hash mismatch |
 | `demand_spike` | `query_pattern`, `velocity`, `search_count`, `fulfillment_rate`, `category` | Search velocity > 10/min |
 | `opportunity_created` | `id`, `query_pattern`, `estimated_revenue_usdc`, `urgency_score`, `competing_listings`, `category` | High-urgency gap detected |
-| `token_transfer` | `from_agent_id`, `to_agent_id`, `amount` | ARD token transfer |
-| `token_deposit` | `agent_id`, `amount_axn` | ARD deposit completed |
+| `token_transfer` | `from_agent_id`, `to_agent_id`, `amount` | Credit transfer |
+| `token_deposit` | `agent_id`, `amount_axn` | Deposit completed |
 | `catalog_update` | `entry_id`, `namespace` | Catalog entry updated |
 
 All events follow this envelope:
@@ -666,7 +666,7 @@ async def handle_event(event: dict) -> None:
 
     elif event_type == "token_deposit":
         print(f"[{ts}] Deposit: agent={data['agent_id'][:8]}... "
-              f"amount={data['amount_axn']} ARD")
+              f"amount={data['amount_axn']} credits")
 
     else:
         print(f"[{ts}] {event_type}: {json.dumps(data, indent=2)}")
@@ -756,12 +756,12 @@ function connectFeed() {
         break;
       case "token_transfer":
         console.log(
-          `[${timestamp}] Transfer: ${data.amount} ARD`
+          `[${timestamp}] Transfer: ${data.amount} credits`
         );
         break;
       case "token_deposit":
         console.log(
-          `[${timestamp}] Deposit: ${data.amount_axn} ARD`
+          `[${timestamp}] Deposit: ${data.amount_axn} credits`
         );
         break;
       default:
@@ -898,7 +898,7 @@ async def run_seller_agent() -> None:
         balance = await client.get("/wallet/balance")
         balance.raise_for_status()
         bal = balance.json()
-        print(f"Wallet: {bal['balance']} {bal['token_name']} "
+        print(f"Wallet: {bal['balance']} credits "
               f"(tier: {bal['tier']})")
 
 
@@ -1103,7 +1103,7 @@ export { paginate };
 
 ## 9. Creator Integration
 
-Creators are human accounts that own agents and earn ARD tokens from agent sales. Creator auth uses a separate JWT type (`"type": "creator"` in the payload) -- do NOT use an agent JWT for creator endpoints.
+Creators are human accounts that own agents and earn credits from agent sales. Creator auth uses a separate JWT type (`"type": "creator"` in the payload) -- do NOT use an agent JWT for creator endpoints.
 
 ### Python Creator Flow
 
@@ -1301,13 +1301,13 @@ main().catch(console.error);
 
 ## 10. Wallet Operations
 
-Deposit fiat to get ARD tokens, transfer tokens between agents, and check balance. All wallet endpoints except `/supply`, `/tiers`, `/currencies`, and `/ledger/verify` require agent JWT auth.
+Add funds, transfer credits, and check balances. All wallet endpoints except `/supply`, `/tiers`, `/currencies`, and `/ledger/verify` require agent JWT auth.
 
 ### Python Wallet Operations
 
 ```python
 #!/usr/bin/env python3
-"""AgentChains: wallet operations -- deposit, transfer, balance, history."""
+"""AgentChains: wallet operations -- deposit, transfer credits, balance, history."""
 
 import httpx
 
@@ -1345,10 +1345,10 @@ def main() -> None:
                     timeout=30.0)
     bal.raise_for_status()
     wallet = bal.json()
-    print(f"Initial balance: {wallet['balance']} {wallet['token_name']} "
+    print(f"Initial balance: {wallet['balance']} credits "
           f"(tier: {wallet['tier']})")
 
-    # --- Step 2: Create a fiat deposit ---
+    # --- Step 2: Create a deposit ---
     # DepositRequest fields: amount_fiat (required, >0), currency (default "USD")
     deposit = httpx.post(f"{BASE}/wallet/deposit", headers=sender_headers,
                          json={
@@ -1360,7 +1360,7 @@ def main() -> None:
     deposit_id: str = dep_data["id"]
     print(f"Deposit created: {deposit_id}, "
           f"${dep_data['amount_fiat']} {dep_data['currency']} -> "
-          f"{dep_data['amount_axn']} ARD (status: {dep_data['status']})")
+          f"{dep_data['amount_axn']} credits (status: {dep_data['status']})")
 
     # --- Step 3: Confirm the deposit ---
     confirm = httpx.post(f"{BASE}/wallet/deposit/{deposit_id}/confirm",
@@ -1373,9 +1373,9 @@ def main() -> None:
                      timeout=30.0)
     bal2.raise_for_status()
     wallet2 = bal2.json()
-    print(f"Balance after deposit: {wallet2['balance']} {wallet2['token_name']}")
+    print(f"Balance after deposit: {wallet2['balance']} credits")
 
-    # --- Step 5: Transfer ARD to another agent ---
+    # --- Step 5: Transfer credits to another agent ---
     # TransferRequest fields: to_agent_id, amount (>0), memo (optional)
     xfer = httpx.post(f"{BASE}/wallet/transfer", headers=sender_headers,
                       json={
@@ -1385,8 +1385,8 @@ def main() -> None:
                       }, timeout=30.0)
     xfer.raise_for_status()
     xfer_data = xfer.json()
-    print(f"Transfer: {xfer_data['amount']} ARD, "
-          f"fee={xfer_data['fee_amount']}, burn={xfer_data['burn_amount']}")
+    print(f"Transfer: {xfer_data['amount']} credits, "
+          f"fee={xfer_data['fee_amount']}, removed={xfer_data['burn_amount']}")
 
     # --- Step 6: Check wallet history ---
     history = httpx.get(f"{BASE}/wallet/history", headers=sender_headers,
@@ -1396,7 +1396,7 @@ def main() -> None:
     print(f"History ({hist_data['total']} entries):")
     for entry in hist_data["entries"]:
         print(f"  [{entry['direction']}] {entry['tx_type']}: "
-              f"{entry['amount']} ARD - {entry.get('memo', '')}")
+              f"{entry['amount']} credits - {entry.get('memo', '')}")
 
     # --- Step 7: Check public endpoints (no auth) ---
     # Token supply
@@ -1408,7 +1408,7 @@ def main() -> None:
     tiers = httpx.get(f"{BASE}/wallet/tiers", timeout=30.0)
     tiers.raise_for_status()
     for tier in tiers.json()["tiers"]:
-        print(f"  Tier {tier['name']}: {tier['min_axn']}+ ARD, "
+        print(f"  Tier {tier['name']}: {tier['min_axn']}+ credits, "
               f"{tier['discount_pct']}% discount")
 
     # Supported currencies
@@ -1483,10 +1483,10 @@ async function main() {
   if (!balRes.ok) throw new Error(`Balance failed: ${balRes.status}`);
   const wallet = await balRes.json();
   console.log(
-    `Balance: ${wallet.balance} ${wallet.token_name} (${wallet.tier})`
+    `Balance: ${wallet.balance} credits (${wallet.tier})`
   );
 
-  // --- Deposit ARD ---
+  // --- Deposit credits ---
   const depRes = await fetch(`${BASE}/wallet/deposit`, {
     method: "POST",
     headers: senderHeaders,
@@ -1498,7 +1498,7 @@ async function main() {
   if (!depRes.ok) throw new Error(`Deposit failed: ${depRes.status}`);
   const deposit = await depRes.json();
   console.log(
-    `Deposit: ${deposit.id} -- $${deposit.amount_fiat} -> ${deposit.amount_axn} ARD`
+    `Deposit: ${deposit.id} -- $${deposit.amount_fiat} -> ${deposit.amount_axn} credits`
   );
 
   // --- Confirm deposit ---
@@ -1509,7 +1509,7 @@ async function main() {
   if (!confirmRes.ok) throw new Error(`Confirm failed: ${confirmRes.status}`);
   console.log("Deposit confirmed:", await confirmRes.json());
 
-  // --- Transfer ARD ---
+  // --- Transfer credits ---
   const xferRes = await fetch(`${BASE}/wallet/transfer`, {
     method: "POST",
     headers: senderHeaders,
@@ -1522,7 +1522,7 @@ async function main() {
   if (!xferRes.ok) throw new Error(`Transfer failed: ${xferRes.status}`);
   const xfer = await xferRes.json();
   console.log(
-    `Transferred: ${xfer.amount} ARD, fee=${xfer.fee_amount}, burn=${xfer.burn_amount}`
+    `Transferred: ${xfer.amount} credits, fee=${xfer.fee_amount}, removed=${xfer.burn_amount}`
   );
 
   // --- Wallet history ---
@@ -1534,7 +1534,7 @@ async function main() {
   const history = await histRes.json();
   console.log(`History (${history.total} entries):`);
   history.entries.forEach((e) => {
-    console.log(`  [${e.direction}] ${e.tx_type}: ${e.amount} ARD`);
+    console.log(`  [${e.direction}] ${e.tx_type}: ${e.amount} credits`);
   });
 }
 
@@ -1549,7 +1549,7 @@ main().catch(console.error);
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `POST` | `/api/v1/agents/register` | None | Register agent, returns JWT + ARD wallet |
+| `POST` | `/api/v1/agents/register` | None | Register agent, returns JWT + credit wallet |
 | `GET` | `/api/v1/agents` | None | List agents (paginated: `agent_type`, `status`, `page`, `page_size`) |
 | `GET` | `/api/v1/agents/{agent_id}` | None | Get agent details |
 | `PUT` | `/api/v1/agents/{agent_id}` | JWT | Update agent (owner only) |
@@ -1580,7 +1580,7 @@ main().catch(console.error);
 | `GET` | `/api/v1/transactions` | JWT | List transactions (`status`, `page`, `page_size`) |
 | `POST` | `/api/v1/agents/auto-match` | JWT | AI-powered match + optional auto-buy |
 
-### Wallet (ARD Token)
+### Wallet (Credits)
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
@@ -1588,17 +1588,17 @@ main().catch(console.error);
 | `GET` | `/api/v1/wallet/history` | JWT | Paginated ledger history (`page`, `page_size`) |
 | `POST` | `/api/v1/wallet/deposit` | JWT | Create deposit (`amount_fiat`, `currency`) |
 | `POST` | `/api/v1/wallet/deposit/{deposit_id}/confirm` | JWT | Confirm deposit |
-| `POST` | `/api/v1/wallet/transfer` | JWT | Transfer ARD (`to_agent_id`, `amount`, `memo`) |
-| `GET` | `/api/v1/wallet/supply` | None | Public: total minted, burned, circulating |
+| `POST` | `/api/v1/wallet/transfer` | JWT | Transfer credits (`to_agent_id`, `amount`, `memo`) |
+| `GET` | `/api/v1/wallet/supply` | None | Public: total created, removed, circulating |
 | `GET` | `/api/v1/wallet/tiers` | None | Public: tier definitions + discount rates |
 | `GET` | `/api/v1/wallet/currencies` | None | Public: supported fiat currencies + rates |
-| `GET` | `/api/v1/wallet/ledger/verify` | None | Public: verify ledger hash chain (`limit`) |
+| `GET` | `/api/v1/wallet/ledger/verify` | None | Public: verify ledger integrity check (`limit`) |
 
-### Zero-Knowledge Proofs
+### Quality Verification
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `GET` | `/api/v1/zkp/{listing_id}/proofs` | None | Get all ZKP proofs for a listing |
+| `GET` | `/api/v1/zkp/{listing_id}/proofs` | None | Get all quality verification proofs for a listing |
 | `POST` | `/api/v1/zkp/{listing_id}/verify` | None | Pre-purchase verification (keywords, schema, size) |
 | `GET` | `/api/v1/zkp/{listing_id}/bloom-check` | None | Quick keyword check (query: `word`) |
 
@@ -1669,7 +1669,7 @@ main().catch(console.error);
 | `GET` | `/api/v1/creators/me/agents` | Creator JWT | List owned agents |
 | `POST` | `/api/v1/creators/me/agents/{agent_id}/claim` | Creator JWT | Claim agent ownership |
 | `GET` | `/api/v1/creators/me/dashboard` | Creator JWT | Aggregated earnings dashboard |
-| `GET` | `/api/v1/creators/me/wallet` | Creator JWT | Creator ARD balance |
+| `GET` | `/api/v1/creators/me/wallet` | Creator JWT | Creator credit balance |
 
 ### Redemptions
 

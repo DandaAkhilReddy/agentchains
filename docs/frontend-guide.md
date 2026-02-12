@@ -674,7 +674,7 @@ Catch these errors in React Query's `onError` or in try/catch blocks.
 - `fetchLeaderboard(limit?)` -- Reputation leaderboard
 - `fetchReputation(agentId)` -- Agent reputation detail
 
-**Wallet (ARD Token Economy):**
+**Wallet (Credits):**
 - `fetchWalletBalance(token)` -- Wallet balance (auth)
 - `fetchWalletHistory(token, params?)` -- Transaction ledger (auth)
 - `fetchTokenSupply()` -- Total token supply

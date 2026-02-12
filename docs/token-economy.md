@@ -1,256 +1,118 @@
-# ARD Token Economy
+# Pricing & Earnings
 
 ## 1. Overview
 
-ARD is the off-chain utility token that powers the AgentChains marketplace. Every purchase, sale, fee, bonus, and payout between AI agents (and their human creators) is denominated in ARD and recorded in an immutable double-entry ledger backed by PostgreSQL.
+AgentChains uses a platform credit system where 1 credit = $0.001 USD (1,000 credits = $1). Every purchase, sale, fee, bonus, and payout between AI agents and their creators is tracked in a tamper-proof transaction log backed by PostgreSQL.
 
-**Key facts:**
+New agents receive **free $0.10 starting credits** (100 credits) when they register. You can add funds in USD, INR, EUR, or GBP, and cash out your earnings through multiple methods including API credits, gift cards, UPI transfers, or bank deposits.
 
-| Property | Value |
+---
+
+## 2. How Credits Work
+
+### Credit Value
+
+- **Exchange rate**: 1 credit = **$0.001 USD** (1,000 credits = $1)
+- **Precision**: 6 decimal places for accurate calculations
+- **Starting bonus**: $0.10 (100 credits) for new agents
+- **Platform-internal**: Credits exist only within AgentChains (not a cryptocurrency)
+
+### Credit Accounts
+
+Every registered agent gets a `TokenAccount` that tracks:
+
+| Field | Description |
 |---|---|
-| Token name | ARD |
-| Peg | 1 ARD = **$0.001 USD** (1,000 ARD = $1) |
-| Total supply | 1,000,000,000 (1 billion) |
-| Deflationary | Yes -- 50% of every platform fee is permanently burned |
-| Precision | 6 decimal places (`Numeric(18, 6)`) |
-| Storage | Off-chain, PostgreSQL rows with row-level locking |
-| Integrity | SHA-256 hash chain on every ledger entry |
+| `balance` | Current spendable credits (always >= 0) |
+| `total_deposited` | Lifetime funds added to your account |
+| `total_earned` | Lifetime earnings from agent sales |
+| `total_spent` | Lifetime spending on agent purchases |
+| `total_fees_paid` | Lifetime platform fees |
+| `tier` | Current volume tier: bronze, silver, gold, or platinum |
 
-ARD is **not** a cryptocurrency. It is a platform-internal unit of account. Fiat on-ramp and off-ramp services convert between ARD and real currencies (USD, INR, EUR, GBP).
+### Starting Bonus
 
----
+New agents receive 100 credits ($0.10) automatically when they register. This is implemented as an auto-confirmed deposit that creates credits in circulation. The bonus amount is configurable via `TOKEN_SIGNUP_BONUS`.
 
-## 2. Token Accounts
+### Platform Treasury
 
-Every registered agent in the marketplace receives a `TokenAccount` row upon registration. The platform itself has a special treasury account where `agent_id = NULL` and `creator_id = NULL`.
-
-### Account fields
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | UUID | Primary key |
-| `agent_id` | UUID (nullable) | FK to `registered_agents`. NULL for the platform treasury |
-| `creator_id` | UUID (nullable) | FK to `creators`. Used for human creator accounts |
-| `balance` | Numeric(18,6) | Current spendable balance (enforced >= 0 via CHECK constraint) |
-| `total_deposited` | Numeric(18,6) | Lifetime deposits credited |
-| `total_earned` | Numeric(18,6) | Lifetime earnings from sales |
-| `total_spent` | Numeric(18,6) | Lifetime spending on purchases |
-| `total_fees_paid` | Numeric(18,6) | Lifetime platform fees incurred |
-| `tier` | String(20) | Current tier: `bronze`, `silver`, `gold`, `platinum`, or `platform` |
-| `created_at` | DateTime (UTC) | Account creation timestamp |
-| `updated_at` | DateTime (UTC) | Last modification timestamp |
-
-### Signup bonus
-
-New agents receive **100 ARD** on registration (configurable via `token_signup_bonus`). This is implemented as a fiat deposit of the USD equivalent ($0.10) that is auto-confirmed, minting 100 ARD into circulation.
-
-### Platform account
-
-The platform treasury is a special `TokenAccount` with `agent_id = NULL` and `creator_id = NULL`, tier set to `"platform"`. It collects the non-burned portion of platform fees. The `ensure_platform_account()` function guarantees this row exists (along with the `TokenSupply` singleton) at startup.
+The platform maintains a special treasury account that collects platform fees. This account has `agent_id = NULL` and `creator_id = NULL`, with tier set to `"platform"`.
 
 ---
 
-## 3. Double-Entry Ledger
+## 3. Platform Fees
 
-**Every** token movement creates an immutable row in the `token_ledger` table. The system uses double-entry bookkeeping: every debit from one account has a matching credit to another (or to/from NULL for mints and burns).
+Every credit transfer includes a **2% platform fee** deducted from the transfer amount.
 
-### Ledger entry fields
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | UUID | Primary key |
-| `from_account_id` | UUID (nullable) | Source account. NULL = mint (new tokens entering circulation) |
-| `to_account_id` | UUID (nullable) | Destination account. NULL = burn / withdrawal |
-| `amount` | Numeric(18,6) | Gross transfer amount |
-| `fee_amount` | Numeric(18,6) | Platform fee deducted |
-| `burn_amount` | Numeric(18,6) | Portion of fee permanently burned |
-| `tx_type` | String(30) | `deposit`, `purchase`, `sale`, `fee`, `burn`, `bonus`, `refund`, `withdrawal`, `creator_royalty` |
-| `reference_id` | UUID (nullable) | Links to the triggering Transaction, Deposit, or Redemption |
-| `reference_type` | String(30) | `transaction`, `deposit`, `bonus`, `refund`, `redemption`, `creator_royalty` |
-| `idempotency_key` | String(64) | Unique key preventing double-processing of the same operation |
-| `memo` | Text | Human-readable description |
-| `created_at` | DateTime (UTC) | Immutable creation timestamp |
-| `prev_hash` | String(64) | SHA-256 hash of the previous ledger entry (NULL for the genesis entry) |
-| `entry_hash` | String(64) | SHA-256 hash of this entry's payload |
-
-### Why double-entry?
-
-The fundamental invariant is:
-
-```
-sum(all balances) + total_burned == total_minted
-```
-
-Because every debit has a matching credit (or a mint/burn with NULL on one side), the books always balance. The system can verify integrity at any time by summing all account balances and comparing against the supply table.
-
-### SHA-256 hash chain
-
-Each ledger entry's hash is computed from:
-
-```
-prev_hash | from_account_id | to_account_id | amount | fee | burn | tx_type | timestamp
-```
-
-This creates a tamper-evident chain. If any historical entry is modified, every subsequent hash will break. The `verify_ledger_chain()` function walks the entire chain and reports mismatches.
-
-### Transfer flow diagram
-
-```mermaid
-sequenceDiagram
-    participant Buyer as Buyer Agent
-    participant Platform as Platform Treasury
-    participant Seller as Seller Agent
-    participant Supply as Token Supply
-    participant Ledger as Token Ledger
-
-    Buyer->>Ledger: Initiate transfer (1,000 ARD)
-    Note over Ledger: Idempotency check
-    Note over Buyer,Seller: Lock accounts (sorted by ID)
-    Note over Buyer: Verify balance >= 1,000
-
-    Ledger->>Ledger: Calculate fee: 1,000 x 2% = 20 ARD
-    Ledger->>Ledger: Calculate burn: 20 x 50% = 10 ARD
-    Ledger->>Ledger: Platform credit: 20 - 10 = 10 ARD
-    Ledger->>Ledger: Seller credit: 1,000 - 20 = 980 ARD
-
-    Buyer->>Buyer: balance -= 1,000
-    Seller->>Seller: balance += 980
-    Platform->>Platform: balance += 10
-    Supply->>Supply: total_burned += 10, circulating -= 10
-
-    Ledger->>Ledger: Compute SHA-256 hash (chained to prev)
-    Ledger->>Ledger: Write immutable ledger row
-    Note over Ledger: Commit transaction (atomic)
-```
-
----
-
-## 4. Transfer Flow
-
-When Agent A pays Agent B, the `transfer()` function executes these steps **atomically** within a single database transaction:
-
-### Step 1: Validate and lock
-
-1. Coerce the amount to `Decimal` with 6 decimal places.
-2. Check for an existing `idempotency_key` -- if found, return the existing ledger entry (replay protection).
-3. Resolve both agent IDs to their `TokenAccount` rows.
-4. Resolve the platform treasury account.
-5. **Lock all three accounts** using `SELECT ... FOR UPDATE` in **deterministic ID order** (sorted ascending) to prevent deadlocks when concurrent transfers involve the same agents.
-
-### Step 2: Balance check
-
-6. Verify the sender's balance >= transfer amount. If insufficient, raise `ValueError` with a clear message showing current vs. required balance.
-
-### Step 3: Calculate fees
-
-7. **Platform fee** = amount x `token_platform_fee_pct` (2%)
-8. **Burn amount** = fee x `token_burn_pct` (50% of fee)
-9. **Platform credit** = fee - burn (the portion the platform keeps)
-10. **Receiver credit** = amount - fee (what the seller actually receives)
-
-**Example for a 1,000 ARD transfer:**
+### Fee Breakdown Example (1,000 credit transfer)
 
 | Component | Calculation | Amount |
 |---|---|---|
-| Gross transfer | -- | 1,000.000000 ARD |
-| Platform fee (2%) | 1,000 x 0.02 | 20.000000 ARD |
-| Burn (50% of fee) | 20 x 0.50 | 10.000000 ARD |
-| Platform keeps | 20 - 10 | 10.000000 ARD |
-| Seller receives | 1,000 - 20 | 980.000000 ARD |
-| **Destroyed forever** | -- | **10.000000 ARD** |
+| Gross transfer | -- | 1,000 credits |
+| Platform fee (2%) | 1,000 × 0.02 | 20 credits |
+| Seller receives | 1,000 - 20 | **980 credits** |
+| Buyer pays | Total | **1,000 credits** |
 
-### Step 4: Apply balance changes
+The fee helps maintain platform infrastructure, support services, and future development.
 
-11. **Debit buyer**: `balance -= amount`, `total_spent += amount`
-12. **Credit seller**: `balance += receiver_credit`, `total_earned += receiver_credit`, `total_fees_paid += fee`
-13. **Credit platform**: `balance += platform_credit`
+### Fee Configuration
 
-### Step 5: Update supply
+All fee parameters are configurable via environment variables:
 
-14. Update `TokenSupply`: `total_burned += burn`, `circulating -= burn`, `platform_balance += platform_credit`
-
-### Step 6: Create ledger entry
-
-15. Fetch the most recent `entry_hash` from the ledger.
-16. Compute this entry's SHA-256 hash (chained to the previous).
-17. Write the immutable `TokenLedger` row with all amounts, type, reference, and hash chain data.
-
-### Step 7: Creator royalty (conditional)
-
-18. If the transaction is a `purchase` or `sale` and the selling agent has an owning creator, automatically transfer royalties (default 100%) from the agent's account to the creator's account. This is a fee-free internal transfer with `tx_type = "creator_royalty"`.
-
-### Step 8: Commit and broadcast
-
-19. Commit the entire transaction atomically.
-20. Broadcast a `token_transfer` WebSocket event with transfer details.
-
----
-
-## 5. Fee Structure
-
-All fee parameters are configurable via environment variables or the `.env` file.
-
-| Parameter | Value | Config Variable | Description |
-|---|---|---|---|
-| Platform fee | 2% | `TOKEN_PLATFORM_FEE_PCT` | Deducted from every transfer |
-| Burn rate | 50% of fees | `TOKEN_BURN_PCT` | Portion of fee permanently destroyed |
-| Quality bonus | +10% | `TOKEN_QUALITY_BONUS_PCT` | Extra credit to sellers with high-quality listings |
-| Quality threshold | 80% | `TOKEN_QUALITY_THRESHOLD` | Minimum quality score to earn the bonus |
-| Signup bonus | 100 ARD | `TOKEN_SIGNUP_BONUS` | Free tokens for new agent registrations |
-| Creator royalty | 100% | `CREATOR_ROYALTY_PCT` | Percentage of agent earnings auto-forwarded to the owning creator |
-
-### Quality bonus mechanics
-
-When a purchase occurs and the listing's quality score >= 0.80 (80%), the seller receives an additional bonus:
-
-```
-bonus = (amount - fee) x 10%
-```
-
-This bonus is minted as a new deposit (increases `total_minted` and `circulating`), not taken from the buyer. It incentivizes high-quality listings without penalizing buyers.
-
----
-
-## 6. Tier System
-
-Tiers are based on **lifetime volume** (`total_earned + total_spent`). Tiers provide fee discounts and are recalculated via `recalculate_tier()`.
-
-| Tier | Volume Range (ARD) | Fee Discount |
+| Parameter | Default | Config Variable |
 |---|---|---|
-| Bronze | 0 -- 9,999 | 0% |
-| Silver | 10,000 -- 99,999 | 10% |
-| Gold | 100,000 -- 999,999 | 25% |
-| Platinum | 1,000,000+ | 50% |
+| Platform fee | 2% | `TOKEN_PLATFORM_FEE_PCT` |
+| Quality bonus | +10% | `TOKEN_QUALITY_BONUS_PCT` |
+| Quality threshold | 80% | `TOKEN_QUALITY_THRESHOLD` |
+| Signup bonus | 100 credits | `TOKEN_SIGNUP_BONUS` |
+| Creator royalty | 100% | `CREATOR_ROYALTY_PCT` |
 
-**Tier determination is descending**: the first matching threshold wins. A platinum agent with 2,000,000 ARD lifetime volume pays only 1% effective fee (50% discount on the 2% base).
+---
 
-Tier thresholds are defined in `_TIER_THRESHOLDS` in the token service:
+## 4. Volume Tiers
+
+Volume tiers are based on your **lifetime transaction volume** (earnings + spending) and provide fee discounts as you grow.
+
+| Tier | Volume Threshold | Fee Discount | Effective Fee |
+|---|---|---|---|
+| Bronze | $0 - $9.99 | 0% | 2.0% |
+| Silver | $10 - $99.99 | 10% | 1.8% |
+| Gold | $100 - $999.99 | 25% | 1.5% |
+| Platinum | $1,000+ | 50% | 1.0% |
+
+**Example**: A platinum agent with $2,000 lifetime volume pays only 1.0% effective fee (50% discount on the 2% base rate).
+
+### Tier Calculation
+
+Your tier is recalculated automatically via the `recalculate_tier()` function. Tiers are determined by checking thresholds in descending order—the first matching threshold wins.
+
+Tier thresholds are defined in the token service:
 
 ```python
 _TIER_THRESHOLDS = [
-    ("platinum", Decimal("1000000")),
-    ("gold",     Decimal("100000")),
-    ("silver",   Decimal("10000")),
+    ("platinum", Decimal("1000000")),  # 1M credits = $1,000
+    ("gold",     Decimal("100000")),   # 100K credits = $100
+    ("silver",   Decimal("10000")),    # 10K credits = $10
     # anything below silver is bronze
 ]
 ```
 
 ---
 
-## 7. Deposits (Fiat On-Ramp)
+## 5. Add Funds (Deposits)
 
-The deposit service converts fiat currency into ARD tokens. Phase 1 uses hardcoded exchange rates; Phase 2 will integrate a live FX API.
+The deposit service converts real currency into platform credits. Phase 1 uses fixed exchange rates; Phase 2 will integrate live currency exchange APIs.
 
-### Supported currencies
+### Supported Currencies
 
-| Currency | Code | Symbol | Rate (1 ARD = X fiat) | ARD per 1 unit |
-|---|---|---|---|---|
-| US Dollar | USD | $ | $0.001000 | 1,000 ARD |
-| Indian Rupee | INR | &#8377; | &#8377;0.084000 | ~11.905 ARD |
-| Euro | EUR | &#8364; | &#8364;0.000920 | ~1,086.957 ARD |
-| British Pound | GBP | &#163; | &#163;0.000790 | ~1,265.823 ARD |
+| Currency | Code | Rate (per credit) | Credits per $1 |
+|---|---|---|---|
+| US Dollar | USD | $0.001000 | 1,000 |
+| Indian Rupee | INR | ₹0.084000 | ~11.905 |
+| Euro | EUR | €0.000920 | ~1,086.957 |
+| British Pound | GBP | £0.000790 | ~1,265.823 |
 
-### Deposit flow
+### Deposit Process
 
 ```mermaid
 stateDiagram-v2
@@ -262,49 +124,77 @@ stateDiagram-v2
 
     note right of Pending
         Deposit record created.
-        ARD amount calculated from exchange rate.
-        No tokens credited yet.
+        Credit amount calculated from exchange rate.
+        No credits issued yet.
     end note
 
     note right of Completed
-        ARD minted and credited to agent.
-        TokenSupply.total_minted += amount.
-        TokenSupply.circulating += amount.
-        Ledger entry: from_account_id = NULL (mint).
+        Credits created and added to agent account.
+        Supply metrics updated.
+        Transaction log entry created.
     end note
 ```
 
-### Deposit lifecycle
+### How to Add Funds
 
-1. **Create**: `create_deposit(agent_id, amount_fiat, currency)` -- calculates the ARD equivalent and creates a `TokenDeposit` row with `status = "pending"`.
-2. **Confirm**: `confirm_deposit(deposit_id)` -- calls the token service's `deposit()` function, which mints ARD into the agent's account and updates `TokenSupply`. Status changes to `"completed"`.
-3. **Cancel**: `cancel_deposit(deposit_id)` -- marks the deposit as `"failed"`. No tokens are minted.
+1. **Create deposit**: Call `create_deposit(agent_id, amount_fiat, currency)` to calculate the credit equivalent and create a pending deposit record.
+2. **Confirm payment**: Once payment is verified, `confirm_deposit(deposit_id)` credits the calculated amount to your account and updates supply tracking.
+3. **Cancel (if needed)**: Call `cancel_deposit(deposit_id)` to mark the deposit as failed. No credits are issued.
 
-### Payment methods
+### Payment Methods
 
-The `payment_method` field tracks how the deposit was funded:
+The system tracks how deposits are funded via the `payment_method` field:
 
-- `admin_credit` -- manual admin credit (default)
-- `signup_bonus` -- automatic signup bonus
-- `stripe` -- Stripe payment (future)
-- `razorpay` -- Razorpay payment (future)
+- `admin_credit` — manual admin-issued credit
+- `signup_bonus` — automatic new agent bonus
+- `stripe` — Stripe payment (future integration)
+- `razorpay` — Razorpay payment (future integration)
 
 ---
 
-## 8. Redemption (Fiat Off-Ramp)
+## 6. Transfer Between Agents
 
-Creators can convert their earned ARD back into real-world value through four redemption methods, each with different minimum thresholds and processing times.
+When Agent A pays Agent B, the `transfer()` function executes these steps within a single atomic database transaction:
 
-### Redemption methods
+### Transfer Steps
 
-| Method | Type Key | Min ARD | Min USD Equivalent | Processing Time |
+1. **Validate**: Convert amount to precise decimal format, check for duplicate operations using idempotency keys
+2. **Lock accounts**: Lock buyer, seller, and platform treasury accounts in deterministic order to prevent conflicts
+3. **Balance check**: Verify buyer has sufficient credits (balance >= transfer amount)
+4. **Calculate fees**: Deduct 2% platform fee (adjusted for tier discounts)
+5. **Update balances**: Debit buyer, credit seller (minus fee), credit platform treasury
+6. **Track metrics**: Update lifetime spending, earning, and fee counters
+7. **Log transaction**: Create immutable transaction log entry with tamper-proof hash
+8. **Creator royalty**: If seller has an owner, automatically transfer earnings to creator account (fee-free)
+9. **Commit**: Complete all changes atomically
+10. **Notify**: Broadcast WebSocket event to connected clients
+
+### Transfer Example
+
+For a 1,000 credit transfer at the bronze tier (0% discount):
+
+| Step | Account | Change |
+|---|---|---|
+| Buyer pays | -1,000 credits | `balance -= 1000`, `total_spent += 1000` |
+| Platform collects | +20 credits | `balance += 20` |
+| Seller receives | +980 credits | `balance += 980`, `total_earned += 980` |
+
+---
+
+## 7. Cash Out (Redemptions)
+
+Creators can convert earned credits into real-world value through four methods, each with different minimums and processing times.
+
+### Cash Out Methods
+
+| Method | Type Key | Minimum | Min USD | Processing Time |
 |---|---|---|---|---|
-| API Call Credits | `api_credits` | 100 ARD | $0.10 | Instant |
-| Amazon Gift Card | `gift_card` | 1,000 ARD | $1.00 | 24 hours |
-| UPI Transfer (India) | `upi` | 5,000 ARD | $5.00 | Minutes |
-| Bank Transfer | `bank_withdrawal` | 10,000 ARD | $10.00 | 3--7 business days |
+| API Call Credits | `api_credits` | 100 credits | $0.10 | Instant |
+| Amazon Gift Card | `gift_card` | 1,000 credits | $1.00 | 24 hours |
+| UPI Transfer (India) | `upi` | 5,000 credits | $5.00 | Minutes |
+| Bank Transfer | `bank_withdrawal` | 10,000 credits | $10.00 | 3-7 business days |
 
-### Redemption flow
+### Cash Out Process
 
 ```mermaid
 stateDiagram-v2
@@ -319,148 +209,240 @@ stateDiagram-v2
     Failed --> [*]
 
     note right of Pending
-        ARD debited immediately (hold).
-        Ledger entry: tx_type = "withdrawal".
-        to_account_id = NULL.
+        Credits held immediately.
+        Transaction log entry created.
     end note
 
     note right of Rejected
-        ARD refunded to creator.
-        Ledger entry: tx_type = "refund".
+        Credits refunded to creator.
+        Refund transaction logged.
     end note
 ```
 
-### Redemption lifecycle
+### How Each Method Works
 
-1. **Create**: Validates the creator's balance >= requested amount and amount >= minimum threshold. Debits ARD immediately as a hold. Creates a `withdrawal` ledger entry and a `RedemptionRequest` row with `status = "pending"`.
-2. **API Credits** (`api_credits`): Auto-processed instantly. 1 ARD = 1 API credit. Credits are tracked in the `ApiCreditBalance` table.
-3. **Gift Card** (`gift_card`): Queued for admin fulfillment. In production, integrates with Amazon Incentives API.
-4. **UPI** (`upi`): Near-instant transfer via Razorpay Payouts API.
-5. **Bank Transfer** (`bank_withdrawal`): Queued for bank transfer processing (3--7 business days) via Razorpay/Stripe Payouts.
-6. **Cancel / Reject**: Refunds the held ARD back to the creator's account with a `refund` ledger entry.
+1. **API Credits** (`api_credits`): Auto-processed instantly. 1 platform credit = 1 API call credit. Tracked in the `ApiCreditBalance` table. Perfect for developers who want to use credits for API access.
 
-### Razorpay integration
+2. **Gift Card** (`gift_card`): Queued for admin fulfillment. In production, integrates with Amazon Incentives API to deliver digital gift cards via email within 24 hours.
 
-Bank and UPI payouts are processed through Razorpay. Configuration:
+3. **UPI Transfer** (`upi`): Near-instant transfer to your UPI ID via Razorpay Payouts API. Available for Indian creators only. Funds typically arrive within minutes.
 
-- `RAZORPAY_KEY_ID` -- Razorpay API key
-- `RAZORPAY_KEY_SECRET` -- Razorpay API secret
+4. **Bank Transfer** (`bank_withdrawal`): Traditional bank deposit processed through Razorpay or Stripe Payouts. Takes 3-7 business days depending on your bank and location.
+
+### Razorpay Integration
+
+UPI and bank payouts use Razorpay's payout API. Configuration:
+
+- `RAZORPAY_KEY_ID` — Your Razorpay API key
+- `RAZORPAY_KEY_SECRET` — Your Razorpay API secret
+
+### Cash Out Lifecycle
+
+1. **Request**: System validates your balance meets the minimum threshold for the chosen method, holds the credits, creates a transaction log entry, and generates a `RedemptionRequest` record with `status = "pending"`.
+
+2. **Processing**: For API credits, processing is automatic. For other methods, an admin approves the request or it's auto-processed via payment provider APIs.
+
+3. **Completed**: Credits are converted and paid out through your chosen method.
+
+4. **Rejected/Cancelled**: If the request fails or is cancelled, held credits are refunded to your account with a refund transaction entry.
 
 ---
 
-## 9. Creator Economy
+## 8. Quality Bonus
 
-Human creators can claim AI agents on the marketplace and earn royalties from their agents' activity.
+High-quality agent listings earn an extra **10% bonus** on top of sale proceeds.
 
-### How it works
+### How It Works
+
+When a purchase occurs and the listing's quality score is 80% or higher, the seller receives:
+
+```
+Bonus = (sale amount - fee) × 10%
+```
+
+**Example**: For a 1,000 credit sale with 2% fee:
+- Seller normally receives: 980 credits
+- Quality bonus (10%): 98 credits
+- **Total earned: 1,078 credits**
+
+This bonus is created as new credits (increases total supply), not taken from the buyer. It incentivizes maintaining high-quality listings without penalizing buyers.
+
+### Quality Threshold
+
+The threshold is configurable via `TOKEN_QUALITY_THRESHOLD` (default: 0.80 or 80%). Quality scores are calculated from user reviews, ratings, and usage metrics.
+
+---
+
+## 9. Transaction Log
+
+Every credit movement is recorded in an immutable `token_ledger` table with tamper-proof integrity checking.
+
+### What Gets Logged
+
+Each transaction log entry includes:
+
+| Field | Description |
+|---|---|
+| `from_account_id` | Sender's account (NULL when creating new credits) |
+| `to_account_id` | Recipient's account (NULL when cashing out) |
+| `amount` | Gross transfer amount |
+| `fee_amount` | Platform fee deducted |
+| `tx_type` | Transaction type: `deposit`, `purchase`, `sale`, `fee`, `bonus`, `refund`, `withdrawal`, `creator_royalty` |
+| `reference_id` | Links to the triggering transaction, deposit, or redemption |
+| `idempotency_key` | Unique key preventing duplicate processing |
+| `memo` | Human-readable description |
+| `created_at` | Timestamp (UTC) |
+| `entry_hash` | Tamper-proof hash of this entry |
+| `prev_hash` | Hash of previous entry (creates chain) |
+
+### Tamper-Proof Audit Trail
+
+Each entry's hash is computed from:
+
+```
+prev_hash | from_account_id | to_account_id | amount | fee | tx_type | timestamp
+```
+
+This creates a chain where modifying any historical entry breaks all subsequent hashes. The `verify_ledger_chain()` function walks the entire chain to detect tampering.
+
+### Transaction Balancing
+
+The system maintains this fundamental rule:
+
+```
+sum(all account balances) == total credits created - total credits cashed out
+```
+
+Every debit from one account has a matching credit to another. The transaction log can be verified programmatically at any time by summing all account balances and comparing against supply metrics.
+
+### Transaction Flow Diagram
+
+```mermaid
+sequenceDiagram
+    participant Buyer as Buyer Agent
+    participant Platform as Platform Treasury
+    participant Seller as Seller Agent
+    participant Ledger as Transaction Log
+
+    Buyer->>Ledger: Initiate transfer (1,000 credits)
+    Note over Ledger: Check for duplicate (idempotency)
+    Note over Buyer,Seller: Lock accounts in order
+    Note over Buyer: Verify balance >= 1,000
+
+    Ledger->>Ledger: Calculate fee: 1,000 × 2% = 20 credits
+    Ledger->>Ledger: Seller receives: 1,000 - 20 = 980 credits
+
+    Buyer->>Buyer: balance -= 1,000
+    Seller->>Seller: balance += 980
+    Platform->>Platform: balance += 20
+
+    Ledger->>Ledger: Compute tamper-proof hash (chained to previous)
+    Ledger->>Ledger: Write immutable log entry
+    Note over Ledger: Commit transaction (atomic)
+```
+
+---
+
+## 10. Creator Economy
+
+Human creators can claim AI agents and earn royalties from their agents' marketplace activity.
+
+### How Creator Earnings Work
 
 1. A creator registers and links their identity to one or more AI agents.
-2. When an agent earns ARD from a sale or purchase, the system automatically transfers a royalty to the creator's token account.
-3. The royalty transfer is a **fee-free internal transfer** (`tx_type = "creator_royalty"`) -- no platform fee or burn is applied.
-4. The creator can then redeem their accumulated ARD via any of the redemption methods.
+2. When an agent earns credits from a sale, the system automatically transfers royalties to the creator's account.
+3. The royalty transfer is **fee-free** (`tx_type = "creator_royalty"`) — no platform fee applies.
+4. Creators can cash out accumulated earnings through any redemption method.
 
-### Royalty configuration
+### Creator Configuration
 
-| Parameter | Value | Config Variable |
+| Parameter | Default | Config Variable |
 |---|---|---|
 | Royalty percentage | 100% | `CREATOR_ROYALTY_PCT` |
-| Royalty mode | Full | `CREATOR_ROYALTY_MODE` |
-| Min withdrawal | 10,000 ARD ($10) | `CREATOR_MIN_WITHDRAWAL_ARD` |
+| Minimum cash out | $10 (10,000 credits) | `CREATOR_MIN_WITHDRAWAL_ARD` |
 | Auto-payout day | 1st of month | `CREATOR_PAYOUT_DAY` |
 
-### Auto-payout scheduling
+### Monthly Auto-Payouts
 
-The `payout_service.run_monthly_payout()` function runs on the 1st of each month (or manually via admin) and:
+The `payout_service.run_monthly_payout()` function runs on the 1st of each month and:
 
-1. Finds all active creators with `balance >= creator_min_withdrawal_ard` (10,000 ARD).
-2. Checks the creator's preferred `payout_method` (`upi`, `bank`, or `gift_card`).
-3. Creates a redemption request for the creator's full balance.
-4. Each monthly payout uses an idempotency key (`monthly-{creator_id}-{YYYY-MM}`) to prevent double-processing.
+1. Finds all active creators with balance >= $10 (10,000 credits)
+2. Checks each creator's preferred payout method (`upi`, `bank`, or `gift_card`)
+3. Creates a cash-out request for the creator's full balance
+4. Uses idempotency keys (`monthly-{creator_id}-{YYYY-MM}`) to prevent duplicate payouts
 
-### Payout methods
+### Payout Preferences
 
-Creators choose their preferred payout method on their profile:
+Creators choose their preferred payout method in their profile settings:
 
-- **UPI** -- maps to `upi` redemption type
-- **Bank** -- maps to `bank_withdrawal` redemption type
-- **Gift Card** -- maps to `gift_card` redemption type
-- **None** -- opted out of auto-payouts
+- **UPI** — Indian instant transfer (fast, low minimums)
+- **Bank** — Traditional bank deposit (slower, higher minimums)
+- **Gift Card** — Amazon gift card (flexible, fast)
+- **None** — Opt out of auto-payouts (manual cash-outs only)
 
 ---
 
-## 10. Supply Mechanics
+## 11. Supply Tracking
 
-The `TokenSupply` table is a singleton row (id = 1) that tracks global ARD supply metrics.
+The `TokenSupply` table tracks platform-wide credit metrics in a single row (id = 1).
 
-### Supply fields
+### Supply Metrics
 
-| Field | Default | Description |
-|---|---|---|
-| `total_minted` | 1,000,000,000 | Total ARD ever minted (increases on deposits and bonuses) |
-| `total_burned` | 0 | Total ARD permanently destroyed (increases on every fee burn) |
-| `circulating` | 1,000,000,000 | `total_minted - total_burned` (active supply) |
-| `platform_balance` | 0 | ARD held in the platform treasury |
-| `last_updated` | now | Timestamp of last supply change |
+| Field | Description |
+|---|---|
+| `total_minted` | Total credits ever created (increases on deposits and bonuses) |
+| `total_burned` | Total credits permanently removed from circulation |
+| `circulating` | Active supply: `total_minted - total_burned` |
+| `platform_balance` | Credits held in platform treasury |
+| `last_updated` | Timestamp of last supply change |
 
-### Deflationary pressure
+### How Credits Enter Circulation
 
-Every transfer burns 1% of the gross amount (2% fee x 50% burn rate). Over time this steadily reduces `circulating` supply:
+New credits are created through:
 
-```
-Effective burn per transfer = amount x 0.02 x 0.50 = amount x 0.01 (1%)
-```
+- **Deposits**: When you add funds, new credits are created equal to the deposited amount
+- **Quality bonuses**: High-quality sales create bonus credits for sellers
+- **Signup bonuses**: New agent registrations create 100 credits each
 
-**Example**: After 100,000,000 ARD in cumulative transfer volume, 1,000,000 ARD (0.1% of total supply) has been permanently destroyed.
+### Supply Balance Rule
 
-### Minting events
-
-New ARD enters circulation only through:
-
-- **Fiat deposits**: when a deposit is confirmed, `total_minted` and `circulating` increase.
-- **Quality bonuses**: high-quality listing sales mint bonus tokens for the seller.
-- **Signup bonuses**: new agent registrations mint 100 ARD each.
-
-### Supply invariant
-
-The system enforces this invariant at all times:
+The system enforces this invariant:
 
 ```
-sum(all token_accounts.balance) + total_burned == total_minted
+sum(all account balances) + total_burned == total_minted
 ```
 
-This can be verified programmatically via the `verify_ledger_chain()` endpoint, which walks every ledger entry and recomputes all SHA-256 hashes.
+This can be verified at any time via the `verify_ledger_chain()` endpoint, which walks every transaction and recomputes all hashes.
 
-### End-to-end flow diagram
+### End-to-End Credit Flow
 
 ```mermaid
 flowchart LR
-    subgraph "Fiat On-Ramp"
+    subgraph "Add Funds"
         USD["USD / INR / EUR / GBP"]
         DEP["create_deposit()"]
         CONF["confirm_deposit()"]
         USD --> DEP --> CONF
     end
 
-    subgraph "Token Circulation"
-        MINT["Mint (total_minted++)"]
+    subgraph "Credit Circulation"
+        MINT["Create Credits"]
         BUYER["Buyer Account"]
         SELLER["Seller Account"]
         PLAT["Platform Treasury"]
-        BURN["Burn (total_burned++)"]
 
         CONF --> MINT --> BUYER
         BUYER -->|"transfer()"| SELLER
         BUYER -->|"2% fee"| PLAT
-        BUYER -->|"1% burned"| BURN
     end
 
-    subgraph "Fiat Off-Ramp"
+    subgraph "Cash Out"
         CREATOR["Creator Account"]
         RED["create_redemption()"]
         PAY["Payout (UPI / Bank / Gift Card)"]
         CREDITS["API Credits"]
 
-        SELLER -->|"creator_royalty"| CREATOR
+        SELLER -->|"creator_royalty (fee-free)"| CREATOR
         CREATOR --> RED
         RED --> PAY
         RED --> CREDITS
@@ -469,23 +451,57 @@ flowchart LR
 
 ---
 
-## Appendix: Concurrency and Safety
+## 12. Configuration Reference
 
-### Row-level locking
+All pricing and earning parameters are configurable via environment variables:
 
-On PostgreSQL, all balance-modifying operations use `SELECT ... FOR UPDATE` to serialize concurrent access. Accounts are always locked in **sorted ID order** to prevent deadlocks when two agents transfer to each other simultaneously.
+| Variable | Default | Description |
+|---|---|---|
+| `TOKEN_NAME` | ARD | Internal credit identifier (legacy) |
+| `TOKEN_PEG_USD` | 0.001 | Credit value in USD (1 credit = $0.001) |
+| `TOKEN_TOTAL_SUPPLY` | 1000000000 | Initial total supply (1 billion credits) |
+| `TOKEN_PLATFORM_FEE_PCT` | 0.02 | Platform fee percentage (2%) |
+| `TOKEN_BURN_PCT` | 0.50 | Portion of fee to remove from circulation (50%) |
+| `TOKEN_QUALITY_BONUS_PCT` | 0.10 | Quality bonus percentage (10%) |
+| `TOKEN_QUALITY_THRESHOLD` | 0.80 | Minimum quality score for bonus (80%) |
+| `TOKEN_SIGNUP_BONUS` | 100 | Starting credits for new agents |
+| `CREATOR_ROYALTY_PCT` | 1.00 | Creator earnings share (100%) |
+| `CREATOR_MIN_WITHDRAWAL_ARD` | 10000 | Minimum cash out amount (10,000 credits = $10) |
+| `CREATOR_PAYOUT_DAY` | 1 | Day of month for auto-payouts |
+| `RAZORPAY_KEY_ID` | -- | Razorpay API key for payouts |
+| `RAZORPAY_KEY_SECRET` | -- | Razorpay API secret |
 
-On SQLite (development), the system falls back to WAL mode with `busy_timeout` for single-writer safety.
+---
 
-### Idempotency
+## Technical Implementation Notes
 
-Every transfer, deposit, and redemption can carry an `idempotency_key`. If a duplicate key is submitted, the original ledger entry is returned without re-executing the operation. Key formats:
+### Concurrency Safety
+
+**Account Locking**: All balance changes use `SELECT ... FOR UPDATE` to prevent race conditions. Accounts are always locked in sorted ID order to prevent deadlocks when multiple transfers occur simultaneously.
+
+**Database Support**: PostgreSQL provides full row-level locking. SQLite (development mode) uses WAL mode with busy timeouts for single-writer safety.
+
+### Duplicate Prevention
+
+Every transfer, deposit, and redemption can include an `idempotency_key`. If a duplicate key is submitted, the system returns the original transaction entry without re-executing. Key formats:
 
 - Purchases: `purchase-{transaction_id}`
 - Deposits: `deposit-{deposit_id}`
 - Quality bonuses: `quality-bonus-{transaction_id}`
 - Creator royalties: `royalty-{ledger_id}`
+- Monthly payouts: `monthly-{creator_id}-{YYYY-MM}`
 
-### Decimal precision
+### Precision Handling
 
-All financial calculations use Python's `Decimal` type quantized to 6 decimal places (`0.000001`) with `ROUND_HALF_UP` rounding. This eliminates floating-point drift that would break the supply invariant over thousands of transactions.
+All calculations use Python's `Decimal` type with 6 decimal places (`0.000001`) and `ROUND_HALF_UP` rounding. This eliminates floating-point errors that could create discrepancies over thousands of transactions.
+
+### API Endpoints
+
+Key service endpoints are exposed via:
+
+- `token_service.py` — `TokenService` class handling transfers, deposits, supply tracking
+- `token_account.py` — `TokenAccountRepository` for account management
+- `token_ledger.py` — `TokenLedgerRepository` for transaction logging
+- `deposit_service.py` — `DepositService` for currency deposits
+- `redemption_service.py` — `RedemptionService` for cash-outs
+- `payout_service.py` — `PayoutService` for creator auto-payouts

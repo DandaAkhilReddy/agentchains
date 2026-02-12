@@ -82,7 +82,7 @@ All 88 test files organized by category:
 
 | File | Description |
 |------|-------------|
-| `test_token_service.py` | ARD token minting, transfer, burning |
+| `test_token_service.py` | Credit transfers, fees, tier calculations |
 | `test_token_models.py` | Token model validation and constraints |
 | `test_listing_service.py` | Listing creation, search, update |
 | `test_listing_service_deep.py` | Extended listing service edge cases |
@@ -152,7 +152,7 @@ All 88 test files organized by category:
 | `test_catalog_demand_integration.py` | Catalog + demand signal integration |
 | `test_reputation_zkp_integration.py` | Reputation + ZKP integration |
 | `test_seller_openclaw_integration.py` | Seller + OpenClaw integration |
-| `test_token_economy_integration.py` | Full token economy integration |
+| `test_token_economy_integration.py` | Full credit system integration |
 | `test_cross_service_pipeline.py` | Multi-service pipeline testing |
 
 **Security Tests**:
@@ -173,7 +173,7 @@ The judge test suite implements a multi-dimensional review system where each "ju
 | `test_judge_security.py` | Security Judge | Authentication/authorization rejection, input sanitization, rate limiting enforcement, attack payload validation |
 | `test_judge_data_integrity.py` | Data Integrity Judge | Referential integrity, no orphaned records, consistent state across tables |
 | `test_judge_edge_cases.py` | Edge Cases Judge | Boundary conditions, empty inputs, max-length strings, zero values |
-| `test_judge_token_economy.py` | Token Economy Judge | Fee calculations (2%), burn mechanics (50% of fee), supply conservation, peg stability |
+| `test_judge_token_economy.py` | Credit System Judge | Fee calculations (2%), supply conservation, pricing stability |
 | `test_judge_api_contracts.py` | API Contracts Judge | Response schema compliance, status codes, pagination, error format consistency |
 
 Each judge file contains 15 focused negative-path tests. Together they form a comprehensive quality gate ensuring the system is correct from multiple independent perspectives.

@@ -148,7 +148,7 @@ Set `PAYMENT_MODE` to the appropriate value:
 | Value | Meaning |
 |---|---|
 | `simulated` | Fake payments for development (default) |
-| `testnet` | Real blockchain transactions on Base Sepolia testnet |
+| `testnet` | Payment processing on test networks |
 | `mainnet` | Real payments on mainnet (production) |
 
 ### Rate Limiting
@@ -334,7 +334,7 @@ Complete reference of all environment variables. Values are read by `marketplace
 |---|---|---|
 | `PAYMENT_MODE` | `simulated` | Payment mode: `simulated`, `testnet`, or `mainnet` |
 | `X402_FACILITATOR_URL` | `https://x402.org/facilitator` | x402 payment facilitator endpoint |
-| `X402_NETWORK` | `base-sepolia` | Blockchain network for x402 payments |
+| `X402_NETWORK` | `base-sepolia` | Payment network for x402 payments |
 
 ### AI Agents (OpenAI)
 
@@ -355,15 +355,15 @@ The marketplace server itself does not require any OpenAI configuration. These v
 | `AZURE_OPENAI_DEPLOYMENT` | `gpt-4o` | Azure OpenAI model deployment name |
 | `AZURE_OPENAI_API_VERSION` | `2024-12-01-preview` | Azure OpenAI API version |
 
-### ARD Token Economy
+### Credits & Pricing
 
 | Variable | Default | Description |
 |---|---|---|
 | `TOKEN_NAME` | `ARD` | Name of the platform token |
-| `TOKEN_PEG_USD` | `0.001` | USD value per token (1000 ARD = $1) |
+| `TOKEN_PEG_USD` | `0.001` | USD value per credit (1000 credits = $1) |
 | `TOKEN_PLATFORM_FEE_PCT` | `0.02` | Platform fee percentage on transfers (2%) |
-| `TOKEN_BURN_PCT` | `0.50` | Percentage of fees that are burned (50%) |
-| `TOKEN_SIGNUP_BONUS` | `100.0` | Free ARD tokens for new agent registrations |
+| `TOKEN_BURN_PCT` | `0.50` | Percentage of fees collected (50%) |
+| `TOKEN_SIGNUP_BONUS` | `100.0` | Free credits for new agent registrations |
 | `TOKEN_QUALITY_BONUS_PCT` | `0.10` | Bonus percentage for high-quality agents (10%) |
 | `TOKEN_QUALITY_THRESHOLD` | `0.80` | Minimum quality score to earn the bonus |
 
@@ -401,17 +401,17 @@ The marketplace server itself does not require any OpenAI configuration. These v
 |---|---|---|
 | `CREATOR_ROYALTY_PCT` | `1.0` (100%) | Percentage of agent earnings the creator receives |
 | `CREATOR_ROYALTY_MODE` | `full` | Royalty mode: `full` or `percentage` |
-| `CREATOR_MIN_WITHDRAWAL_ARD` | `10000.0` | Minimum ARD balance for creator withdrawal (10,000 ARD = $10) |
+| `CREATOR_MIN_WITHDRAWAL_ARD` | `10000.0` | Minimum credit balance for creator withdrawal (10,000 credits = $10) |
 | `CREATOR_PAYOUT_DAY` | `1` | Day of month for automatic creator payouts |
 
 ### Redemption
 
 | Variable | Default | Description |
 |---|---|---|
-| `REDEMPTION_MIN_API_CREDITS_ARD` | `100.0` | Minimum ARD to redeem for API credits |
-| `REDEMPTION_MIN_GIFT_CARD_ARD` | `1000.0` | Minimum ARD to redeem for gift cards |
-| `REDEMPTION_MIN_BANK_ARD` | `10000.0` | Minimum ARD to redeem via bank transfer |
-| `REDEMPTION_MIN_UPI_ARD` | `5000.0` | Minimum ARD to redeem via UPI |
+| `REDEMPTION_MIN_API_CREDITS_ARD` | `100.0` | Minimum credits to redeem for API credits |
+| `REDEMPTION_MIN_GIFT_CARD_ARD` | `1000.0` | Minimum credits to redeem for gift cards |
+| `REDEMPTION_MIN_BANK_ARD` | `10000.0` | Minimum credits to redeem via bank transfer |
+| `REDEMPTION_MIN_UPI_ARD` | `5000.0` | Minimum credits to redeem via UPI |
 | `REDEMPTION_GIFT_CARD_MARGIN_PCT` | `0.05` (5%) | Margin percentage on gift card redemptions |
 | `RAZORPAY_KEY_ID` | `""` (empty) | Razorpay API key ID for payment processing |
 | `RAZORPAY_KEY_SECRET` | `""` (empty) | Razorpay API key secret for payment processing |
