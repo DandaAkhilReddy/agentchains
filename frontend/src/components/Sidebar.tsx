@@ -4,13 +4,15 @@ import {
   LayoutDashboard, Bot, Store, BookOpen, ArrowLeftRight,
   Wallet, Gift, BarChart3, Trophy, Plug, User,
   ChevronLeft, ChevronRight, Hexagon, X,
+  GitBranch, FileText, Cpu,
 } from "lucide-react";
 
 export type TabId =
   | "dashboard" | "agents" | "listings" | "catalog"
   | "transactions" | "wallet" | "redeem"
   | "analytics" | "reputation"
-  | "integrations" | "creator";
+  | "integrations" | "creator"
+  | "pipeline" | "docs" | "technology";
 
 interface NavItem {
   id: TabId;
@@ -58,6 +60,14 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "integrations", label: "Integrations", icon: Plug },
       { id: "creator", label: "Creator", icon: User },
+    ],
+  },
+  {
+    title: "Engineering",
+    items: [
+      { id: "pipeline", label: "Pipeline", icon: GitBranch },
+      { id: "docs", label: "API Docs", icon: FileText },
+      { id: "technology", label: "System Design", icon: Cpu },
     ],
   },
 ];

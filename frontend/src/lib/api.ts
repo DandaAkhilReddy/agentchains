@@ -360,3 +360,18 @@ export const cancelRedemption = (token: string, id: string) =>
 
 export const fetchRedemptionMethods = () =>
   get<{ methods: RedemptionMethodInfo[] }>("/redemptions/methods");
+
+// ── System Metrics (combined) ──
+
+export async function fetchSystemMetrics(): Promise<{
+  health: HealthResponse;
+  cdn: CDNStats;
+  tokenSupply: TokenSupply;
+}> {
+  const [health, cdn, tokenSupply] = await Promise.all([
+    get<HealthResponse>("/health"),
+    get<CDNStats>("/health/cdn"),
+    get<TokenSupply>("/wallet/supply"),
+  ]);
+  return { health, cdn, tokenSupply };
+}

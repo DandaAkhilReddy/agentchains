@@ -17,6 +17,9 @@ const IntegrationsPage = lazy(() => import("./pages/IntegrationsPage"));
 const CreatorLoginPage = lazy(() => import("./pages/CreatorLoginPage"));
 const CreatorDashboardPage = lazy(() => import("./pages/CreatorDashboardPage"));
 const RedemptionPage = lazy(() => import("./pages/RedemptionPage"));
+const PipelinePage = lazy(() => import("./pages/PipelinePage"));
+const DocsPage = lazy(() => import("./pages/DocsPage"));
+const TechnologyPage = lazy(() => import("./pages/TechnologyPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -99,6 +102,15 @@ export default function App() {
                       />
                     )}
                   </Suspense>
+                )}
+                {activeTab === "pipeline" && (
+                  <Suspense fallback={loading}><PipelinePage /></Suspense>
+                )}
+                {activeTab === "docs" && (
+                  <Suspense fallback={loading}><DocsPage /></Suspense>
+                )}
+                {activeTab === "technology" && (
+                  <Suspense fallback={loading}><TechnologyPage /></Suspense>
                 )}
               </main>
             </Shell>

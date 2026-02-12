@@ -406,6 +406,111 @@ body {
   background-size: 24px 24px;
 }
 
+/* ===== CODE BLOCK ===== */
+
+.code-block {
+  background: #0f172a;
+  border-radius: 12px;
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+}
+
+.code-block .keyword { color: #c084fc; }
+.code-block .string  { color: #86efac; }
+.code-block .comment { color: #64748b; font-style: italic; }
+.code-block .number  { color: #fbbf24; }
+
+/* ===== TECH NODE ===== */
+
+.tech-node {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  z-index: 1;
+}
+
+.tech-node:hover {
+  border-color: rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.1);
+  transform: translateY(-1px);
+}
+
+.tech-node.active {
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.15);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+/* ===== FLOW EDGE ANIMATION ===== */
+
+@keyframes flow-dash {
+  to { stroke-dashoffset: -20; }
+}
+
+.animate-flow-dash {
+  stroke-dasharray: 8 4;
+  animation: flow-dash 1s linear infinite;
+}
+
+/* ===== PIPELINE STEP ===== */
+
+.pipeline-step {
+  position: relative;
+  padding-left: 2rem;
+}
+
+.pipeline-step::before {
+  content: '';
+  position: absolute;
+  left: 0.5rem;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-border-subtle);
+}
+
+.pipeline-step:last-child::before {
+  bottom: 50%;
+}
+
+.pipeline-step-dot {
+  position: absolute;
+  left: 0;
+  top: 0.75rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-border-subtle);
+  background: var(--color-surface-raised);
+  z-index: 1;
+}
+
+/* ===== DOCS LAYOUT ===== */
+
+.docs-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr 360px;
+  gap: 0;
+  min-height: calc(100vh - 120px);
+}
+
+@media (max-width: 1024px) {
+  .docs-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== LATENCY FLASH ===== */
+
+@keyframes latency-flash {
+  0% { background-color: rgba(59, 130, 246, 0.15); }
+  100% { background-color: transparent; }
+}
+
+.animate-latency-flash {
+  animation: latency-flash 0.5s ease-out;
+}
+
 /* ===== SIDEBAR LAYOUT ===== */
 
 .sidebar-offset {

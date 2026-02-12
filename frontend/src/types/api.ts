@@ -602,3 +602,41 @@ export interface RedemptionMethodInfo {
   processing_time: string;
   available: boolean;
 }
+
+// ── Pipeline Types ──
+
+export interface PipelineToolCall {
+  name: string;
+  input: Record<string, unknown>;
+  output?: unknown;
+}
+
+export interface PipelineStep {
+  id: string;
+  agentId: string;
+  agentName: string;
+  action: string;
+  status: "running" | "completed" | "failed" | "waiting";
+  startedAt: string;
+  completedAt?: string;
+  latencyMs?: number;
+  toolCall?: PipelineToolCall;
+  error?: string;
+}
+
+export interface AgentExecution {
+  agentId: string;
+  agentName: string;
+  status: "active" | "idle" | "error";
+  steps: PipelineStep[];
+  startedAt: string;
+  lastActivityAt: string;
+}
+
+// ── System Metrics (for Technology page) ──
+
+export interface SystemMetrics {
+  health: HealthResponse;
+  cdn: CDNStats;
+  tokenSupply: TokenSupply;
+}
