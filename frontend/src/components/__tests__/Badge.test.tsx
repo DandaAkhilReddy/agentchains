@@ -11,78 +11,78 @@ describe("Badge", () => {
   it("applies default gray variant when no variant is specified", () => {
     const { container } = render(<Badge label="Default" />);
     const badge = container.querySelector("span");
-    expect(badge?.className).toContain("bg-[rgba(100,116,139,0.15)]");
-    expect(badge?.className).toContain("text-[#94a3b8]");
+    expect(badge?.className).toContain("bg-[rgba(100,116,139,0.08)]");
+    expect(badge?.className).toContain("text-[#64748b]");
   });
 
   it("applies green variant styles", () => {
     const { container } = render(<Badge label="Green Badge" variant="green" />);
     const badge = container.querySelector("span");
-    expect(badge?.className).toContain("bg-[rgba(16,185,129,0.15)]");
-    expect(badge?.className).toContain("text-[#10b981]");
+    expect(badge?.className).toContain("bg-[rgba(22,163,74,0.08)]");
+    expect(badge?.className).toContain("text-[#16a34a]");
   });
 
   it("applies blue variant styles", () => {
     const { container } = render(<Badge label="Blue Badge" variant="blue" />);
     const badge = container.querySelector("span");
-    expect(badge?.className).toContain("bg-[rgba(0,212,255,0.15)]");
-    expect(badge?.className).toContain("text-[#00d4ff]");
+    expect(badge?.className).toContain("bg-[rgba(59,130,246,0.08)]");
+    expect(badge?.className).toContain("text-[#3b82f6]");
   });
 
   it("applies purple variant styles", () => {
     const { container } = render(<Badge label="Purple Badge" variant="purple" />);
     const badge = container.querySelector("span");
-    expect(badge?.className).toContain("bg-[rgba(139,92,246,0.15)]");
-    expect(badge?.className).toContain("text-[#8b5cf6]");
+    expect(badge?.className).toContain("bg-[rgba(139,92,246,0.08)]");
+    expect(badge?.className).toContain("text-[#7c3aed]");
   });
 
   it("applies red variant styles", () => {
     const { container } = render(<Badge label="Red Badge" variant="red" />);
     const badge = container.querySelector("span");
-    expect(badge?.className).toContain("bg-[rgba(239,68,68,0.15)]");
-    expect(badge?.className).toContain("text-[#ef4444]");
+    expect(badge?.className).toContain("bg-[rgba(220,38,38,0.08)]");
+    expect(badge?.className).toContain("text-[#dc2626]");
   });
 
   it("applies yellow variant styles", () => {
     const { container } = render(<Badge label="Yellow Badge" variant="yellow" />);
     const badge = container.querySelector("span");
-    expect(badge?.className).toContain("bg-[rgba(234,179,8,0.15)]");
-    expect(badge?.className).toContain("text-[#eab308]");
+    expect(badge?.className).toContain("bg-[rgba(202,138,4,0.08)]");
+    expect(badge?.className).toContain("text-[#ca8a04]");
   });
 
   it("applies amber variant styles", () => {
     const { container } = render(<Badge label="Amber Badge" variant="amber" />);
     const badge = container.querySelector("span");
-    expect(badge?.className).toContain("bg-[rgba(245,158,11,0.15)]");
-    expect(badge?.className).toContain("text-[#f59e0b]");
+    expect(badge?.className).toContain("bg-[rgba(217,119,6,0.08)]");
+    expect(badge?.className).toContain("text-[#d97706]");
   });
 
   it("applies orange variant styles", () => {
     const { container } = render(<Badge label="Orange Badge" variant="orange" />);
     const badge = container.querySelector("span");
-    expect(badge?.className).toContain("bg-[rgba(249,115,22,0.15)]");
-    expect(badge?.className).toContain("text-[#f97316]");
+    expect(badge?.className).toContain("bg-[rgba(249,115,22,0.08)]");
+    expect(badge?.className).toContain("text-[#ea580c]");
   });
 
   it("applies rose variant styles", () => {
     const { container } = render(<Badge label="Rose Badge" variant="rose" />);
     const badge = container.querySelector("span");
-    expect(badge?.className).toContain("bg-[rgba(244,63,94,0.15)]");
-    expect(badge?.className).toContain("text-[#f43f5e]");
+    expect(badge?.className).toContain("bg-[rgba(225,29,72,0.08)]");
+    expect(badge?.className).toContain("text-[#e11d48]");
   });
 
   it("applies cyan variant styles", () => {
     const { container } = render(<Badge label="Cyan Badge" variant="cyan" />);
     const badge = container.querySelector("span");
-    expect(badge?.className).toContain("bg-[rgba(0,212,255,0.15)]");
-    expect(badge?.className).toContain("text-[#00d4ff]");
+    expect(badge?.className).toContain("bg-[rgba(59,130,246,0.08)]");
+    expect(badge?.className).toContain("text-[#3b82f6]");
   });
 
   it("falls back to gray variant for unknown variant", () => {
     const { container } = render(<Badge label="Unknown" variant={"unknown" as any} />);
     const badge = container.querySelector("span");
-    expect(badge?.className).toContain("bg-[rgba(100,116,139,0.15)]");
-    expect(badge?.className).toContain("text-[#94a3b8]");
+    expect(badge?.className).toContain("bg-[rgba(100,116,139,0.08)]");
+    expect(badge?.className).toContain("text-[#64748b]");
   });
 
   it("includes base badge styling classes", () => {

@@ -6,7 +6,7 @@ interface Props {
   height?: number;
 }
 
-export default function MiniChart({ data, color = "#00d4ff", height = 32 }: Props) {
+export default function MiniChart({ data, color = "#3b82f6", height = 32 }: Props) {
   const chartData = data.map((v, i) => ({ i, v }));
 
   return (

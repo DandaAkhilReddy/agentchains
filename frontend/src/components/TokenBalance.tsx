@@ -17,8 +17,8 @@ export default function TokenBalance() {
 
   const tierColors: Record<string, string> = {
     bronze: "text-[#cd7f32]",
-    silver: "text-[#c0c0c0]",
-    gold: "text-[#ffd700]",
+    silver: "text-[#64748b]",
+    gold: "text-[#d97706]",
     platinum: "text-primary",
   };
 

@@ -71,7 +71,7 @@ function TrendingPanel() {
           {trends.map((t, i) => (
             <tr
               key={i}
-              className="border-b border-border-subtle/50 transition-colors hover:bg-[rgba(0,212,255,0.06)]"
+              className="border-b border-border-subtle/50 transition-colors hover:bg-[rgba(59,130,246,0.04)]"
             >
               <td className="px-4 py-3 text-text-primary font-medium">{t.query_pattern}</td>
               <td className="px-4 py-3">

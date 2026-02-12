@@ -73,7 +73,7 @@ export default function DataTable<T>({
                 } ${
                   onRowClick
                     ? "cursor-pointer hover:bg-primary-glow hover:border-l-2 hover:border-l-primary"
-                    : "hover:bg-[rgba(0,212,255,0.06)]"
+                    : "hover:bg-[rgba(59,130,246,0.04)]"
                 }`}
               >
                 {columns.map((col) => (

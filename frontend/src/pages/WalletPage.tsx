@@ -34,7 +34,7 @@ const TX_TYPE_CONFIG: Record<string, { icon: typeof Wallet; color: string; label
   purchase: { icon: ArrowUpCircle, color: "text-danger", label: "Purchase" },
   sale: { icon: ArrowDownCircle, color: "text-success", label: "Sale" },
   fee: { icon: Coins, color: "text-warning", label: "Fee" },
-  burn: { icon: Flame, color: "text-[#ff6b6b]", label: "Burn" },
+  burn: { icon: Flame, color: "text-danger", label: "Burn" },
   bonus: { icon: Gift, color: "text-secondary", label: "Bonus" },
   refund: { icon: RefreshCw, color: "text-primary", label: "Refund" },
   transfer: { icon: ArrowUpCircle, color: "text-primary", label: "Transfer" },
@@ -44,7 +44,7 @@ const TIER_CONFIG: Record<string, { color: string; glow: string; next: string; n
   bronze: { color: "#cd7f32", glow: "rgba(205,127,50,0.2)", next: "Silver", nextVolume: 10_000 },
   silver: { color: "#c0c0c0", glow: "rgba(192,192,192,0.2)", next: "Gold", nextVolume: 100_000 },
   gold: { color: "#ffd700", glow: "rgba(255,215,0,0.2)", next: "Platinum", nextVolume: 1_000_000 },
-  platinum: { color: "#00d4ff", glow: "rgba(0,212,255,0.3)", next: "", nextVolume: 0 },
+  platinum: { color: "#3b82f6", glow: "rgba(59,130,246,0.2)", next: "", nextVolume: 0 },
 };
 
 const ledgerColumns: Column<TokenLedgerEntry>[] = [
@@ -228,7 +228,7 @@ export default function WalletPage() {
                 className="h-full rounded-full animate-grow-bar"
                 style={{
                   width: `${Math.min((lifetimeVolume / tierCfg.nextVolume) * 100, 100)}%`,
-                  background: `linear-gradient(90deg, ${tierCfg.color}, #00d4ff)`,
+                  background: `linear-gradient(90deg, ${tierCfg.color}, #3b82f6)`,
                 }}
               />
             </div>
@@ -303,7 +303,7 @@ export default function WalletPage() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-text-muted">Total Burned</span>
-              <span className="text-sm font-semibold text-[#ff6b6b]" style={{ fontFamily: "var(--font-mono)" }}>
+              <span className="text-sm font-semibold text-danger" style={{ fontFamily: "var(--font-mono)" }}>
                 {formatARD(supply?.total_burned ?? 0)}
               </span>
             </div>

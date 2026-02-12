@@ -10,7 +10,7 @@ interface Props {
 export default function Shell({ children, onMenuToggle }: Props) {
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-border-glow bg-[rgba(10,10,15,0.85)] backdrop-blur-xl">
+      <header className="sticky top-0 z-30 border-b border-border-glow bg-[rgba(255,255,255,0.8)] backdrop-blur-xl">
         <div className="flex h-14 items-center justify-between px-4 md:justify-end md:px-6">
           {/* Mobile hamburger */}
           {onMenuToggle && (

@@ -129,7 +129,7 @@ export default function Sidebar({ activeTab, onTabChange, mobileOpen, onMobileCl
                   }`}
                 >
                   {active && (
-                    <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-primary shadow-[0_0_8px_rgba(0,212,255,0.6)]" />
+                    <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-primary shadow-[0_0_8px_rgba(59,130,246,0.4)]" />
                   )}
                   <item.icon className={`h-[18px] w-[18px] shrink-0 ${active ? "text-primary" : "text-text-muted group-hover:text-text-secondary"}`} />
                   {!collapsed && (
@@ -156,7 +156,7 @@ export default function Sidebar({ activeTab, onTabChange, mobileOpen, onMobileCl
     <>
       {/* Desktop sidebar */}
       <aside
-        className={`fixed left-0 top-0 z-40 hidden md:flex h-screen flex-col border-r border-border-glow bg-[rgba(10,10,15,0.95)] backdrop-blur-xl transition-all duration-300 ${
+        className={`fixed left-0 top-0 z-40 hidden md:flex h-screen flex-col border-r border-border-glow bg-[rgba(255,255,255,0.85)] backdrop-blur-xl transition-all duration-300 ${
           collapsed ? "w-16" : "w-60"
         }`}
       >
@@ -170,7 +170,7 @@ export default function Sidebar({ activeTab, onTabChange, mobileOpen, onMobileCl
             className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
             onClick={onMobileClose}
           />
-          <aside className="fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-border-glow bg-[rgba(10,10,15,0.98)] backdrop-blur-xl md:hidden animate-slide-in">
+          <aside className="fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-border-glow bg-[rgba(255,255,255,0.92)] backdrop-blur-xl md:hidden animate-slide-in">
             {sidebarContent}
           </aside>
         </>

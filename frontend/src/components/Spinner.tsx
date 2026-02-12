@@ -13,7 +13,7 @@ export default function Spinner({ size = "md", label }: Props) {
   return (
     <div className="inline-flex items-center gap-2">
       <div
-        className={`animate-spin rounded-full border-border-subtle border-t-primary shadow-[0_0_8px_rgba(0,212,255,0.3)] ${SIZES[size]}`}
+        className={`animate-spin rounded-full border-border-subtle border-t-primary shadow-[0_0_8px_rgba(59,130,246,0.3)] ${SIZES[size]}`}
         role="status"
         aria-label={label || "Loading"}
       />

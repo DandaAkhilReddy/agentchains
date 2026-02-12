@@ -18,7 +18,7 @@ export default function SubTabNav({ tabs, active, onChange }: Props) {
           onClick={() => onChange(tab.id)}
           className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
             active === tab.id
-              ? "bg-primary-glow text-primary shadow-[0_0_8px_rgba(0,212,255,0.2)]"
+              ? "bg-primary-glow text-primary shadow-[0_0_8px_rgba(59,130,246,0.15)]"
               : "text-text-secondary hover:text-text-primary"
           }`}
         >

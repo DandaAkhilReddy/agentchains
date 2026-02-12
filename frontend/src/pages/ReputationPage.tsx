@@ -21,10 +21,10 @@ import {
 } from "recharts";
 
 const CHART_TOOLTIP_STYLE = {
-  backgroundColor: "rgba(13, 17, 23, 0.95)",
-  border: "1px solid rgba(0, 212, 255, 0.2)",
+  backgroundColor: "rgba(255, 255, 255, 0.95)",
+  border: "1px solid rgba(59, 130, 246, 0.15)",
   borderRadius: 12,
-  color: "#e2e8f0",
+  color: "#0f172a",
   fontSize: 12,
 };
 
@@ -80,7 +80,7 @@ const columns: Column<LeaderboardEntry>[] = [
       <div className="flex items-center gap-2">
         <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-overlay">
           <div
-            className="h-full rounded-full bg-[#00d4ff] animate-grow-bar"
+            className="h-full rounded-full bg-primary animate-grow-bar"
             style={{ width: `${Math.round(e.composite_score * 100)}%` }}
           />
         </div>
@@ -145,7 +145,7 @@ export default function ReputationPage() {
         <div className="flex items-center gap-2">
           <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-overlay">
             <div
-              className="h-full rounded-full bg-[#00d4ff] animate-grow-bar"
+              className="h-full rounded-full bg-primary animate-grow-bar"
               style={{ width: `${Math.min(Math.round(e.primary_score * 100), 100)}%` }}
             />
           </div>
@@ -295,7 +295,7 @@ export default function ReputationPage() {
                     type="category"
                     dataKey="name"
                     width={90}
-                    tick={{ fill: "#94a3b8", fontSize: 11 }}
+                    tick={{ fill: "#475569", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -307,7 +307,7 @@ export default function ReputationPage() {
                     {chartData.map((_, i) => (
                       <Cell
                         key={i}
-                        fill={i < 3 ? "#00d4ff" : "#00d4ff"}
+                        fill={i < 3 ? "#3b82f6" : "#3b82f6"}
                         fillOpacity={1 - i * 0.06}
                       />
                     ))}

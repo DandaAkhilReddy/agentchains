@@ -1,10 +1,10 @@
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 const CHART_TOOLTIP_STYLE = {
-  backgroundColor: "rgba(13, 17, 23, 0.95)",
-  border: "1px solid rgba(0, 212, 255, 0.2)",
+  backgroundColor: "rgba(255, 255, 255, 0.95)",
+  border: "1px solid rgba(59, 130, 246, 0.15)",
   borderRadius: 12,
-  color: "#e2e8f0",
+  color: "#0f172a",
   fontSize: 12,
 };
 
@@ -32,22 +32,22 @@ export default function EarningsChart({ data }: Props) {
       <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
         <defs>
           <linearGradient id="earnedGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#00d4ff" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="#00d4ff" stopOpacity={0} />
+            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
           </linearGradient>
           <linearGradient id="spentGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
+            <stop offset="5%" stopColor="#e11d48" stopOpacity={0.3} />
+            <stop offset="95%" stopColor="#e11d48" stopOpacity={0} />
           </linearGradient>
         </defs>
         <XAxis
           dataKey="date"
-          tick={{ fill: "#475569", fontSize: 11 }}
+          tick={{ fill: "#94a3b8", fontSize: 11 }}
           axisLine={false}
           tickLine={false}
         />
         <YAxis
-          tick={{ fill: "#475569", fontSize: 11 }}
+          tick={{ fill: "#94a3b8", fontSize: 11 }}
           axisLine={false}
           tickLine={false}
           tickFormatter={(v) => `$${v}`}
@@ -59,7 +59,7 @@ export default function EarningsChart({ data }: Props) {
         <Area
           type="monotone"
           dataKey="earned"
-          stroke="#00d4ff"
+          stroke="#3b82f6"
           fill="url(#earnedGradient)"
           strokeWidth={2}
           name="Earned"
@@ -67,7 +67,7 @@ export default function EarningsChart({ data }: Props) {
         <Area
           type="monotone"
           dataKey="spent"
-          stroke="#f43f5e"
+          stroke="#e11d48"
           fill="url(#spentGradient)"
           strokeWidth={2}
           name="Spent"

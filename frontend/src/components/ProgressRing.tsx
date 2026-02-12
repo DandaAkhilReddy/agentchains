@@ -7,11 +7,11 @@ interface Props {
 }
 
 const COLORS: Record<string, string> = {
-  cyan: "#00d4ff",
+  cyan: "#3b82f6",
   purple: "#8b5cf6",
-  green: "#10b981",
-  amber: "#f59e0b",
-  red: "#ef4444",
+  green: "#16a34a",
+  amber: "#d97706",
+  red: "#dc2626",
 };
 
 export default function ProgressRing({

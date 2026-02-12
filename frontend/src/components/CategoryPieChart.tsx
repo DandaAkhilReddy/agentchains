@@ -1,12 +1,12 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
-const COLORS = ["#00d4ff", "#8b5cf6", "#10b981", "#f59e0b", "#f43f5e"];
+const COLORS = ["#3b82f6", "#8b5cf6", "#16a34a", "#d97706", "#e11d48"];
 
 const CHART_TOOLTIP_STYLE = {
-  backgroundColor: "rgba(13, 17, 23, 0.95)",
-  border: "1px solid rgba(0, 212, 255, 0.2)",
+  backgroundColor: "rgba(255, 255, 255, 0.95)",
+  border: "1px solid rgba(59, 130, 246, 0.15)",
   borderRadius: 12,
-  color: "#e2e8f0",
+  color: "#0f172a",
   fontSize: 12,
 };
 

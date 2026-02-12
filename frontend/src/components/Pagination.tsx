@@ -54,7 +54,7 @@ export default function Pagination({ page, totalPages, onPageChange }: Props) {
               onClick={() => onPageChange(p)}
               className={`${btn} ${
                 p === page
-                  ? "bg-primary text-surface font-bold shadow-[0_0_12px_rgba(0,212,255,0.3)]"
+                  ? "bg-primary text-white font-bold shadow-[0_0_12px_rgba(59,130,246,0.3)]"
                   : "text-text-secondary hover:text-text-primary hover:bg-surface-overlay"
               }`}
             >

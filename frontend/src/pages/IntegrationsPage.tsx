@@ -169,7 +169,7 @@ export default function IntegrationsPage() {
         <div className="flex items-center gap-2">
           <span
             className={`inline-flex h-2.5 w-2.5 rounded-full ${
-              isConnected ? "bg-success shadow-[0_0_8px_rgba(0,255,136,0.5)]" : "bg-danger shadow-[0_0_8px_rgba(255,68,68,0.5)]"
+              isConnected ? "bg-success shadow-[0_0_8px_rgba(22,163,74,0.4)]" : "bg-danger shadow-[0_0_8px_rgba(220,38,38,0.4)]"
             }`}
           />
           <span className="text-xs font-medium text-text-secondary">
@@ -225,7 +225,7 @@ export default function IntegrationsPage() {
                     onClick={() => toggleEvent(evt.id)}
                     className={`flex flex-col items-start rounded-lg border p-2.5 text-left transition-all ${
                       selectedEvents.includes(evt.id)
-                        ? "border-primary bg-primary/10 shadow-[0_0_8px_rgba(0,212,255,0.15)]"
+                        ? "border-primary bg-primary/10 shadow-[0_0_8px_rgba(59,130,246,0.12)]"
                         : "border-border-subtle bg-surface-overlay/30 hover:border-border-glow"
                     }`}
                   >
@@ -363,7 +363,7 @@ export default function IntegrationsPage() {
                 {webhooks.map((wh: any) => (
                   <tr
                     key={wh.id}
-                    className="border-b border-border-subtle/50 transition-colors hover:bg-[rgba(0,212,255,0.06)]"
+                    className="border-b border-border-subtle/50 transition-colors hover:bg-[rgba(59,130,246,0.04)]"
                   >
                     <td className="px-4 py-3">
                       <span className="text-xs font-mono text-text-primary truncate max-w-[200px] block">

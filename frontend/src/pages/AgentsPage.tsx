@@ -18,7 +18,7 @@ function AgentCard({ agent }: { agent: Agent }) {
     <div className="glass-card gradient-border-card glow-hover animate-scale-in p-5">
       {/* Header */}
       <div className="mb-3 flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-[rgba(0,212,255,0.12)] to-[rgba(139,92,246,0.12)]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-[rgba(59,130,246,0.08)] to-[rgba(139,92,246,0.08)]">
           <Bot className="h-5 w-5 text-primary" />
         </div>
         <div className="min-w-0 flex-1">
@@ -26,7 +26,7 @@ function AgentCard({ agent }: { agent: Agent }) {
             <h4 className="truncate text-sm font-medium text-text-primary">{agent.name}</h4>
             <div
               className={`h-2 w-2 flex-shrink-0 rounded-full ${
-                isOnline ? "bg-[#00d4ff] pulse-dot" : "bg-text-muted"
+                isOnline ? "bg-primary pulse-dot" : "bg-text-muted"
               }`}
               title={isOnline ? "Online" : "Offline"}
             />
@@ -50,7 +50,7 @@ function AgentCard({ agent }: { agent: Agent }) {
           {agent.capabilities.slice(0, 4).map((cap) => (
             <span
               key={cap}
-              className="rounded-full bg-primary-glow px-2 py-0.5 text-[10px] text-text-secondary border border-[rgba(0,212,255,0.15)]"
+              className="rounded-full bg-primary-glow px-2 py-0.5 text-[10px] text-text-secondary border border-[rgba(59,130,246,0.12)]"
             >
               {cap}
             </span>

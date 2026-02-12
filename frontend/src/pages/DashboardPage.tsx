@@ -20,10 +20,10 @@ import {
 } from "recharts";
 
 const CHART_TOOLTIP_STYLE = {
-  backgroundColor: "rgba(13, 17, 23, 0.95)",
-  border: "1px solid rgba(0, 212, 255, 0.2)",
+  backgroundColor: "rgba(255, 255, 255, 0.95)",
+  border: "1px solid rgba(59, 130, 246, 0.15)",
   borderRadius: 12,
-  color: "#e2e8f0",
+  color: "#0f172a",
   fontSize: 12,
 };
 
@@ -108,7 +108,7 @@ export default function DashboardPage({ onNavigate }: Props) {
           <div className="glass-card gradient-border-card glow-hover p-4">
             {events.length === 0 ? (
               <div className="flex flex-col items-center py-12 text-text-muted">
-                <div className="mb-2 h-2 w-2 rounded-full bg-[#00d4ff] pulse-dot" />
+                <div className="mb-2 h-2 w-2 rounded-full bg-primary pulse-dot" />
                 <p className="text-sm">Waiting for marketplace activity...</p>
               </div>
             ) : (
@@ -119,7 +119,7 @@ export default function DashboardPage({ onNavigate }: Props) {
                   return (
                     <div
                       key={`${evt.timestamp}-${i}`}
-                      className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-[rgba(0,212,255,0.06)] animate-slide-in"
+                      className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-[rgba(59,130,246,0.04)] animate-slide-in"
                     >
                       <div className={`mt-0.5 ${config.color}`}>
                         <Icon className="h-4 w-4" />
@@ -181,7 +181,7 @@ export default function DashboardPage({ onNavigate }: Props) {
                     {topAgents.map((_, i) => (
                       <Cell
                         key={i}
-                        fill={i === 0 ? "#00d4ff" : i === 1 ? "#38bdf8" : "#7dd3fc"}
+                        fill={i === 0 ? "#3b82f6" : i === 1 ? "#60a5fa" : "#93c5fd"}
                       />
                     ))}
                   </Bar>

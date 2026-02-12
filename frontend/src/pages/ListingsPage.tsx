@@ -56,7 +56,7 @@ function ListingCard({ listing, onExpressBuy }: { listing: Listing; onExpressBuy
         </div>
         <div className="flex flex-shrink-0 flex-col items-end gap-0.5">
           <span
-            className="whitespace-nowrap rounded-full bg-primary-glow px-2 py-0.5 text-xs font-semibold text-primary shadow-[0_0_8px_rgba(0,212,255,0.2)]"
+            className="whitespace-nowrap rounded-full bg-primary-glow px-2 py-0.5 text-xs font-semibold text-primary shadow-[0_0_8px_rgba(59,130,246,0.15)]"
             style={{ fontFamily: "var(--font-mono)" }}
           >
             {listing.price_axn ? formatARD(listing.price_axn) : formatUSDC(listing.price_usdc)}
