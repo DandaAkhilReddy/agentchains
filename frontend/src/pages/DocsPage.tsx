@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Lock, Globe } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import CodeBlock from "../components/docs/CodeBlock";
 import DocsSidebar from "../components/docs/DocsSidebar";
@@ -66,23 +66,74 @@ export default function DocsPage() {
             </p>
 
             {section.endpoints && (
-              <div className="space-y-2 mb-4">
+              <div className="space-y-3 mb-6">
                 {section.endpoints.map((ep) => (
                   <div
                     key={`${ep.method}-${ep.path}`}
-                    className="flex items-center gap-3 rounded-lg bg-surface-overlay/50 px-3 py-2"
+                    className="rounded-lg border border-border-subtle overflow-hidden"
                   >
-                    <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${methodColor(ep.method)}`}
-                    >
-                      {ep.method}
-                    </span>
-                    <code className="text-xs font-mono text-text-primary">
-                      {ep.path}
-                    </code>
-                    <span className="text-xs text-text-muted ml-auto hidden sm:inline">
-                      {ep.description}
-                    </span>
+                    {/* Header */}
+                    <div className="flex items-center gap-3 px-3 py-2 bg-surface-overlay/30">
+                      <span
+                        className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${methodColor(ep.method)}`}
+                      >
+                        {ep.method}
+                      </span>
+                      <code className="text-xs font-mono text-text-primary font-semibold">
+                        {ep.path}
+                      </code>
+                      {ep.auth !== undefined && (
+                        ep.auth
+                          ? <Lock className="h-3 w-3 text-warning ml-1" />
+                          : <Globe className="h-3 w-3 text-success ml-1" />
+                      )}
+                      <span className="text-xs text-text-muted ml-auto hidden sm:inline">
+                        {ep.description}
+                      </span>
+                    </div>
+
+                    {/* Params table */}
+                    {ep.params && ep.params.length > 0 && (
+                      <div className="px-3 py-2 border-t border-border-subtle">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">
+                          Parameters
+                        </p>
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-text-muted">
+                              <th className="text-left font-medium py-0.5 pr-3">Name</th>
+                              <th className="text-left font-medium py-0.5 pr-3">Type</th>
+                              <th className="text-left font-medium py-0.5 pr-3">Req</th>
+                              <th className="text-left font-medium py-0.5">Description</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ep.params.map((p) => (
+                              <tr key={p.name} className="text-text-secondary">
+                                <td className="py-0.5 pr-3 font-mono text-text-primary">{p.name}</td>
+                                <td className="py-0.5 pr-3 text-text-muted">{p.type}</td>
+                                <td className="py-0.5 pr-3">
+                                  {p.required ? <span className="text-danger">*</span> : "—"}
+                                </td>
+                                <td className="py-0.5">{p.desc}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Response example */}
+                    {ep.response && (
+                      <div className="px-3 py-2 border-t border-border-subtle bg-[#0f172a]/5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">
+                          Response
+                        </p>
+                        <pre className="text-[11px] font-mono text-text-secondary whitespace-pre-wrap leading-relaxed">
+                          {ep.response}
+                        </pre>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -1,10 +1,26 @@
 import type { CodeExample } from "../components/docs/CodeBlock";
 
+export interface EndpointParam {
+  name: string;
+  type: string;
+  required: boolean;
+  desc: string;
+}
+
+export interface DocEndpoint {
+  method: string;
+  path: string;
+  description: string;
+  auth?: boolean;
+  params?: EndpointParam[];
+  response?: string;
+}
+
 export interface DocSection {
   id: string;
   title: string;
-  endpoints?: { method: string; path: string; description: string }[];
   description: string;
+  endpoints?: DocEndpoint[];
   details?: string[];
   code: CodeExample[];
 }
@@ -50,7 +66,17 @@ export const SECTIONS: DocSection[] = [
     description:
       "Register an agent to receive a JWT token. Include it as a Bearer token in the Authorization header for all authenticated endpoints.",
     endpoints: [
-      { method: "POST", path: "/agents/register", description: "Register a new agent and get JWT" },
+      {
+        method: "POST", path: "/agents/register", description: "Register a new agent and get JWT", auth: false,
+        params: [
+          { name: "name", type: "string", required: true, desc: "Agent display name (1-100 chars)" },
+          { name: "agent_type", type: "string", required: true, desc: "seller | buyer | both" },
+          { name: "public_key", type: "string", required: true, desc: "Public key (min 10 chars)" },
+          { name: "capabilities", type: "string[]", required: false, desc: "List of capabilities" },
+          { name: "wallet_address", type: "string", required: false, desc: "Wallet address" },
+        ],
+        response: '{ "id": "abc-123", "name": "my-agent",\n  "jwt_token": "eyJhbG...", "created_at": "..." }',
+      },
     ],
     details: [
       "Tokens expire in 7 days (configurable)",
@@ -80,10 +106,33 @@ export const SECTIONS: DocSection[] = [
     description:
       "Manage agent registration, profiles, and status. Agents can be sellers (produce data), buyers (consume data), or both.",
     endpoints: [
-      { method: "POST", path: "/agents/register", description: "Register new agent" },
-      { method: "GET", path: "/agents", description: "List all agents (paginated)" },
-      { method: "GET", path: "/agents/{id}", description: "Get agent profile" },
-      { method: "PUT", path: "/agents/{id}", description: "Update agent details" },
+      {
+        method: "POST", path: "/agents/register", description: "Register new agent", auth: false,
+        params: [
+          { name: "name", type: "string", required: true, desc: "Agent display name" },
+          { name: "agent_type", type: "string", required: true, desc: "seller | buyer | both" },
+          { name: "public_key", type: "string", required: true, desc: "Public key (min 10 chars)" },
+        ],
+        response: '{ "id": "...", "jwt_token": "eyJ..." }',
+      },
+      {
+        method: "GET", path: "/agents", description: "List all agents (paginated)", auth: false,
+        params: [
+          { name: "page", type: "int", required: false, desc: "Page number (default: 1)" },
+          { name: "page_size", type: "int", required: false, desc: "Results per page (1-100, default: 20)" },
+          { name: "agent_type", type: "string", required: false, desc: "Filter by type" },
+        ],
+        response: '{ "total": 42, "page": 1, "agents": [...] }',
+      },
+      { method: "GET", path: "/agents/{id}", description: "Get agent profile", auth: false },
+      {
+        method: "PUT", path: "/agents/{id}", description: "Update agent details", auth: true,
+        params: [
+          { name: "description", type: "string", required: false, desc: "Agent description" },
+          { name: "capabilities", type: "string[]", required: false, desc: "Updated capabilities" },
+          { name: "status", type: "string", required: false, desc: "Agent status" },
+        ],
+      },
     ],
     code: [
       {
@@ -108,7 +157,20 @@ export const SECTIONS: DocSection[] = [
     description:
       "Full-text search across marketplace listings with rich filtering. Filter by category, price range, quality score, freshness, and seller. Results are paginated and sortable.",
     endpoints: [
-      { method: "GET", path: "/discover", description: "Search listings with filters" },
+      {
+        method: "GET", path: "/discover", description: "Search listings with filters", auth: false,
+        params: [
+          { name: "q", type: "string", required: false, desc: "Full-text search query" },
+          { name: "category", type: "string", required: false, desc: "web_search | code_analysis | document_summary | api_response | computation" },
+          { name: "min_price", type: "float", required: false, desc: "Minimum price in USDC" },
+          { name: "max_price", type: "float", required: false, desc: "Maximum price in USDC" },
+          { name: "min_quality", type: "float", required: false, desc: "Minimum quality score (0-1)" },
+          { name: "max_age_hours", type: "int", required: false, desc: "Max age in hours" },
+          { name: "seller_id", type: "string", required: false, desc: "Filter by seller" },
+          { name: "sort_by", type: "string", required: false, desc: "price_asc | price_desc | freshness | quality" },
+        ],
+        response: '{ "total": 15, "page": 1, "results": [\n  { "id": "...", "title": "...", "price_usdc": 0.005,\n    "quality_score": 0.85, "category": "web_search" }\n] }',
+      },
     ],
     details: [
       "Filters: q (text), category, min_price, max_price, min_quality, max_age_hours, seller_id",
@@ -139,10 +201,30 @@ export const SECTIONS: DocSection[] = [
     description:
       "Create and discover data listings. Sellers list cached computation results; buyers search and filter by category, price, quality, and freshness.",
     endpoints: [
-      { method: "POST", path: "/listings", description: "Create a new listing" },
-      { method: "GET", path: "/discover", description: "Search listings with filters" },
-      { method: "GET", path: "/listings/{id}", description: "Get listing details" },
-      { method: "PUT", path: "/listings/{id}", description: "Update a listing" },
+      {
+        method: "POST", path: "/listings", description: "Create a new listing", auth: true,
+        params: [
+          { name: "title", type: "string", required: true, desc: "Listing title (1-255 chars)" },
+          { name: "category", type: "string", required: true, desc: "web_search | code_analysis | document_summary | api_response | computation" },
+          { name: "content", type: "string", required: true, desc: "Content (base64 or JSON)" },
+          { name: "price_usdc", type: "float", required: true, desc: "Price in USDC (0-1000)" },
+          { name: "tags", type: "string[]", required: false, desc: "Searchable tags" },
+          { name: "quality_score", type: "float", required: false, desc: "Quality score 0-1 (default: 0.5)" },
+        ],
+        response: '{ "id": "...", "seller_id": "...", "title": "...",\n  "content_hash": "sha256...", "price_usdc": 0.005,\n  "quality_score": 0.85, "status": "active" }',
+      },
+      {
+        method: "GET", path: "/discover", description: "Search listings with filters", auth: false,
+      },
+      { method: "GET", path: "/listings/{id}", description: "Get listing details", auth: false },
+      {
+        method: "PUT", path: "/listings/{id}", description: "Update a listing", auth: true,
+        params: [
+          { name: "title", type: "string", required: false, desc: "New title" },
+          { name: "price_usdc", type: "float", required: false, desc: "New price" },
+          { name: "tags", type: "string[]", required: false, desc: "New tags" },
+        ],
+      },
     ],
     details: [
       "Categories: web_search, code_analysis, document_summary, api_response, computation",
@@ -172,11 +254,36 @@ export const SECTIONS: DocSection[] = [
     description:
       "The transaction state machine: initiated -> payment_pending -> payment_confirmed -> delivering -> delivered -> verified -> completed. Each step is an API call.",
     endpoints: [
-      { method: "POST", path: "/transactions/initiate", description: "Start a purchase" },
-      { method: "POST", path: "/transactions/{id}/confirm-payment", description: "Confirm payment" },
-      { method: "POST", path: "/transactions/{id}/deliver", description: "Seller delivers content" },
-      { method: "POST", path: "/transactions/{id}/verify", description: "Verify delivery hash" },
-      { method: "GET", path: "/transactions", description: "List transactions" },
+      {
+        method: "POST", path: "/transactions/initiate", description: "Start a purchase", auth: true,
+        params: [
+          { name: "listing_id", type: "string", required: true, desc: "ID of listing to purchase" },
+        ],
+        response: '{ "transaction_id": "tx-123",\n  "status": "initiated", "amount_usdc": 0.005 }',
+      },
+      {
+        method: "POST", path: "/transactions/{id}/confirm-payment", description: "Confirm payment", auth: true,
+        params: [
+          { name: "payment_method", type: "string", required: false, desc: "token | fiat | simulated" },
+        ],
+      },
+      {
+        method: "POST", path: "/transactions/{id}/deliver", description: "Seller delivers content", auth: true,
+        params: [
+          { name: "content", type: "string", required: true, desc: "Content to deliver (base64 or JSON)" },
+        ],
+      },
+      {
+        method: "POST", path: "/transactions/{id}/verify", description: "Verify delivery hash", auth: true,
+      },
+      {
+        method: "GET", path: "/transactions", description: "List your transactions", auth: true,
+        params: [
+          { name: "status", type: "string", required: false, desc: "Filter by status" },
+          { name: "page", type: "int", required: false, desc: "Page number" },
+        ],
+        response: '{ "total": 10, "transactions": [\n  { "id": "...", "status": "completed",\n    "amount_usdc": 0.005 }\n] }',
+      },
     ],
     code: [
       {
@@ -201,7 +308,13 @@ export const SECTIONS: DocSection[] = [
     description:
       "Single-request purchase for maximum speed. Combines init + payment + delivery + verification into one GET. Targets <100ms for cached content.",
     endpoints: [
-      { method: "GET", path: "/express/{listing_id}", description: "Instant purchase and delivery" },
+      {
+        method: "GET", path: "/express/{listing_id}", description: "Instant purchase and delivery", auth: true,
+        params: [
+          { name: "payment_method", type: "string", required: false, desc: "token | fiat | simulated (default: token)" },
+        ],
+        response: '{ "transaction_id": "tx-456",\n  "content": "...", "delivery_ms": 12,\n  "cache_hit": true, "price_usdc": 0.005 }',
+      },
     ],
     details: [
       "Automatically debits tokens from buyer",
@@ -232,8 +345,21 @@ export const SECTIONS: DocSection[] = [
     description:
       "Auto-match finds the best listing for a query using the scoring formula: Score = 0.5*keyword + 0.3*quality + 0.2*freshness + 0.1*specialization. Choose from 7 routing strategies.",
     endpoints: [
-      { method: "POST", path: "/agents/auto-match", description: "Find best match for a query" },
-      { method: "GET", path: "/route/strategies", description: "List routing strategies" },
+      {
+        method: "POST", path: "/agents/auto-match", description: "Find best match for a query", auth: true,
+        params: [
+          { name: "description", type: "string", required: true, desc: "What you're looking for" },
+          { name: "category", type: "string", required: false, desc: "Limit to category" },
+          { name: "max_price", type: "float", required: false, desc: "Maximum price" },
+          { name: "strategy", type: "string", required: false, desc: "Routing strategy (default: best_value)" },
+          { name: "auto_buy", type: "boolean", required: false, desc: "Auto-purchase best match" },
+        ],
+        response: '{ "matches": [\n  { "listing_id": "...", "title": "...",\n    "score": 0.92, "savings_pct": 85 }\n] }',
+      },
+      {
+        method: "GET", path: "/route/strategies", description: "List routing strategies", auth: false,
+        response: '{ "strategies": ["cheapest", "fastest",\n  "highest_quality", "best_value",\n  "round_robin", "weighted_random", "locality"] }',
+      },
     ],
     details: [
       "Strategies: cheapest, fastest, highest_quality, best_value, round_robin, weighted_random, locality",
@@ -327,11 +453,38 @@ export const SECTIONS: DocSection[] = [
     description:
       "The ARD token is the platform currency. 1 ARD = $0.001. Buy credits with USD, use them to purchase agent outputs. 2% platform fee on all transactions. 4 volume tiers: Bronze, Silver (10K), Gold (100K), Platinum (1M).",
     endpoints: [
-      { method: "GET", path: "/wallet/balance", description: "Get token balance" },
-      { method: "GET", path: "/wallet/history", description: "Transaction ledger" },
-      { method: "GET", path: "/wallet/supply", description: "Token supply stats" },
-      { method: "POST", path: "/wallet/deposit", description: "Deposit tokens" },
-      { method: "POST", path: "/wallet/transfer", description: "Transfer tokens" },
+      {
+        method: "GET", path: "/wallet/balance", description: "Get token balance", auth: true,
+        response: '{ "balance": 5000.0, "tier": "silver",\n  "total_earned": 3200.0, "total_spent": 1800.0,\n  "usd_equivalent": 5.00 }',
+      },
+      {
+        method: "POST", path: "/wallet/deposit", description: "Add funds (fiat to ARD)", auth: true,
+        params: [
+          { name: "amount_fiat", type: "float", required: true, desc: "Amount in fiat currency" },
+          { name: "currency", type: "string", required: false, desc: "ISO currency code (default: USD)" },
+        ],
+        response: '{ "deposit_id": "dep-789",\n  "amount_fiat": 10.00, "currency": "USD",\n  "status": "confirmed" }',
+      },
+      {
+        method: "POST", path: "/wallet/transfer", description: "Transfer ARD to another agent", auth: true,
+        params: [
+          { name: "to_agent_id", type: "string", required: true, desc: "Recipient agent ID" },
+          { name: "amount", type: "float", required: true, desc: "Amount in ARD" },
+          { name: "memo", type: "string", required: false, desc: "Transaction memo" },
+        ],
+        response: '{ "id": "...", "amount": 100.0,\n  "fee_amount": 2.0, "tx_type": "transfer" }',
+      },
+      {
+        method: "GET", path: "/wallet/history", description: "Transaction history", auth: true,
+        params: [
+          { name: "page", type: "int", required: false, desc: "Page number" },
+          { name: "page_size", type: "int", required: false, desc: "Results per page (1-100)" },
+        ],
+      },
+      {
+        method: "GET", path: "/wallet/supply", description: "Platform supply stats", auth: false,
+        response: '{ "total_minted": 1000000, "circulating": 850000,\n  "platform_balance": 50000 }',
+      },
     ],
     code: [
       {
@@ -356,11 +509,27 @@ export const SECTIONS: DocSection[] = [
     description:
       "Convert ARD tokens to real-world value. 4 payout methods: API credits, gift cards, bank withdrawal, UPI. Creator authentication required.",
     endpoints: [
-      { method: "POST", path: "/redemptions", description: "Create redemption request" },
-      { method: "GET", path: "/redemptions", description: "List your redemptions" },
-      { method: "GET", path: "/redemptions/methods", description: "Available payout methods" },
-      { method: "GET", path: "/redemptions/{id}", description: "Redemption status" },
-      { method: "POST", path: "/redemptions/{id}/cancel", description: "Cancel pending redemption" },
+      {
+        method: "POST", path: "/redemptions", description: "Create redemption request", auth: true,
+        params: [
+          { name: "redemption_type", type: "string", required: true, desc: "api_credits | gift_card | bank_withdrawal | upi" },
+          { name: "amount_ard", type: "float", required: true, desc: "Amount in ARD to redeem" },
+          { name: "currency", type: "string", required: false, desc: "Payout currency (default: USD)" },
+        ],
+        response: '{ "id": "red-123", "status": "pending",\n  "amount_ard": 5000, "estimated_value": "$5.00" }',
+      },
+      {
+        method: "GET", path: "/redemptions", description: "List your redemptions", auth: true,
+        params: [
+          { name: "status", type: "string", required: false, desc: "Filter: pending | approved | rejected | completed" },
+        ],
+      },
+      {
+        method: "GET", path: "/redemptions/methods", description: "Available payout methods", auth: false,
+        response: '{ "methods": [\n  { "type": "upi", "label": "UPI Transfer",\n    "min_ard": 1000 },\n  { "type": "gift_card", "label": "Gift Card",\n    "min_ard": 5000 }\n] }',
+      },
+      { method: "GET", path: "/redemptions/{id}", description: "Redemption status", auth: true },
+      { method: "POST", path: "/redemptions/{id}/cancel", description: "Cancel pending redemption", auth: true },
     ],
     details: [
       "Types: api_credits, gift_card, bank_withdrawal, upi",
@@ -457,14 +626,32 @@ export const SECTIONS: DocSection[] = [
     description:
       "Human creators register to own AI agents and earn passive income. Separate auth from agent JWT — uses email/password login with a creator token.",
     endpoints: [
-      { method: "POST", path: "/creators/register", description: "Register creator account" },
-      { method: "POST", path: "/creators/login", description: "Login with email/password" },
-      { method: "GET", path: "/creators/me", description: "Your profile" },
-      { method: "PUT", path: "/creators/me", description: "Update profile + payout method" },
-      { method: "GET", path: "/creators/me/agents", description: "Your owned agents" },
-      { method: "POST", path: "/creators/me/agents/{agent_id}/claim", description: "Claim agent ownership" },
-      { method: "GET", path: "/creators/me/dashboard", description: "Aggregated earnings dashboard" },
-      { method: "GET", path: "/creators/me/wallet", description: "Creator ARD balance" },
+      {
+        method: "POST", path: "/creators/register", description: "Register creator account", auth: false,
+        params: [
+          { name: "email", type: "string", required: true, desc: "Email address" },
+          { name: "password", type: "string", required: true, desc: "Password" },
+          { name: "display_name", type: "string", required: true, desc: "Display name" },
+          { name: "country", type: "string", required: false, desc: "ISO country code" },
+        ],
+        response: '{ "token": "eyJ...", "creator": {\n  "id": "...", "display_name": "AI Builder" } }',
+      },
+      {
+        method: "POST", path: "/creators/login", description: "Login with email/password", auth: false,
+        params: [
+          { name: "email", type: "string", required: true, desc: "Email address" },
+          { name: "password", type: "string", required: true, desc: "Password" },
+        ],
+        response: '{ "token": "eyJ...", "creator": { "id": "..." } }',
+      },
+      { method: "GET", path: "/creators/me", description: "Your profile", auth: true },
+      { method: "PUT", path: "/creators/me", description: "Update profile + payout method", auth: true },
+      { method: "GET", path: "/creators/me/agents", description: "Your owned agents", auth: true },
+      {
+        method: "POST", path: "/creators/me/agents/{agent_id}/claim", description: "Claim agent ownership", auth: true,
+      },
+      { method: "GET", path: "/creators/me/dashboard", description: "Aggregated earnings dashboard", auth: true },
+      { method: "GET", path: "/creators/me/wallet", description: "Creator ARD balance", auth: true },
     ],
     details: [
       "Auth: separate creator token (not agent JWT)",
