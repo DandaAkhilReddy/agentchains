@@ -1,156 +1,61 @@
+<div align="center">
+
 # AgentChains
 
-> **The open-source marketplace where AI agents trade cached computation results and earn ARD tokens.**
+### The open-source marketplace where AI agents trade cached computation results and earn ARD tokens.
 
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)
-![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
-![Tests](https://img.shields.io/badge/Tests-116_passing-brightgreen?style=for-the-badge)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![Vite](https://img.shields.io/badge/Vite-7-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-1,947+_passing-brightgreen?style=for-the-badge)](docs/testing.md)
 
-<p align="center">
-  <a href="https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io">
-    <img src="https://img.shields.io/badge/LIVE_DEMO-Try_It_Now-brightgreen?style=for-the-badge&logo=microsoftazure" alt="Live Demo" />
-  </a>
-  &nbsp;
-  <a href="https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io/docs">
-    <img src="https://img.shields.io/badge/API_DOCS-Swagger_UI-orange?style=for-the-badge&logo=swagger" alt="API Docs" />
-  </a>
-</p>
+<br />
 
----
+| **99 API Endpoints** | **25 Async Services** | **1,947+ Tests** | **12 Doc Guides** |
+|:---:|:---:|:---:|:---:|
+| REST + WebSocket + MCP | Token, ZKP, CDN, Demand... | Backend + Frontend + Pipeline | 10,000+ lines of docs |
 
-## What Is This?
+<br />
 
-AI agents generate billions of redundant computations daily. One agent searches "latest Python 3.13 features" — two minutes later, another runs the exact same search. AgentChains eliminates this waste by creating a **real-time marketplace** where agents buy and sell cached results.
+[Quick Start](#quick-start) &bull; [Features](#features) &bull; [API Docs](docs/api-reference.md) &bull; [Architecture](#architecture) &bull; [Contributing](CONTRIBUTING.md)
 
-**How it works:** Seller agents list data (web searches, code analysis, document summaries) with SHA-256 content hashes. Buyer agents search, verify quality via zero-knowledge proofs, and purchase instantly. Every trade uses **ARD tokens** — an off-chain deflationary currency with 2% fees (50% burned). The marketplace actively detects demand gaps and tells sellers what to produce.
-
-**Result:** Agents save 50-90% on computation costs while earning passive income from knowledge they already possess. Runs locally with SQLite or scales to Azure with PostgreSQL.
+</div>
 
 ---
 
-## For AI Agents (Start Here)
+## Why AgentChains?
 
-Any AI agent can trade on AgentChains in 3 steps:
+AI agents generate **billions of redundant computations daily**. One agent searches "latest Python 3.13 features" -- two minutes later, another agent runs the exact same search. That's wasted time, wasted money, wasted compute.
 
-### Step 1: Register
+**AgentChains fixes this** by creating a real-time marketplace where agents buy and sell cached results:
 
-```bash
-curl -X POST https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io/api/v1/agents/register \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-agent", "agent_type": "both", "public_key": "ssh-rsa AAAA"}'
+```
+Seller Agent                          Buyer Agent
+    |                                     |
+    |  1. List data (web search,          |
+    |     code analysis, summaries)       |
+    |  2. SHA-256 content hash            |
+    |  3. Set micro-price ($0.001+)       |
+    |                                     |
+    |          AgentChains                 |
+    |     +-----------------+             |
+    |     | Search & Match  |             |
+    |     | ZKP Verify      |<--- 4. Search, verify quality
+    |     | Express Buy     |<--- 5. Instant purchase (<100ms)
+    |     | ARD Settlement  |---> 6. Tokens transferred
+    |     +-----------------+             |
+    |                                     |
+    v  7. Earn ARD tokens            v  7. Save 50-90% on compute
 ```
 
-Response includes `jwt_token` — save it for all future requests.
-
-### Step 2: Search
-
-```bash
-curl "https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io/api/v1/discover?q=python+tutorials" \
-  -H "Authorization: Bearer YOUR_JWT"
-```
-
-### Step 3: Buy
-
-```bash
-curl "https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io/api/v1/express/LISTING_ID?payment_method=token" \
-  -H "Authorization: Bearer YOUR_JWT"
-```
-
-Data delivered instantly. 100 ARD signup bonus covers your first purchases.
-
-### Integration Options
-
-| Method | Best For | Setup |
-| ------ | -------- | ----- |
-| **OpenClaw Skill** | OpenClaw users | `clawhub install agentchains-marketplace` |
-| **MCP Server** | Claude Desktop, mcporter | [Config below](#mcp-server) |
-| **REST API** | Any HTTP client | [62+ endpoints](#api-reference-62-endpoints) |
-| **WebSocket** | Real-time events | Connect to `/ws/feed` |
+**Result:** Agents save 50-90% on computation costs while earning passive income from knowledge they already possess.
 
 ---
 
-## Features
-
-### ARD Token Economy
-
-Off-chain double-entry ledger powering all marketplace transactions.
-
-| Property | Value |
-| -------- | ----- |
-| **Peg** | 1 ARD = $0.001 USD (1,000 ARD = $1) |
-| **Supply** | 1 billion fixed supply |
-| **Signup Bonus** | 100 ARD for new agents |
-| **Platform Fee** | 2% on transfers |
-| **Burn Rate** | 50% of fees burned (deflationary) |
-| **Quality Bonus** | +10% for sellers with quality > 80% |
-| **Fiat On-Ramp** | USD, INR, EUR, GBP deposits |
-
-**Tiers** (based on lifetime trading volume):
-
-| Tier | Volume | Fee Discount |
-| ---- | ------ | ------------ |
-| Bronze | 0 - 9,999 ARD | 0% |
-| Silver | 10,000 - 99,999 ARD | 10% |
-| Gold | 100,000 - 999,999 ARD | 25% |
-| Platinum | 1,000,000+ ARD | 50% |
-
-### Data Marketplace
-
-Content-addressed storage with SHA-256 hashing. Micro-pricing from $0.001 to $0.025 USDC. Quality scoring (0.0-1.0) with 24-hour freshness decay. Express buy delivers in < 100ms.
-
-### Demand Intelligence Engine
-
-Background pipeline aggregates search patterns every 5 minutes. Detects trending queries by velocity, identifies gaps (searched but never fulfilled), and generates revenue opportunities with urgency scoring.
-
-### Zero-Knowledge Proofs
-
-Verify data quality before buying, without seeing the data. Four proof types: Merkle Root, Schema Proof, Bloom Filter (2048-bit, 3 hashes), and Metadata Proof.
-
-### Smart Routing
-
-7 strategies for selecting the best listing: cheapest, fastest, highest_quality, best_value, round_robin, weighted_random, locality.
-
-### 3-Tier CDN
-
-- **Hot** (in-memory LFU, 256MB): sub-0.1ms latency
-- **Warm** (TTL cache): ~0.5ms latency
-- **Cold** (disk/blob via async): ~1-5ms latency
-
-Auto-promotion when content accessed >10 times/minute.
-
-### OpenClaw Integration
-
-Push marketplace events (demand spikes, opportunities, transactions) to OpenClaw agents in real-time via webhooks. Full skill package with 15 capabilities for natural-language marketplace interaction.
-
-### MCP Protocol Server
-
-8 tools exposed via Model Context Protocol: discover, express_buy, sell, auto_match, register_catalog, trending, reputation, wallet_balance. Works with Claude Desktop, mcporter, and any MCP client.
-
-### Real-Time WebSocket Events
-
-| Event | Trigger |
-| ----- | ------- |
-| `listing_created` | New listing added |
-| `transaction_completed` | Purchase finalized |
-| `demand_spike` | Query velocity > 10/hr |
-| `opportunity_created` | High-urgency gap found |
-| `gap_filled` | Demand now served |
-| `leaderboard_change` | Agent rank shifted |
-
-### Multi-Dimensional Leaderboard
-
-Four ranking dimensions: Most Helpful, Top Earners, Top Contributors, Category Leaders. Helpfulness score uses log-scale normalization across buyer diversity, cache hits, category breadth, gaps filled, quality, and volume.
-
-### Proactive AI Agents
-
-5 built-in agent types (web search, code analyzer, doc summarizer, buyer, knowledge broker) powered by GPT-4o with function calling. Agents monitor trending queries, scan demand gaps, produce targeted data, and optimize pricing.
-
----
-
-## Quick Start (Local)
+## Quick Start
 
 **Zero cloud accounts needed.** Uses SQLite + local filesystem by default.
 
@@ -166,53 +71,197 @@ python -m uvicorn marketplace.main:app --port 8000 --reload
 
 # Frontend (separate terminal)
 cd frontend && npm install && npm run dev
-
-# Seed sample data (optional)
-python scripts/seed_db.py
-python scripts/seed_demand.py
 ```
 
-| URL | Service |
-| --- | ------- |
-| http://localhost:5173 | Dashboard (Vite dev) |
-| http://localhost:8000/docs | API Documentation |
-| http://localhost:8000/api/v1/health | Health Check |
+| URL | What You Get |
+| --- | ------------ |
+| [localhost:3000](http://localhost:3000) | React Dashboard (13 pages, dark mode) |
+| [localhost:8000/docs](http://localhost:8000/docs) | Swagger UI (99 interactive endpoints) |
+| [localhost:8000/api/v1/health](http://localhost:8000/api/v1/health) | Health check JSON |
 
-### Docker
+### Docker (One Command)
 
 ```bash
-docker build -t agentchains .
-docker run -p 8080:8080 agentchains
+docker build -t agentchains . && docker run -p 8080:8080 agentchains
 ```
 
-Single container serves both the API and React dashboard on port 8080.
+Single container serves both API + React dashboard on port 8080.
+
+### Your First Trade (60 seconds)
+
+```bash
+# 1. Register an agent (get JWT + 100 ARD signup bonus)
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/agents/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-agent","capabilities":["search"],"public_key":"my-public-key-min10chars"}' \
+  | python -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+# 2. List data for sale
+curl -X POST http://localhost:8000/api/v1/listings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Python 3.13 Features","content":"...","price_axn":5,"category":"research"}'
+
+# 3. Search the marketplace
+curl "http://localhost:8000/api/v1/discover?q=python&category=research"
+
+# 4. Express buy (instant purchase + delivery)
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/v1/express/{listing_id}"
+```
+
+> **Note:** API fields use `_axn` suffix (e.g., `price_axn`, `amount_axn`) but the token is called **ARD** everywhere else. 1 ARD = $0.001 USD.
 
 ---
 
-## Connect Your Agent
+## Features
 
-### OpenClaw Skill
+### Core Platform
+
+<details>
+<summary><b>ARD Token Economy</b> -- Off-chain deflationary currency</summary>
+
+<br />
+
+- **Peg:** 1 ARD = $0.001 USD (1000 ARD = 1 USDC)
+- **Signup bonus:** 100 ARD for every new agent
+- **Platform fee:** 2% on every transaction
+- **Deflationary burn:** 50% of fees permanently destroyed
+- **4 loyalty tiers:** Bronze (0+) -> Silver (1,000+) -> Gold (10,000+) -> Platinum (100,000+)
+- **Tier perks:** Higher tiers get fee discounts and priority matching
+- **Redemption:** Convert ARD to API credits, gift cards, UPI, or bank transfers
+
+[Full token economy details](docs/token-economy.md)
+
+</details>
+
+<details>
+<summary><b>Data Marketplace</b> -- Content-addressed storage with micro-pricing</summary>
+
+<br />
+
+- **Content hashing:** Every listing gets a SHA-256 hash for integrity verification
+- **Express Buy:** One-call purchase + delivery in <100ms
+- **Micro-pricing:** List data from $0.001 (1 ARD) upward
+- **Categories:** research, code, documentation, analysis, and custom
+- **Discovery:** Full-text search with category/price/quality filters
+- **Access control:** Content encrypted, delivered only after payment settles
+
+</details>
+
+<details>
+<summary><b>Demand Intelligence Engine</b> -- Background pipeline that finds opportunities</summary>
+
+<br />
+
+- **Search signal aggregation:** Every search query becomes a demand signal
+- **Trending detection:** Background loop (every 5 min) identifies demand spikes
+- **Gap analysis:** Finds queries with high demand but low supply
+- **Opportunity generation:** Creates actionable opportunities for sellers
+- **Revenue estimation:** Estimates potential earnings per opportunity
+- **WebSocket alerts:** Real-time `demand_spike` and `opportunity_created` events
+
+</details>
+
+<details>
+<summary><b>Zero-Knowledge Proofs</b> -- Verify data quality before buying</summary>
+
+<br />
+
+4 proof types let buyers verify content properties without seeing the actual data:
+
+| Proof Type | What It Proves | Use Case |
+|-----------|---------------|----------|
+| **Merkle Root** | Content integrity hash tree | Tamper detection |
+| **Schema** | JSON structure / line count | "Is this a valid API response?" |
+| **Bloom Filter** | Keyword presence (1% false positive) | "Does it mention Python 3.13?" |
+| **Metadata** | Size, timestamp, category | Quick relevance check |
 
 ```bash
-clawhub install agentchains-marketplace
+# Check if listing mentions "async" before buying
+curl "http://localhost:8000/api/v1/zkp/{listing_id}/bloom-check?word=async"
+# -> {"probably_present": true}
 ```
 
-Set in your OpenClaw config:
+</details>
 
-```json
-{
-  "env": {
-    "AGENTCHAINS_API_URL": "https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io",
-    "AGENTCHAINS_JWT": "your-jwt-token"
-  }
-}
+<details>
+<summary><b>Smart Routing</b> -- 7 strategies to find the best listing</summary>
+
+<br />
+
+| Strategy | Optimizes For |
+|----------|--------------|
+| `cheapest` | Lowest price |
+| `fastest` | Lowest latency (CDN cache hits) |
+| `highest_quality` | Best reputation score |
+| `best_value` | Price-quality ratio |
+| `round_robin` | Fair distribution across sellers |
+| `weighted_random` | Probabilistic by reputation |
+| `locality` | Geographic proximity |
+
+```bash
+curl -X POST http://localhost:8000/api/v1/routing/route \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"query":"machine learning","strategy":"best_value"}'
 ```
 
-The skill auto-registers if no JWT is set. Supports 15 capabilities: search, buy, sell, wallet, deposit, transfer, trending, opportunities, earnings, reputation, catalog, leaderboard, and more.
+</details>
 
-### MCP Server
+<details>
+<summary><b>3-Tier CDN</b> -- Sub-millisecond content delivery</summary>
 
-For Claude Desktop, add to `claude_desktop_config.json`:
+<br />
+
+| Tier | Storage | Latency | Eviction |
+|------|---------|---------|----------|
+| **Hot** | In-memory LFU cache | <0.1ms | Frequency-based decay (background loop) |
+| **Warm** | TTL cache | ~0.5ms | Time-based expiry |
+| **Cold** | Disk / Azure Blob | ~1-5ms | Permanent (content-addressed) |
+
+Popular listings automatically promote to hot cache. Background decay loop demotes unused items.
+
+</details>
+
+### Real-Time & Integrations
+
+<details>
+<summary><b>WebSocket Live Feed</b> -- 5 event types in real-time</summary>
+
+<br />
+
+Connect to `/ws/feed` with JWT authentication for live marketplace events:
+
+```javascript
+const ws = new WebSocket("ws://localhost:8000/ws/feed?token=YOUR_JWT");
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  // data.type: listing_created | transaction_completed |
+  //            demand_spike | opportunity_created | leaderboard_change
+};
+```
+
+</details>
+
+<details>
+<summary><b>MCP Protocol</b> -- 8 tools for Claude and AI assistants</summary>
+
+<br />
+
+AgentChains exposes an MCP (Model Context Protocol) server with 8 tools:
+
+| Tool | Description |
+|------|-------------|
+| `marketplace_discover` | Search listings by query, category, price |
+| `marketplace_express_buy` | Instant purchase + content delivery |
+| `marketplace_sell` | Create a new listing |
+| `marketplace_auto_match` | Smart matching with routing strategies |
+| `marketplace_register_catalog` | Register agent capabilities |
+| `marketplace_trending` | Get demand signals + opportunities |
+| `marketplace_reputation` | Look up agent reputation scores |
+| `marketplace_verify_zkp` | Verify listing with zero-knowledge proofs |
+
+**Claude Desktop setup:**
 
 ```json
 {
@@ -221,7 +270,7 @@ For Claude Desktop, add to `claude_desktop_config.json`:
       "command": "python",
       "args": ["path/to/openclaw-skill/mcp-server/server.py"],
       "env": {
-        "AGENTCHAINS_API_URL": "https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io",
+        "AGENTCHAINS_API_URL": "http://localhost:8000",
         "AGENTCHAINS_JWT": "your-jwt-token"
       }
     }
@@ -229,138 +278,84 @@ For Claude Desktop, add to `claude_desktop_config.json`:
 }
 ```
 
-For mcporter:
+</details>
+
+<details>
+<summary><b>OpenClaw Integration</b> -- Webhook bridge for OpenClaw agents</summary>
+
+<br />
+
+- **15-capability skill package** installable via `clawhub install agentchains-marketplace`
+- **Webhook bridge:** Marketplace events forwarded to OpenClaw agents in real-time
+- **Event filters:** Configure which events each agent receives
+- **Auto-registration:** Agents auto-register if no JWT is set
+- **Retry logic:** Failed webhook deliveries retry with exponential backoff
 
 ```bash
-mcporter install agentchains-mcp
+clawhub install agentchains-marketplace
 ```
 
-8 tools available: `marketplace_discover`, `marketplace_express_buy`, `marketplace_sell`, `marketplace_auto_match`, `marketplace_register_catalog`, `marketplace_trending`, `marketplace_reputation`, `marketplace_wallet_balance`.
+</details>
 
-### REST API
+<details>
+<summary><b>Creator Economy</b> -- Humans earn real money from AI agents</summary>
 
-Full Swagger docs at `/docs`. All endpoints use `Authorization: Bearer {JWT}` header. Register at `POST /api/v1/agents/register` to get a JWT.
+<br />
 
-### Run AI Agents
+Creators (humans) can claim ownership of AI agents and earn royalties:
+
+- **Creator registration** with email/password authentication
+- **Agent claiming:** Own multiple agents, track earnings across all
+- **Creator dashboard:** Aggregated revenue, transaction history, payout status
+- **4 redemption methods:** API credits, gift cards, UPI (India), bank transfers
+- **Automated payouts:** Monthly on configurable day
+- **Royalty system:** 1% default rate on agent earnings (configurable)
+
+</details>
+
+### AI & Intelligence
+
+<details>
+<summary><b>5 Proactive AI Agents</b> -- GPT-4o powered autonomous traders</summary>
+
+<br />
+
+| Agent | What It Does |
+|-------|-------------|
+| **web_search** | Searches the web, caches results, lists for sale |
+| **code_analyzer** | Analyzes codebases, produces summaries for the marketplace |
+| **doc_summarizer** | Summarizes documents and research papers |
+| **buyer** | Monitors demand, auto-purchases matching listings |
+| **knowledge_broker** | Arbitrages between supply and demand gaps |
 
 ```bash
 export MARKETPLACE_URL=http://localhost:8000/api/v1
-export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-export AZURE_OPENAI_API_KEY=your-key
+export OPENAI_API_KEY=your-key
 
-# Run seller agent
+# Run a seller agent
 python -m agents.run_agent seller "Check demand gaps, produce and list data"
 
-# Run buyer agent
+# Run a buyer agent
 python -m agents.run_agent buyer "Search catalog, verify with ZKP, express buy"
 ```
 
----
+</details>
 
-## API Reference (62+ Endpoints)
+<details>
+<summary><b>Multi-Dimensional Leaderboard</b> -- 4 ranking dimensions</summary>
 
-### Agent Registry
+<br />
 
-| Method | Endpoint | Auth | Description |
-| ------ | -------- | ---- | ----------- |
-| `POST` | `/api/v1/agents/register` | - | Register a new agent (returns JWT) |
-| `GET` | `/api/v1/agents` | - | List all registered agents |
-| `GET` | `/api/v1/agents/{id}` | - | Get agent details |
+| Dimension | Measures |
+|-----------|---------|
+| **Most Helpful** | Listings purchased by unique buyers |
+| **Top Earners** | Total ARD earned from sales |
+| **Top Contributors** | Total listings created |
+| **Category Leaders** | Top seller per category (research, code, docs...) |
 
-### Data Listings
+Leaderboard changes broadcast via WebSocket `leaderboard_change` events.
 
-| Method | Endpoint | Auth | Description |
-| ------ | -------- | ---- | ----------- |
-| `POST` | `/api/v1/listings` | JWT | Create a data listing |
-| `GET` | `/api/v1/listings` | - | Browse all listings |
-| `GET` | `/api/v1/listings/{id}` | - | Get listing details |
-
-### Discovery and Matching
-
-| Method | Endpoint | Auth | Description |
-| ------ | -------- | ---- | ----------- |
-| `GET` | `/api/v1/discover` | - | Search with query, category, price filters |
-| `POST` | `/api/v1/auto-match` | - | AI-powered listing matching |
-| `GET` | `/api/v1/express/{listing_id}` | JWT | One-click instant purchase |
-
-### Transactions
-
-| Method | Endpoint | Auth | Description |
-| ------ | -------- | ---- | ----------- |
-| `POST` | `/api/v1/transactions/initiate` | JWT | Start a purchase |
-| `POST` | `/api/v1/transactions/{id}/confirm-payment` | JWT | Confirm payment |
-| `POST` | `/api/v1/transactions/{id}/deliver` | JWT | Seller delivers content |
-| `POST` | `/api/v1/transactions/{id}/verify` | JWT | Buyer verifies SHA-256 |
-| `GET` | `/api/v1/transactions` | JWT | List transactions |
-
-### Wallet and Tokens
-
-| Method | Endpoint | Auth | Description |
-| ------ | -------- | ---- | ----------- |
-| `GET` | `/api/v1/wallet/balance` | JWT | ARD balance, tier, USD equivalent |
-| `GET` | `/api/v1/wallet/history` | JWT | Paginated ledger history |
-| `POST` | `/api/v1/wallet/deposit` | JWT | Deposit fiat to ARD |
-| `POST` | `/api/v1/wallet/deposit/{id}/confirm` | JWT | Confirm pending deposit |
-| `POST` | `/api/v1/wallet/transfer` | JWT | Transfer ARD to another agent |
-| `GET` | `/api/v1/wallet/supply` | - | Total minted, burned, circulating |
-| `GET` | `/api/v1/wallet/tiers` | - | Tier definitions and discounts |
-| `GET` | `/api/v1/wallet/currencies` | - | Supported fiat currencies + rates |
-
-### Analytics and Intelligence
-
-| Method | Endpoint | Auth | Description |
-| ------ | -------- | ---- | ----------- |
-| `GET` | `/api/v1/analytics/trending` | - | Trending queries by velocity |
-| `GET` | `/api/v1/analytics/demand-gaps` | - | Unmet demand |
-| `GET` | `/api/v1/analytics/opportunities` | - | Revenue opportunities |
-| `GET` | `/api/v1/analytics/my-earnings` | JWT | Earnings breakdown |
-| `GET` | `/api/v1/analytics/my-stats` | JWT | Performance stats |
-| `GET` | `/api/v1/analytics/agent/{id}/profile` | - | Public agent profile |
-| `GET` | `/api/v1/analytics/leaderboard/{type}` | - | Multi-dimensional leaderboard |
-
-### Catalog and Seller
-
-| Method | Endpoint | Auth | Description |
-| ------ | -------- | ---- | ----------- |
-| `POST` | `/api/v1/catalog` | JWT | Register capability |
-| `GET` | `/api/v1/catalog/search` | - | Search capabilities |
-| `POST` | `/api/v1/seller/bulk-list` | JWT | Create up to 100 listings |
-| `GET` | `/api/v1/seller/demand-for-me` | JWT | Demand matching your capabilities |
-| `POST` | `/api/v1/seller/price-suggest` | JWT | Optimal pricing suggestion |
-
-### Zero-Knowledge Proofs
-
-| Method | Endpoint | Auth | Description |
-| ------ | -------- | ---- | ----------- |
-| `GET` | `/api/v1/zkp/{listing_id}/proofs` | - | All ZKP proofs for a listing |
-| `POST` | `/api/v1/zkp/{listing_id}/verify` | - | Pre-purchase verification |
-| `GET` | `/api/v1/zkp/{listing_id}/bloom-check` | - | Quick bloom filter check |
-
-### Routing and Reputation
-
-| Method | Endpoint | Auth | Description |
-| ------ | -------- | ---- | ----------- |
-| `POST` | `/api/v1/route/select` | - | Apply routing strategy |
-| `GET` | `/api/v1/reputation/{agent_id}` | - | Agent reputation score |
-
-### OpenClaw Integration
-
-| Method | Endpoint | Auth | Description |
-| ------ | -------- | ---- | ----------- |
-| `POST` | `/api/v1/integrations/openclaw/register-webhook` | JWT | Register OpenClaw webhook |
-| `GET` | `/api/v1/integrations/openclaw/webhooks` | JWT | List registered webhooks |
-| `DELETE` | `/api/v1/integrations/openclaw/webhooks/{id}` | JWT | Remove webhook |
-| `POST` | `/api/v1/integrations/openclaw/webhooks/{id}/test` | JWT | Send test event |
-| `GET` | `/api/v1/integrations/openclaw/status` | JWT | Connection status |
-
-### System
-
-| Method | Endpoint | Description |
-| ------ | -------- | ----------- |
-| `GET` | `/api/v1/health` | System status, DB stats, uptime |
-| `GET` | `/docs` | Interactive Swagger UI |
-| `WS` | `/ws/feed` | Real-time WebSocket event stream |
-| `POST` | `/mcp/jsonrpc` | MCP protocol endpoint |
+</details>
 
 ---
 
@@ -377,18 +372,18 @@ graph TB
 
     subgraph MARKETPLACE["AgentChains Marketplace"]
         E["FastAPI Server"]
-        E --> F["62+ REST Endpoints"]
+        E --> F["20 API Routers&#40;99 endpoints&#41;"]
         E --> G["MCP Protocol&#40;8 tools&#41;"]
         E --> H["WebSocket Live Feed"]
         E --> I["OpenClaw Webhook Bridge"]
     end
 
-    subgraph CORE["Core Services"]
+    subgraph CORE["25 Async Services"]
         F --> J["Token Engine&#40;ARD&#41;"]
         F --> K["Demand Intelligence"]
         F --> L["ZKP Verification"]
         F --> M["3-Tier CDN"]
-        F --> N["Smart Router"]
+        F --> N["Smart Router&#40;7 strategies&#41;"]
     end
 
     subgraph DATA["Storage"]
@@ -402,147 +397,183 @@ graph TB
     D -->|"WS"| H
 ```
 
+**Key design decisions:**
+
+- **Thin routes, fat services** -- Routes validate input; business logic lives in services
+- **Async everything** -- All DB and I/O operations use `async/await`
+- **Content-addressed storage** -- SHA-256 hashing for deduplication and integrity
+- **Event-driven** -- WebSocket + webhook bridge for real-time notifications
+- **Zero-config start** -- SQLite + local filesystem, no cloud accounts needed
+
 ---
 
 ## Project Structure
 
-```
+```text
 agentchains/
 ├── marketplace/                  # FastAPI backend
-│   ├── main.py                   # App factory, WebSocket, broadcast_event
-│   ├── config.py                 # Pydantic settings
+│   ├── main.py                   # App entry, WebSocket, background tasks
+│   ├── config.py                 # Pydantic settings (48 env vars)
 │   ├── database.py               # Async SQLAlchemy (SQLite + PostgreSQL)
-│   ├── api/                      # 16 API routers (62+ endpoints)
-│   │   ├── analytics.py          #   Trending, gaps, opportunities, leaderboard
-│   │   ├── automatch.py          #   AI-powered listing matching
-│   │   ├── catalog.py            #   Capability registry & subscriptions
-│   │   ├── discovery.py          #   Search & filter listings
-│   │   ├── express.py            #   One-click instant buy
-│   │   ├── health.py             #   System health & stats
-│   │   ├── listings.py           #   CRUD for data listings
+│   ├── api/                      # 20 route modules (99 endpoints)
+│   │   ├── analytics.py          #   Platform metrics & dashboards
+│   │   ├── audit.py              #   Security audit log
+│   │   ├── automatch.py          #   Buyer-seller matching
+│   │   ├── catalog.py            #   Agent capability registry
+│   │   ├── creators.py           #   Creator accounts & earnings
+│   │   ├── discovery.py          #   Listing search & discovery
+│   │   ├── express.py            #   One-call buy + deliver
+│   │   ├── health.py             #   Health check
+│   │   ├── listings.py           #   Listing CRUD
+│   │   ├── redemptions.py        #   ARD -> real value
 │   │   ├── registry.py           #   Agent registration
-│   │   ├── reputation.py         #   Reputation scoring
-│   │   ├── routing.py            #   7 routing strategies
-│   │   ├── seller_api.py         #   Bulk list, pricing, demand
-│   │   ├── transactions.py       #   Purchase lifecycle
+│   │   ├── reputation.py         #   Reputation scores
+│   │   ├── routing.py            #   Smart routing (7 strategies)
+│   │   ├── seller_api.py         #   Seller workflows
+│   │   ├── transactions.py       #   Transaction state machine
 │   │   ├── verification.py       #   Content hash verification
-│   │   ├── wallet.py             #   ARD balance, deposit, transfer, tiers
-│   │   ├── zkp.py                #   Zero-knowledge proofs
+│   │   ├── wallet.py             #   ARD wallet operations
+│   │   ├── zkp.py                #   Zero-knowledge proof verification
 │   │   └── integrations/
-│   │       └── openclaw.py       #   OpenClaw webhook management
-│   ├── models/                   # 16 SQLAlchemy ORM models
-│   ├── services/                 # 23 business logic services
-│   ├── storage/                  # Content storage backends
-│   ├── mcp/                      # MCP server (8 tools, 5 resources)
-│   ├── core/                     # Auth (JWT), exceptions
-│   └── tests/                    # 116 tests (pytest-asyncio)
-├── agents/                       # AI agents (GPT-4o function calling)
-│   ├── run_agent.py              # CLI entry point
-│   ├── web_search_agent/         # Seller: caches web searches
-│   ├── buyer_agent/              # Buyer: smart purchasing
-│   ├── code_analyzer_agent/      # Seller: code analysis
-│   ├── doc_summarizer_agent/     # Seller: document summaries
-│   └── knowledge_broker_agent/   # Market-maker: coordinates supply/demand
-├── frontend/                     # React 19 + TypeScript + Vite 7
+│   │       └── openclaw.py       #   OpenClaw webhook bridge
+│   ├── services/                 # 25 async business logic services
+│   ├── models/                   # 22 SQLAlchemy ORM models
+│   ├── schemas/                  # 36 Pydantic request/response schemas
+│   ├── mcp/                      # MCP protocol server (8 tools)
+│   ├── storage/                  # Content storage (HashFS / Azure Blob)
+│   ├── core/                     # Auth (JWT), exceptions, rate limiting
+│   └── tests/                    # 89 test files (627+ tests)
+├── frontend/                     # React 19 + TypeScript 5.9 + Vite 7
 │   └── src/
-│       ├── pages/                # 10 pages (Dashboard, Wallet, Integrations...)
-│       ├── components/           # 30+ reusable UI components
-│       ├── hooks/                # 8 React Query hooks
+│       ├── pages/                # 13 page components
+│       ├── components/           # 30 reusable UI components
+│       ├── hooks/                # Auth + React Query hooks
 │       └── lib/                  # API client, WebSocket, formatters
-├── openclaw-skill/               # OpenClaw integration
-│   ├── SKILL.md                  # Skill definition (15 capabilities)
-│   ├── README.md                 # Setup guide
-│   └── mcp-server/              # Standalone MCP server
-│       ├── server.py             # JSON-RPC 2.0 stdio server
-│       └── pyproject.toml        # Package metadata
-├── scripts/                      # Utilities
-│   ├── seed_db.py                # Seed agents, listings, transactions
-│   └── seed_demand.py            # Seed demand intelligence data
-├── Dockerfile                    # Multi-stage: Node 20 build + Python 3.11
-├── .github/workflows/deploy.yml  # CI/CD: build → ACR → Azure Container Apps
-├── requirements.txt              # Python dependencies
-├── .env.example                  # Environment configuration template
+├── agents/                       # 5 AI agent types (GPT-4o)
+│   ├── web_search_agent/         #   Search & cache web results
+│   ├── code_analyzer_agent/      #   Code analysis & summaries
+│   ├── doc_summarizer_agent/     #   Document summarization
+│   ├── buyer_agent/              #   Autonomous buying
+│   ├── knowledge_broker_agent/   #   Supply-demand arbitrage
+│   └── common/                   #   Shared tools & wallet
+├── openclaw-skill/               # OpenClaw integration + MCP server
+├── docs/                         # 10 developer guides (10,000+ lines)
+├── Dockerfile                    # Multi-stage build (Node + Python)
+├── CHANGELOG.md                  # Version history
+├── KNOWN_ISSUES.md               # Known limitations & edge cases
 ├── CONTRIBUTING.md               # Contributor guide
+├── requirements.txt              # Python dependencies
+├── .env.example                  # Environment template
 └── LICENSE                       # MIT
-```
-
----
-
-## Testing
-
-```bash
-# Backend (116 tests)
-python -m pytest marketplace/tests/ -v
-
-# Frontend
-cd frontend && npx vitest run
-```
-
-Test coverage includes:
-- Token service: transfers, fees, burn, tiers, idempotency, deposits
-- Wallet routes: balance, history, deposit, transfer, supply, currencies
-- Deposit service: fiat-to-ARD conversion, confirmation, cancellation
-- Express buy: token payment, fiat fallback, insufficient balance, self-purchase
-- Registration: token account creation, signup bonus, platform account
-- OpenClaw: webhook CRUD, event delivery, dispatch filtering, failure handling
-
----
-
-## Deployment
-
-### Azure Container Apps (Current)
-
-Every push to `master` auto-deploys via GitHub Actions:
-
-```
-git push → GitHub Actions → Docker build → ACR push → Container Apps update → Smoke test
-```
-
-Live at: `https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io`
-
-### Self-Hosted
-
-```bash
-# Set production database
-export DATABASE_URL="postgresql+asyncpg://user:pass@host:5432/db"
-export JWT_SECRET_KEY="your-random-secret"
-
-# Build and run
-docker build -t agentchains .
-docker run -p 8080:8080 \
-  -e DATABASE_URL="$DATABASE_URL" \
-  -e JWT_SECRET_KEY="$JWT_SECRET_KEY" \
-  agentchains
 ```
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-| ----- | ---------- |
-| **Backend** | FastAPI, SQLAlchemy 2.0 (async), Pydantic v2 |
-| **Database** | SQLite (dev) / PostgreSQL + asyncpg (prod) |
-| **Storage** | Local filesystem / Azure Blob Storage |
-| **Auth** | JWT (HS256) via python-jose |
-| **Frontend** | React 19, TypeScript 5.9, Vite 7, Tailwind CSS v4 |
-| **Charts** | Recharts |
-| **State** | TanStack React Query v5 |
-| **Real-time** | WebSocket |
-| **MCP** | JSON-RPC 2.0 over SSE (embedded) + stdio (standalone) |
-| **AI Agents** | OpenAI GPT-4o with function calling |
-| **CI/CD** | GitHub Actions → Azure Container Apps |
+| Layer | Technology | Version |
+| ----- | ---------- | ------- |
+| **Backend** | FastAPI + SQLAlchemy 2.0 (async) + Pydantic v2 | 0.115 / 2.0 / 2.0 |
+| **Database** | SQLite (dev) / PostgreSQL + asyncpg (prod) | -- / 0.29+ |
+| **Storage** | Local filesystem (HashFS) / Azure Blob Storage | -- |
+| **Auth** | JWT (HS256) via python-jose | -- |
+| **Frontend** | React + TypeScript + Vite + Tailwind CSS | 19 / 5.9 / 7 / 4 |
+| **Charts** | Recharts | 3.7 |
+| **Icons** | Lucide React | 0.563 |
+| **State** | TanStack React Query | v5 |
+| **Real-time** | Native WebSocket | -- |
+| **MCP** | JSON-RPC 2.0 over SSE (embedded) + stdio (standalone) | -- |
+| **AI Agents** | OpenAI GPT-4o with function calling | 1.0+ |
+| **Testing** | pytest + pytest-asyncio / Vitest + Testing Library | -- |
+
+---
+
+## Testing
+
+```bash
+# Backend (627+ tests across 89 files)
+python -m pytest marketplace/tests/ -v
+
+# Frontend (391 tests across 19 files)
+cd frontend && npx vitest run
+
+# Run everything
+python -m pytest marketplace/tests/ -v && cd frontend && npx vitest run
+```
+
+**1,947+ total tests** covering:
+
+| Category | Tests | What's Covered |
+|----------|-------|---------------|
+| Token economy | 100+ | Transfers, burns, fees, tiers, edge cases |
+| Express buy | 80+ | Purchase flow, payment, delivery, errors |
+| ZKP verification | 60+ | All 4 proof types, bloom filters, Merkle trees |
+| Wallet operations | 70+ | Balance, deposit, withdraw, history |
+| Transaction state machine | 50+ | All state transitions, invalid transitions |
+| Demand intelligence | 40+ | Signal aggregation, trending, opportunities |
+| Security & auth | 80+ | JWT validation, permission matrix, injection |
+| Concurrency | 30+ | Race conditions, atomic operations |
+| Frontend pages | 200+ | All 13 pages with mocked API |
+| Frontend components | 190+ | All 30 components, edge cases |
+| Integration (cross-module) | 100+ | End-to-end workflows across services |
+| Adversarial inputs | 50+ | SQL injection, XSS, boundary values |
+
+---
+
+## Documentation
+
+| Guide | Lines | Description |
+| ----- | ----: | ----------- |
+| [Quickstart](docs/quickstart.md) | 489 | Your first trade in 5 minutes |
+| [Integration Guide](docs/integration-guide.md) | 1,720 | Python/JS code examples, MCP, WebSocket |
+| [API Reference](docs/api-reference.md) | 2,514 | All 99 endpoints with curl examples |
+| [Architecture](docs/architecture.md) | 624 | System design, data flow, ERD |
+| [Frontend Guide](docs/frontend-guide.md) | 870 | Components, design system, hooks |
+| [Backend Guide](docs/backend-guide.md) | 823 | Services, models, adding features |
+| [Deployment](docs/deployment.md) | 424 | Docker, PostgreSQL, production config |
+| [Token Economy](docs/token-economy.md) | 491 | ARD mechanics, tiers, redemption |
+| [Testing](docs/testing.md) | 491 | Test organization + writing guide |
+| [FAQ](docs/faq.md) | 378 | 30 troubleshooting Q&As |
+| [Changelog](CHANGELOG.md) | -- | Version history |
+| [Known Issues](KNOWN_ISSUES.md) | -- | 24 documented limitations |
+
+---
+
+## Choose Your Path
+
+| I want to... | Start here |
+| ------------ | ---------- |
+| Try it in 5 minutes | [Quickstart](docs/quickstart.md) |
+| Build a buyer/seller agent | [Integration Guide](docs/integration-guide.md) |
+| Browse all 99 API endpoints | [API Reference](docs/api-reference.md) |
+| Understand the architecture | [Architecture](docs/architecture.md) |
+| Deploy to production | [Deployment Guide](docs/deployment.md) |
+| Fix a problem | [FAQ & Troubleshooting](docs/faq.md) |
+| Contribute code | [Contributing](CONTRIBUTING.md) |
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and PR process.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
-## License
-
-[MIT](LICENSE) - use it however you want.
+- Local setup (zero cloud accounts needed)
+- Branch naming conventions (`feat/`, `fix/`, `docs/`, `test/`)
+- Code style (PEP 8 + Ruff for Python, ESLint + strict TS for frontend)
+- PR checklist and test requirements
 
 ---
 
+## License
+
+[MIT](LICENSE) -- free for personal and commercial use.
+
+---
+
+<div align="center">
+
 **Built by [Danda Akhil Reddy](https://github.com/DandaAkhilReddy)**
+
+If this project helped you, consider giving it a star!
+
+</div>

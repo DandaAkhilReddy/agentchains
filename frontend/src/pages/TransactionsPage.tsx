@@ -4,7 +4,10 @@ import { useAuth } from "../hooks/useAuth";
 import DataTable, { type Column } from "../components/DataTable";
 import Badge, { statusVariant } from "../components/Badge";
 import CopyButton from "../components/CopyButton";
+import PageHeader from "../components/PageHeader";
+import Pagination from "../components/Pagination";
 import { truncateId, formatUSDC, formatARD, relativeTime } from "../lib/format";
+import { ArrowLeftRight } from "lucide-react";
 import type { Transaction, TransactionStatus } from "../types/api";
 
 const PIPELINE_STEPS: { key: TransactionStatus; label: string }[] = [
@@ -208,6 +211,7 @@ export default function TransactionsPage() {
 
   return (
     <div className="space-y-4">
+      <PageHeader title="Transactions" subtitle="Track purchases and deliveries" icon={ArrowLeftRight} />
       {/* Header bar */}
       <div className="flex flex-wrap items-center gap-3">
         <select
@@ -247,22 +251,7 @@ export default function TransactionsPage() {
       />
 
       {data && data.total > 20 && (
-        <div className="flex items-center justify-end gap-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-            className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30"
-          >
-            Prev
-          </button>
-          <button
-            disabled={page * 20 >= data.total}
-            onClick={() => setPage((p) => p + 1)}
-            className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30"
-          >
-            Next
-          </button>
-        </div>
+        <Pagination page={page} totalPages={Math.ceil(data.total / 20)} onPageChange={setPage} />
       )}
     </div>
   );

@@ -2,7 +2,7 @@
 
 Thanks for your interest in contributing! AgentChains is an open-source agent-to-agent data marketplace and we welcome contributions of all kinds.
 
-## Development Setup
+## 1. Getting Started
 
 ### Prerequisites
 
@@ -28,76 +28,127 @@ npm install
 npm run dev
 ```
 
-The app uses SQLite and local filesystem by default — no cloud accounts needed.
+The app uses SQLite and local filesystem by default -- no cloud accounts needed.
 
-## Running Tests
+### Verify It Works
+
+- <http://localhost:3000> -- Dashboard (frontend)
+- <http://localhost:8000/docs> -- API docs (Swagger)
+- <http://localhost:8000/api/v1/health> -- Health check
+
+## 2. Project Structure
+
+- `marketplace/` -- FastAPI backend (routes, services, models) -- [Backend Guide](docs/backend-guide.md)
+- `frontend/` -- React 19 + TypeScript SPA -- [Frontend Guide](docs/frontend-guide.md)
+- `agents/` -- AI agent definitions and runners
+- `docs/` -- Project documentation
+
+Full details: [Architecture](docs/architecture.md)
+
+## 3. Development Workflow
+
+### Branch Naming
+
+Use prefixed branch names off `main`:
+
+- `feat/add-agent-scheduler` -- new features
+- `fix/token-balance-rounding` -- bug fixes
+- `docs/update-api-reference` -- documentation
+- `test/add-listing-edge-cases` -- test coverage
+- `refactor/extract-pricing-logic` -- code improvements
+
+### Commit Messages
+
+Use [conventional commits](https://www.conventionalcommits.org/):
+
+```
+feat: add webhook retry with exponential backoff
+fix: correct token balance after failed transaction
+docs: add MCP tool authoring guide
+test: add edge cases for listing expiry
+chore: bump FastAPI to 0.115
+```
+
+### Before Submitting
+
+Always run the full test suite before opening a PR (see section 5).
+
+## 4. Code Style
+
+### Python (Backend)
+
+- **PEP 8 + Ruff** (configured in `pyproject.toml`, line length 100)
+- **Type hints** required for all function signatures
+- **Async/await** for ALL database and I/O operations
+- **Pydantic v2** models for request/response schemas
+- **Pattern**: thin routes, fat services
+
+```python
+# Route (thin -- validate + delegate)
+@router.post("/my-endpoint")
+async def my_endpoint(
+    data: MySchema,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    result = await my_service.do_thing(db, agent_id, data)
+    return result
+```
+
+Routes validate input and return responses. Business logic lives in services.
+
+### TypeScript (Frontend)
+
+- **ESLint + TypeScript strict mode**
+- **React functional components** with hooks
+- **TanStack React Query v5** for server state
+- **Tailwind CSS 4 only** -- no inline styles, no CSS variables in page files
+- Use existing components: `PageHeader`, `StatCard`, `DataTable`, `Badge`, `Pagination`, etc.
+
+## 5. Running Tests
 
 ```bash
-# Backend (116 tests)
+# Backend (627 tests)
 python -m pytest marketplace/tests/ -v
 
-# Frontend
+# Frontend (391 tests)
 cd frontend && npx vitest run
 ```
 
-All tests must pass before submitting a PR.
+All tests MUST pass before submitting a PR.
 
-## Code Style
+See [Testing Guide](docs/testing.md) for details on writing new tests.
 
-### Python (Backend)
-- Follow PEP 8
-- Use type hints for function signatures
-- Async/await for all database and I/O operations
-- Pydantic models for request/response schemas
+## 6. PR Checklist
 
-### TypeScript (Frontend)
-- ESLint + TypeScript strict mode
-- React functional components with hooks
-- TanStack React Query for server state
-- Tailwind CSS for styling (no inline styles)
+- [ ] Code follows project patterns (thin routes, fat services)
+- [ ] Type hints / TypeScript types for all new code
+- [ ] Tests added for new functionality
+- [ ] All existing tests pass
+- [ ] No hardcoded credentials or secrets
+- [ ] Frontend: uses Tailwind classes only (no CSS vars in page files)
+- [ ] Documentation updated if adding new endpoints/features
 
-## Project Architecture
-
-```
-marketplace/          # FastAPI backend
-  api/                # Route handlers (thin — delegate to services)
-  services/           # Business logic (all async)
-  models/             # SQLAlchemy ORM models
-  core/               # Auth, exceptions
-  mcp/                # MCP protocol server
-frontend/src/         # React SPA
-  pages/              # Page components
-  components/         # Reusable UI components
-  hooks/              # React Query hooks
-  lib/                # API client, formatters
-openclaw-skill/       # OpenClaw integration
-  SKILL.md            # Skill definition for ClawHub
-  mcp-server/         # Standalone MCP server
-```
-
-### Key Patterns
-- **Routes are thin**: API routes validate input and return responses. Business logic lives in services.
-- **Services are async**: All service functions use `async/await` with SQLAlchemy async sessions.
-- **Events broadcast**: `broadcast_event()` in `main.py` pushes events to WebSocket clients and OpenClaw webhooks.
-- **Token economy**: All token operations go through `token_service.py` which maintains a double-entry ledger.
-
-## Submitting Changes
-
-1. Fork the repo and create a branch from `master`
-2. Make your changes
-3. Add tests for new functionality
-4. Run the full test suite (`pytest` + `vitest`)
-5. Submit a pull request with a clear description
-
-## What to Work On
+## 7. What to Work On
 
 - Check [open issues](https://github.com/DandaAkhilReddy/agentchains/issues) for bugs and feature requests
 - Look for `good first issue` labels
-- Improve test coverage
-- Add new agent types in `agents/`
-- Build new MCP tools
-- Improve documentation
+- Areas that need help:
+  - Test coverage improvements
+  - New agent types in `agents/`
+  - New MCP tools
+  - Documentation
 
-## Questions?
+## 8. Documentation
+
+See the [docs/](docs/) folder for detailed guides:
+
+- [Architecture](docs/architecture.md) -- System design
+- [API Reference](docs/api-reference.md) -- All endpoints
+- [Frontend Guide](docs/frontend-guide.md) -- Components + design system
+- [Backend Guide](docs/backend-guide.md) -- Services + models
+- [Testing](docs/testing.md) -- Test patterns
+
+## 9. Questions?
 
 Open an issue or start a discussion on GitHub.

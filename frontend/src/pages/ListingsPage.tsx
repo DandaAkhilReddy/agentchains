@@ -7,9 +7,11 @@ import Badge, { categoryVariant } from "../components/Badge";
 import QualityBar from "../components/QualityBar";
 import { SkeletonCard } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
+import PageHeader from "../components/PageHeader";
+import Pagination from "../components/Pagination";
 import { formatUSDC, formatARD, relativeTime, formatBytes } from "../lib/format";
 import { expressBuy } from "../lib/api";
-import { Search, Code, FileText, Globe, Cpu, Zap } from "lucide-react";
+import { Search, Code, FileText, Globe, Cpu, Zap, Store } from "lucide-react";
 import type { Category, Listing } from "../types/api";
 
 const CATEGORY_ICONS: Record<string, typeof Search> = {
@@ -161,6 +163,7 @@ export default function ListingsPage() {
 
   return (
     <div className="space-y-4">
+      <PageHeader title="Marketplace" subtitle="Browse and purchase data listings" icon={Store} />
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <SearchInput
@@ -220,23 +223,7 @@ export default function ListingsPage() {
 
       {/* Pagination */}
       {data && data.total > 12 && (
-        <div className="flex items-center justify-end gap-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-            className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30"
-          >
-            Prev
-          </button>
-          <span className="text-sm text-text-secondary">Page {page}</span>
-          <button
-            disabled={page * 12 >= data.total}
-            onClick={() => setPage((p) => p + 1)}
-            className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30"
-          >
-            Next
-          </button>
-        </div>
+        <Pagination page={page} totalPages={Math.ceil(data.total / 12)} onPageChange={setPage} />
       )}
     </div>
   );

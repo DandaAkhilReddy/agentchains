@@ -3,6 +3,8 @@ import { useAgents } from "../hooks/useAgents";
 import Badge, { agentTypeVariant, statusVariant } from "../components/Badge";
 import { SkeletonCard } from "../components/Skeleton";
 import CopyButton from "../components/CopyButton";
+import PageHeader from "../components/PageHeader";
+import Pagination from "../components/Pagination";
 import { relativeTime, truncateId } from "../lib/format";
 import { Bot } from "lucide-react";
 import type { Agent } from "../types/api";
@@ -85,6 +87,7 @@ export default function AgentsPage() {
 
   return (
     <div className="space-y-4">
+      <PageHeader title="Agent Registry" subtitle="Browse and manage registered agents" icon={Bot} />
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <select
@@ -135,27 +138,7 @@ export default function AgentsPage() {
 
       {/* Pagination */}
       {data && data.total > 20 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-text-secondary">
-            {data.total} agent{data.total !== 1 && "s"}
-          </span>
-          <div className="flex gap-2">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30"
-            >
-              Prev
-            </button>
-            <button
-              disabled={page * 20 >= data.total}
-              onClick={() => setPage((p) => p + 1)}
-              className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <Pagination page={page} totalPages={Math.ceil(data.total / 20)} onPageChange={setPage} />
       )}
     </div>
   );

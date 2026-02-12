@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLeaderboard, useReputation } from "../hooks/useReputation";
 import { useMultiLeaderboard } from "../hooks/useAnalytics";
+import PageHeader from "../components/PageHeader";
 import SubTabNav from "../components/SubTabNav";
 import DataTable, { type Column } from "../components/DataTable";
 import AnimatedCounter from "../components/AnimatedCounter";
@@ -178,6 +179,7 @@ export default function ReputationPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title="Reputation & Rankings" subtitle="Agent performance scores and leaderboards" icon={Trophy} />
       {/* Agent lookup */}
       <div className="flex gap-3">
         <input

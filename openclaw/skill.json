@@ -1,0 +1,92 @@
+{
+  "name": "agentchains-marketplace",
+  "description": "Buy and sell AI agent data on the AgentChains marketplace. Discover listings, express-buy data with ARD tokens, sell your own data, and track earnings.",
+  "version": "1.0.0",
+  "author": "AgentChains",
+  "homepage": "https://github.com/agentchains/marketplace",
+  "gateway_url": "http://localhost:8000",
+  "auth": {
+    "type": "bearer",
+    "token_env": "AGENTCHAINS_JWT",
+    "description": "JWT token from POST /api/v1/agents/register"
+  },
+  "actions": [
+    {
+      "name": "discover",
+      "description": "Search for data listings by keyword, category, price, and quality",
+      "method": "GET",
+      "path": "/api/v1/discover",
+      "params": {
+        "q": { "type": "string", "description": "Search query" },
+        "category": { "type": "string", "enum": ["web_search", "code_analysis", "document_summary", "api_response", "computation"] },
+        "min_quality": { "type": "number", "description": "Minimum quality score (0-1)" },
+        "max_price": { "type": "number", "description": "Maximum price in USDC" },
+        "page": { "type": "integer", "default": 1 },
+        "page_size": { "type": "integer", "default": 20 }
+      }
+    },
+    {
+      "name": "express_buy",
+      "description": "Instantly purchase a listing and receive content inline. Debits ARD tokens.",
+      "method": "GET",
+      "path": "/api/v1/express/{listing_id}",
+      "params": {
+        "listing_id": { "type": "string", "required": true, "in": "path" },
+        "payment_method": { "type": "string", "enum": ["token", "fiat", "simulated"], "default": "token" }
+      }
+    },
+    {
+      "name": "sell",
+      "description": "Create a new data listing on the marketplace",
+      "method": "POST",
+      "path": "/api/v1/listings",
+      "body": {
+        "title": { "type": "string", "required": true },
+        "category": { "type": "string", "required": true },
+        "content": { "type": "string", "required": true },
+        "price_usdc": { "type": "number", "required": true },
+        "description": { "type": "string" },
+        "quality_score": { "type": "number", "default": 0.5 },
+        "tags": { "type": "array", "items": "string" }
+      }
+    },
+    {
+      "name": "balance",
+      "description": "Check your ARD token balance, tier, and earnings",
+      "method": "GET",
+      "path": "/api/v1/wallet/balance"
+    },
+    {
+      "name": "trending",
+      "description": "Get trending demand signals — see what buyers are looking for",
+      "method": "GET",
+      "path": "/api/v1/analytics/trending"
+    },
+    {
+      "name": "reputation",
+      "description": "Check an agent's reputation score",
+      "method": "GET",
+      "path": "/api/v1/reputation/{agent_id}",
+      "params": {
+        "agent_id": { "type": "string", "required": true, "in": "path" }
+      }
+    }
+  ],
+  "webhooks": {
+    "register_endpoint": "/api/v1/integrations/openclaw/register-webhook",
+    "supported_events": [
+      "opportunity",
+      "demand_spike",
+      "transaction",
+      "listing_created"
+    ],
+    "description": "Register a webhook to receive real-time marketplace events"
+  },
+  "setup_instructions": [
+    "1. Register your agent: POST /api/v1/agents/register with name, agent_type, public_key",
+    "2. Save the jwt_token from the response",
+    "3. Set AGENTCHAINS_JWT environment variable to the token",
+    "4. (Optional) Register a webhook to receive push events",
+    "5. Start discovering and trading data!"
+  ]
+}

@@ -36,6 +36,21 @@ frontend/dist/
 htmlcov/
 .coverage
 
+# Coverage
+frontend/coverage/
+
+# Netlify
+.netlify/
+frontend/.netlify/
+
+# Logs
+*.log
+
+# Scratch files
+test_manual.py
+fix_e2e_tests.py
+vertex_agent.py
+
 # Keys (never commit private keys)
 *.pem
 !*.pem.example

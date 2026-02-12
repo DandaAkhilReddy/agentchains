@@ -39,3 +39,26 @@ export function SkeletonTable({ rows = 5 }: { rows?: number }) {
     </div>
   );
 }
+
+export function SkeletonStatCard() {
+  return (
+    <div className="glass-card border border-border-subtle p-5 space-y-2">
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-10 w-10 rounded-xl" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-6 w-24" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SkeletonChart() {
+  return (
+    <div className="glass-card border border-border-subtle p-4 space-y-3">
+      <Skeleton className="h-3 w-32" />
+      <Skeleton className="h-48 w-full rounded-lg" />
+    </div>
+  );
+}

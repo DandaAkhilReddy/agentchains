@@ -4,6 +4,7 @@ Target: <100ms for cache-hit content.
 """
 
 import time
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -45,7 +46,8 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
     if content_bytes is None:
         raise HTTPException(status_code=404, detail="Content not found in storage")
 
-    # 5. Token payment
+    # 5. Token payment — pre-generate tx_id for idempotency
+    tx_id = str(uuid.uuid4())
     token_result = None
     amount_axn = None
     if payment_method == "token":
@@ -53,7 +55,7 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
             from marketplace.services.token_service import debit_for_purchase
             listing_quality = float(listing.quality_score or 0)
             token_result = await debit_for_purchase(
-                db, buyer_id, seller_id, price_usdc, listing_quality, None  # tx_id set after commit
+                db, buyer_id, seller_id, price_usdc, listing_quality, tx_id
             )
             amount_axn = token_result["amount_axn"]
         except Exception as e:
@@ -62,6 +64,7 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
     # 6. Create completed transaction record (collapsed state machine)
     now = datetime.now(timezone.utc)
     tx = Transaction(
+        id=tx_id,
         listing_id=lid,
         buyer_id=buyer_id,
         seller_id=seller_id,

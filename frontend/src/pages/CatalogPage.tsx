@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, BookOpen, Zap, Shield } from "lucide-react";
+import { Search, BookOpen, Zap, Shield, Globe } from "lucide-react";
+import PageHeader from "../components/PageHeader";
 import { searchCatalog, fetchCDNStats, fetchMCPHealth } from "../lib/api";
 import type { CatalogEntry, CDNStats, MCPHealth } from "../types/api";
 
@@ -47,6 +48,7 @@ export default function CatalogPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title="Catalog & Infrastructure" subtitle="Browse capabilities, CDN stats, and MCP health" icon={Globe} />
       {/* Infrastructure Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <CDNCard stats={cdnStats ?? null} />

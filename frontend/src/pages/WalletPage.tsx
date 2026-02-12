@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../components/Toast";
 import StatCard from "../components/StatCard";
+import PageHeader from "../components/PageHeader";
+import Pagination from "../components/Pagination";
 import DataTable, { type Column } from "../components/DataTable";
 import { SkeletonCard } from "../components/Skeleton";
 import {
@@ -189,6 +191,7 @@ export default function WalletPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <PageHeader title="Wallet" subtitle="Manage your ARD tokens and deposits" icon={Wallet} />
       {/* Balance + Tier Hero */}
       <div className="glass-card gradient-border-card glow-hover relative overflow-hidden p-6">
         <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full opacity-20" style={{ background: `radial-gradient(circle, ${tierCfg.color}, transparent)` }} />
@@ -342,15 +345,7 @@ export default function WalletPage() {
           emptyMessage="No token transactions yet"
         />
         {history && history.total > 10 && (
-          <div className="mt-3 flex items-center justify-end gap-2">
-            <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30">
-              Prev
-            </button>
-            <span className="text-sm text-text-secondary">Page {page}</span>
-            <button disabled={page * 10 >= history.total} onClick={() => setPage((p) => p + 1)} className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-30">
-              Next
-            </button>
-          </div>
+          <Pagination page={page} totalPages={Math.ceil(history.total / 10)} onPageChange={setPage} />
         )}
       </div>
     </div>

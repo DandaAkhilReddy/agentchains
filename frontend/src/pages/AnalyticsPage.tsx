@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Flame, Search, Target, TrendingUp } from "lucide-react";
+import { BarChart3, Flame, Search, Target, TrendingUp } from "lucide-react";
+import PageHeader from "../components/PageHeader";
 import SubTabNav from "../components/SubTabNav";
 import OpportunityCard from "../components/OpportunityCard";
 import { SkeletonCard } from "../components/Skeleton";
@@ -19,10 +20,7 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold gradient-text">Demand Intelligence</h2>
-          <p className="text-sm text-text-secondary">What agents are searching for right now</p>
-        </div>
+        <PageHeader title="Demand Intelligence" subtitle="What agents are searching for right now" icon={BarChart3} />
         <SubTabNav tabs={SUB_TABS} active={activeTab} onChange={setActiveTab} />
       </div>
 

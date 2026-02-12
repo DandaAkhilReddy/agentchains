@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import { CreditCard, Gift, Building2, Smartphone, Loader2, CheckCircle, XCircle, Clock } from "lucide-react";
+import { CreditCard, Gift, Building2, Smartphone, Loader2, CheckCircle, XCircle, Clock, ArrowRight } from "lucide-react";
 import { createRedemption, fetchRedemptions, cancelRedemption, fetchCreatorWallet } from "../lib/api";
+import PageHeader from "../components/PageHeader";
+import Badge from "../components/Badge";
+import AnimatedCounter from "../components/AnimatedCounter";
 
 interface Props {
   token: string;
@@ -32,13 +35,15 @@ const STATUS_ICONS: Record<string, any> = {
   rejected: XCircle,
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: "text-yellow-400",
-  processing: "text-blue-400",
-  completed: "text-[var(--accent)]",
-  failed: "text-red-400",
-  rejected: "text-red-400",
+const STATUS_VARIANTS: Record<string, "yellow" | "blue" | "green" | "red" | "gray"> = {
+  pending: "yellow",
+  processing: "blue",
+  completed: "green",
+  failed: "red",
+  rejected: "red",
 };
+
+const fmtARD = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toFixed(0));
 
 export default function RedemptionPage({ token }: Props) {
   const [balance, setBalance] = useState(0);
@@ -90,24 +95,23 @@ export default function RedemptionPage({ token }: Props) {
     } catch {}
   };
 
-  const fmtARD = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toFixed(0);
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Redeem ARD Tokens</h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          Convert your earnings to real value — API credits, gift cards, or cash
-        </p>
-      </div>
+      <PageHeader
+        title="Redeem ARD"
+        subtitle="Convert your earnings to real value — API credits, gift cards, or cash"
+        icon={Gift}
+      />
 
       {/* Balance Banner */}
-      <div className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-5">
+      <div className="glass-card gradient-border-card p-6">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-[var(--text-muted)]">Available Balance</p>
-            <p className="text-3xl font-bold text-[var(--accent)]">{fmtARD(balance)} ARD</p>
-            <p className="text-sm text-[var(--text-secondary)]">${balanceUsd.toFixed(2)} USD</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-text-secondary">Available Balance</p>
+            <p className="mt-1 text-3xl font-bold gradient-text" style={{ fontFamily: "var(--font-mono)" }}>
+              <AnimatedCounter value={balance} /> ARD
+            </p>
+            <p className="text-sm text-text-muted">${balanceUsd.toFixed(2)} USD</p>
           </div>
         </div>
       </div>
@@ -122,20 +126,20 @@ export default function RedemptionPage({ token }: Props) {
               key={m.type}
               onClick={() => eligible && setSelectedType(m.type)}
               disabled={!eligible}
-              className={`rounded-xl border p-4 text-left transition-all ${
+              className={`glass-card rounded-xl p-4 text-left transition-all ${
                 active
-                  ? "border-[var(--accent)] bg-[var(--accent)]/10"
+                  ? "border-primary bg-primary-glow ring-1 ring-primary/30"
                   : eligible
-                  ? "border-[var(--border-default)] bg-[var(--bg-card)] hover:border-[var(--accent)]/50"
-                  : "border-[var(--border-default)] bg-[var(--bg-card)] opacity-40 cursor-not-allowed"
+                    ? "border-border-subtle hover:border-primary/40 glow-hover"
+                    : "border-border-subtle opacity-40 cursor-not-allowed"
               }`}
             >
-              <m.icon className={`mb-2 h-6 w-6 ${active ? "text-[var(--accent)]" : "text-[var(--text-secondary)]"}`} />
-              <p className="font-semibold text-[var(--text-primary)]">{m.label}</p>
-              <p className="text-xs text-[var(--text-muted)]">{m.desc}</p>
+              <m.icon className={`mb-2 h-6 w-6 ${active ? "text-primary" : "text-text-secondary"}`} />
+              <p className="font-semibold text-text-primary">{m.label}</p>
+              <p className="text-xs text-text-muted">{m.desc}</p>
               <div className="mt-2 flex items-center justify-between">
-                <span className="text-xs text-[var(--text-muted)]">Min: {fmtARD(m.min)} ARD</span>
-                <span className="text-xs text-[var(--text-secondary)]">{m.time}</span>
+                <span className="text-xs text-text-muted">Min: {fmtARD(m.min)} ARD</span>
+                <span className="text-xs text-text-secondary">{m.time}</span>
               </div>
             </button>
           );
@@ -144,28 +148,29 @@ export default function RedemptionPage({ token }: Props) {
 
       {/* Amount Input */}
       {selectedType && (
-        <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
-          <h3 className="mb-3 font-semibold text-[var(--text-primary)]">Enter Amount</h3>
+        <div className="glass-card gradient-border-card p-5 animate-scale-in">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">Enter Amount</h3>
           <div className="flex gap-3">
             <div className="flex-1">
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                min={METHODS.find(m => m.type === selectedType)?.min || 0}
+                min={METHODS.find((m) => m.type === selectedType)?.min || 0}
                 max={balance}
                 placeholder="Amount in ARD"
-                className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-card)] px-4 py-3 text-lg text-[var(--text-primary)] outline-none focus:border-[var(--accent)] transition-colors"
+                className="futuristic-input w-full px-4 py-3 text-lg"
+                style={{ fontFamily: "var(--font-mono)" }}
               />
               {amount && (
-                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                <p className="mt-1 text-sm text-text-muted" style={{ fontFamily: "var(--font-mono)" }}>
                   = ${(parseFloat(amount) * 0.001).toFixed(2)} USD
                 </p>
               )}
             </div>
             <button
               onClick={() => setAmount(String(balance))}
-              className="rounded-lg border border-[var(--border-default)] px-4 text-sm text-[var(--text-secondary)] hover:text-[var(--accent)]"
+              className="btn-ghost rounded-lg px-4 text-sm"
             >
               Max
             </button>
@@ -173,13 +178,13 @@ export default function RedemptionPage({ token }: Props) {
           <button
             onClick={handleRedeem}
             disabled={loading || !amount || parseFloat(amount) <= 0}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent)] py-3 text-sm font-bold text-black hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            className="btn-primary mt-4 flex w-full items-center justify-center gap-2 py-3 text-sm font-bold disabled:opacity-50"
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
             Redeem {amount ? `${fmtARD(parseFloat(amount))} ARD` : ""}
           </button>
           {msg && (
-            <p className={`mt-2 text-sm ${msg.type === "ok" ? "text-[var(--accent)]" : "text-red-400"}`}>
+            <p className={`mt-2 text-sm ${msg.type === "ok" ? "text-success" : "text-danger"}`}>
               {msg.text}
             </p>
           )}
@@ -187,35 +192,51 @@ export default function RedemptionPage({ token }: Props) {
       )}
 
       {/* History */}
-      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
-        <h2 className="mb-4 text-lg font-semibold text-[var(--text-primary)]">Redemption History</h2>
+      <div className="glass-card gradient-border-card p-5">
+        <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-text-secondary">Redemption History</h2>
         {history.length === 0 ? (
-          <p className="text-sm text-[var(--text-muted)]">No redemptions yet.</p>
+          <div className="flex flex-col items-center justify-center py-8 text-text-muted">
+            <Gift className="mb-3 h-8 w-8 opacity-40" />
+            <p className="text-sm">No redemptions yet.</p>
+          </div>
         ) : (
           <div className="space-y-2">
             {history.map((r) => {
               const StatusIcon = STATUS_ICONS[r.status] || Clock;
               return (
-                <div key={r.id} className="flex items-center justify-between rounded-lg border border-[var(--border-default)] p-3">
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between rounded-xl border border-border-subtle bg-surface-raised/50 p-3 transition-colors hover:border-primary/20"
+                >
                   <div className="flex items-center gap-3">
-                    <StatusIcon className={`h-5 w-5 ${STATUS_COLORS[r.status] || ""} ${r.status === "processing" ? "animate-spin" : ""}`} />
+                    <StatusIcon
+                      className={`h-5 w-5 ${
+                        r.status === "completed" ? "text-success" :
+                        r.status === "processing" ? "text-primary animate-spin" :
+                        r.status === "pending" ? "text-warning" :
+                        "text-danger"
+                      }`}
+                    />
                     <div>
-                      <p className="text-sm font-medium text-[var(--text-primary)]">
+                      <p className="text-sm font-medium text-text-primary">
                         {r.redemption_type.replace("_", " ")} — {fmtARD(r.amount_ard)} ARD
                       </p>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {new Date(r.created_at).toLocaleDateString()} — {r.status}
+                      <p className="text-xs text-text-muted">
+                        {new Date(r.created_at).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
-                  {r.status === "pending" && (
-                    <button
-                      onClick={() => handleCancel(r.id)}
-                      className="text-xs text-red-400 hover:underline"
-                    >
-                      Cancel
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <Badge label={r.status} variant={STATUS_VARIANTS[r.status] || "gray"} />
+                    {r.status === "pending" && (
+                      <button
+                        onClick={() => handleCancel(r.id)}
+                        className="text-xs text-danger hover:underline"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}

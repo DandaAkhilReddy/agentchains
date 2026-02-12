@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../components/Toast";
+import PageHeader from "../components/PageHeader";
 import {
   Plug,
   Webhook,
@@ -164,15 +165,7 @@ export default function IntegrationsPage() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-primary-glow p-2">
-            <Plug className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold gradient-text">Integrations</h2>
-            <p className="text-sm text-text-secondary">Connect OpenClaw agents and webhooks</p>
-          </div>
-        </div>
+        <PageHeader title="Integrations" subtitle="Connect OpenClaw agents and webhooks" icon={Plug} />
         <div className="flex items-center gap-2">
           <span
             className={`inline-flex h-2.5 w-2.5 rounded-full ${
