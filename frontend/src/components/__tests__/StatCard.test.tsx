@@ -28,8 +28,10 @@ describe("StatCard", () => {
     const { container } = render(
       <StatCard label="Total Users" value={100} icon={Users} />
     );
-    const iconContainer = container.querySelector(".bg-primary-glow");
+    // Icon is inside a rounded-full div with inline backgroundColor style
+    const iconContainer = container.querySelector(".rounded-full");
     expect(iconContainer).toBeInTheDocument();
+    expect(iconContainer?.getAttribute("style")).toContain("background-color");
   });
 
   it("shows subtitle when provided", () => {
@@ -53,7 +55,7 @@ describe("StatCard", () => {
       />
     );
     expect(screen.getByText("+12%")).toBeInTheDocument();
-    const trendSpan = container.querySelector(".text-success");
+    const trendSpan = container.querySelector(".text-\\[\\#34d399\\]");
     expect(trendSpan).toBeInTheDocument();
   });
 
@@ -67,7 +69,7 @@ describe("StatCard", () => {
       />
     );
     expect(screen.getByText("-5%")).toBeInTheDocument();
-    const trendSpan = container.querySelector(".text-danger");
+    const trendSpan = container.querySelector(".text-\\[\\#f87171\\]");
     expect(trendSpan).toBeInTheDocument();
   });
 
@@ -81,7 +83,7 @@ describe("StatCard", () => {
       />
     );
     expect(screen.getByText("0%")).toBeInTheDocument();
-    const trendSpan = container.querySelector(".text-text-muted");
+    const trendSpan = container.querySelector(".text-\\[\\#64748b\\]");
     expect(trendSpan).toBeInTheDocument();
   });
 
@@ -94,7 +96,7 @@ describe("StatCard", () => {
     render(<StatCard label="Sales" value={500} trend="up" />);
     // Check that trend section doesn't exist by looking for trend icons
     const { container } = render(<StatCard label="Sales" value={500} trend="up" />);
-    const trendSection = container.querySelector(".text-success");
+    const trendSection = container.querySelector(".text-\\[\\#34d399\\]");
     expect(trendSection).not.toBeInTheDocument();
   });
 
@@ -114,22 +116,23 @@ describe("StatCard", () => {
     expect(screen.getByText("25,000")).toBeInTheDocument();
     expect(screen.getByText("Last 7 days")).toBeInTheDocument();
     expect(screen.getByText("+15%")).toBeInTheDocument();
-    expect(container.querySelector(".bg-primary-glow")).toBeInTheDocument();
-    expect(container.querySelector(".text-success")).toBeInTheDocument();
+    expect(container.querySelector(".rounded-full")).toBeInTheDocument();
+    expect(container.querySelector(".text-\\[\\#34d399\\]")).toBeInTheDocument();
   });
 
-  it("applies glass-card and gradient-border-card styling", () => {
+  it("applies dark card styling with border and hover effects", () => {
     const { container } = render(<StatCard label="Test" value={100} />);
-    const card = container.querySelector(".glass-card");
+    const card = container.querySelector(".rounded-2xl");
     expect(card).toBeInTheDocument();
-    expect(card?.className).toContain("gradient-border-card");
-    expect(card?.className).toContain("glow-hover");
+    expect(card?.className).toContain("bg-[#141928]");
+    expect(card?.className).toContain("border");
+    expect(card?.className).toContain("transition-all");
   });
 
   it("applies monospace font to value", () => {
     const { container } = render(<StatCard label="Count" value={100} />);
     const valueSpan = container.querySelector('[style*="font-family"]');
     expect(valueSpan).toBeInTheDocument();
-    expect(valueSpan?.getAttribute("style")).toContain("var(--font-mono)");
+    expect(valueSpan?.getAttribute("style")).toContain("font-family: var(--font-mono");
   });
 });

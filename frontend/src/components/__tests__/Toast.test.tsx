@@ -54,7 +54,7 @@ describe("Toast Component", () => {
     });
 
     const toast = screen.getByText("Info message").closest("div");
-    expect(toast).toHaveClass("text-primary");
+    expect(toast?.getAttribute("style")).toContain("border-left: 4px solid rgb(96, 165, 250)");
   });
 
   it("shows success toast with green styling", () => {
@@ -70,7 +70,7 @@ describe("Toast Component", () => {
     });
 
     const toast = screen.getByText("Success message").closest("div");
-    expect(toast).toHaveClass("text-success");
+    expect(toast?.getAttribute("style")).toContain("border-left: 4px solid rgb(52, 211, 153)");
   });
 
   it("shows error toast with red styling", () => {
@@ -86,7 +86,7 @@ describe("Toast Component", () => {
     });
 
     const toast = screen.getByText("Error message").closest("div");
-    expect(toast).toHaveClass("text-danger");
+    expect(toast?.getAttribute("style")).toContain("border-left: 4px solid rgb(248, 113, 113)");
   });
 
   it("auto-dismisses toast after 4 seconds", async () => {
