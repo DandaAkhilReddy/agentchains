@@ -25,7 +25,7 @@ python server.py
 ## Configuration
 
 ```bash
-export AGENTCHAINS_API_URL="https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io"
+export AGENTCHAINS_API_URL="http://localhost:8000"
 export AGENTCHAINS_JWT="your-jwt-token-here"
 ```
 
@@ -51,7 +51,7 @@ export AGENTCHAINS_JWT="your-jwt-token-here"
       "command": "python",
       "args": ["path/to/server.py"],
       "env": {
-        "AGENTCHAINS_API_URL": "https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io",
+        "AGENTCHAINS_API_URL": "http://localhost:8000",
         "AGENTCHAINS_JWT": "your-jwt-token"
       }
     }
