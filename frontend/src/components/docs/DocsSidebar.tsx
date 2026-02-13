@@ -23,19 +23,22 @@ export default function DocsSidebar({ sections, groups, activeId, onSelect, sear
   const sectionMap = new Map(sections.map((s) => [s.id, s]));
 
   return (
-    <div className="border-r border-border-subtle pr-4 hidden md:block">
-      <div className="sticky top-[4.5rem] space-y-4">
+    <div className="bg-[#0d1220] border-r border-[rgba(255,255,255,0.06)] pr-0 hidden md:block">
+      <div className="sticky top-[4.5rem] p-4 space-y-4">
+        {/* Search input */}
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-muted" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#64748b]" />
           <input
             type="text"
             placeholder="Search docs..."
             value={searchQuery}
             onChange={(e) => onSearch(e.target.value)}
-            className="w-full rounded-lg bg-surface-overlay/50 border border-border-subtle py-1.5 pl-8 pr-3 text-xs text-text-primary placeholder:text-text-muted focus:border-primary/30 focus:outline-none"
+            className="w-full rounded-lg bg-[#141928] border border-[rgba(255,255,255,0.06)] py-2 pl-9 pr-3 text-xs text-[#e2e8f0] placeholder:text-[#64748b] focus:border-[rgba(96,165,250,0.4)] focus:shadow-[0_0_0_2px_rgba(96,165,250,0.1)] focus:outline-none transition-all"
           />
         </div>
-        <nav className="space-y-3 max-h-[calc(100vh-160px)] overflow-y-auto">
+
+        {/* Navigation */}
+        <nav className="space-y-3 max-h-[calc(100vh-160px)] overflow-y-auto scrollbar-thin">
           {groups ? (
             // Grouped navigation
             groups.map((group) => {
@@ -47,7 +50,7 @@ export default function DocsSidebar({ sections, groups, activeId, onSelect, sear
 
               return (
                 <div key={group.label}>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted px-3 py-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#64748b] px-3 py-1.5">
                     {group.label}
                   </div>
                   <div className="space-y-0.5">
@@ -55,10 +58,10 @@ export default function DocsSidebar({ sections, groups, activeId, onSelect, sear
                       <button
                         key={section.id}
                         onClick={() => onSelect(section.id)}
-                        className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                        className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
                           activeId === section.id
-                            ? "bg-primary-glow text-primary"
-                            : "text-text-secondary hover:text-text-primary hover:bg-surface-overlay/50"
+                            ? "text-[#60a5fa] bg-[rgba(96,165,250,0.08)] border-l-2 border-[#60a5fa] pl-2.5"
+                            : "text-[#64748b] hover:text-[#94a3b8] hover:bg-[rgba(255,255,255,0.03)] border-l-2 border-transparent pl-2.5"
                         }`}
                       >
                         {section.title}
@@ -74,10 +77,10 @@ export default function DocsSidebar({ sections, groups, activeId, onSelect, sear
               <button
                 key={section.id}
                 onClick={() => onSelect(section.id)}
-                className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
                   activeId === section.id
-                    ? "bg-primary-glow text-primary"
-                    : "text-text-secondary hover:text-text-primary hover:bg-surface-overlay/50"
+                    ? "text-[#60a5fa] bg-[rgba(96,165,250,0.08)] border-l-2 border-[#60a5fa] pl-2.5"
+                    : "text-[#64748b] hover:text-[#94a3b8] hover:bg-[rgba(255,255,255,0.03)] border-l-2 border-transparent pl-2.5"
                 }`}
               >
                 {section.title}

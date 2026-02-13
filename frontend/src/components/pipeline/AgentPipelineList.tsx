@@ -10,10 +10,12 @@ interface Props {
 export default function AgentPipelineList({ executions, selectedId, onSelect }: Props) {
   if (executions.length === 0) {
     return (
-      <div className="glass-card p-6 text-center">
-        <Bot className="mx-auto h-10 w-10 text-text-muted mb-3" />
-        <p className="text-sm font-medium text-text-secondary">No agent activity yet</p>
-        <p className="text-xs text-text-muted mt-1">
+      <div className="rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#141928] p-6 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[rgba(96,165,250,0.08)] mb-3">
+          <Bot className="h-6 w-6 text-[#64748b]" />
+        </div>
+        <p className="text-sm font-semibold text-[#94a3b8]">No agent activity yet</p>
+        <p className="text-xs text-[#64748b] mt-1">
           Agent executions will appear here in real-time as marketplace events flow in via WebSocket.
         </p>
       </div>
@@ -22,43 +24,50 @@ export default function AgentPipelineList({ executions, selectedId, onSelect }: 
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-widest text-text-muted px-1">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-[#64748b] px-1 mb-1">
         Active Agents ({executions.length})
       </p>
       {executions.map((exec) => {
         const isSelected = exec.agentId === selectedId;
-        const statusColor = exec.status === "active" ? "bg-success" : exec.status === "error" ? "bg-danger" : "bg-text-muted";
+        const statusColor =
+          exec.status === "active"
+            ? "bg-[#34d399]"
+            : exec.status === "error"
+              ? "bg-[#f87171]"
+              : "bg-[#64748b]";
         const ago = getRelativeTime(exec.lastActivityAt);
         return (
           <button
             key={exec.agentId}
             onClick={() => onSelect(exec.agentId)}
-            className={`w-full text-left glass-card-subtle p-3 rounded-xl transition-all duration-200 ${
+            className={`w-full text-left rounded-xl p-3 transition-all duration-200 border ${
               isSelected
-                ? "border-primary/30 shadow-[0_0_12px_rgba(59,130,246,0.08)]"
-                : "hover:border-primary/15"
+                ? "bg-[#1a2035] border-[rgba(96,165,250,0.3)] shadow-[0_0_16px_rgba(96,165,250,0.08)]"
+                : "bg-[#141928] border-[rgba(255,255,255,0.06)] hover:border-[rgba(96,165,250,0.15)] hover:bg-[#1a2035]"
             }`}
           >
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-glow">
-                  <Bot className="h-4 w-4 text-primary" />
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[rgba(96,165,250,0.1)]">
+                  <Bot className="h-4 w-4 text-[#60a5fa]" />
                 </div>
-                <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${statusColor} ${exec.status === "active" ? "animate-pulse" : ""}`} />
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#141928] ${statusColor} ${exec.status === "active" ? "animate-pulse" : ""}`}
+                />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-text-primary truncate">{exec.agentName}</p>
-                <div className="flex items-center gap-2 text-xs text-text-muted">
+                <p className="text-sm font-medium text-[#e2e8f0] truncate">{exec.agentName}</p>
+                <div className="flex items-center gap-2 text-xs text-[#64748b]">
                   <span>{exec.steps.length} steps</span>
                   <span>&middot;</span>
                   <span>{ago}</span>
                 </div>
               </div>
               {exec.status === "active" && (
-                <Activity className="h-3.5 w-3.5 text-success shrink-0" />
+                <Activity className="h-3.5 w-3.5 text-[#34d399] shrink-0" />
               )}
               {exec.status === "error" && (
-                <AlertCircle className="h-3.5 w-3.5 text-danger shrink-0" />
+                <AlertCircle className="h-3.5 w-3.5 text-[#f87171] shrink-0" />
               )}
             </div>
           </button>

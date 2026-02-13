@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { FileText, Lock, Globe, Link as LinkIcon } from "lucide-react";
+import { FileText, Lock, Globe, Link as LinkIcon, Check } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import CodeBlock from "../components/docs/CodeBlock";
 import DocsSidebar from "../components/docs/DocsSidebar";
@@ -12,21 +12,21 @@ import type { DocEndpoint } from "./docs-sections";
 function methodColor(method: string): string {
   switch (method) {
     case "GET":
-      return "bg-success/10 text-success";
+      return "bg-[rgba(52,211,153,0.12)] text-[#34d399] border border-[rgba(52,211,153,0.25)]";
     case "POST":
-      return "bg-primary/10 text-primary";
+      return "bg-[rgba(96,165,250,0.12)] text-[#60a5fa] border border-[rgba(96,165,250,0.25)]";
     case "PUT":
-      return "bg-warning/10 text-warning";
+      return "bg-[rgba(251,191,36,0.12)] text-[#fbbf24] border border-[rgba(251,191,36,0.25)]";
     case "DELETE":
-      return "bg-danger/10 text-danger";
+      return "bg-[rgba(248,113,113,0.12)] text-[#f87171] border border-[rgba(248,113,113,0.25)]";
     case "PATCH":
-      return "bg-warning/10 text-warning";
+      return "bg-[rgba(251,191,36,0.12)] text-[#fbbf24] border border-[rgba(251,191,36,0.25)]";
     case "WS":
-      return "bg-secondary/10 text-secondary";
+      return "bg-[rgba(167,139,250,0.12)] text-[#a78bfa] border border-[rgba(167,139,250,0.25)]";
     case "SSE":
-      return "bg-secondary/10 text-secondary";
+      return "bg-[rgba(34,211,238,0.12)] text-[#22d3ee] border border-[rgba(34,211,238,0.25)]";
     default:
-      return "bg-surface-overlay text-text-muted";
+      return "bg-[rgba(100,116,139,0.12)] text-[#64748b] border border-[rgba(100,116,139,0.25)]";
   }
 }
 
@@ -34,38 +34,66 @@ function methodColor(method: string): string {
 
 function EndpointBlock({ ep }: { ep: DocEndpoint }) {
   return (
-    <div className="mb-6">
+    <div className="mb-6 rounded-xl border border-[rgba(255,255,255,0.06)] bg-[#141928] p-4">
       <div className="flex items-center gap-2 mb-2">
         <span
-          className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${methodColor(ep.method)}`}
+          className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${methodColor(ep.method)}`}
         >
           {ep.method}
         </span>
-        <code className="text-xs font-mono text-text-primary font-semibold">
+        <code className="text-xs font-mono text-[#e2e8f0] font-semibold">
           {ep.path}
         </code>
         {ep.auth !== undefined &&
           (ep.auth ? (
-            <Lock className="h-3 w-3 text-warning ml-1" />
+            <Lock className="h-3 w-3 text-[#fbbf24] ml-1" />
           ) : (
-            <Globe className="h-3 w-3 text-success ml-1" />
+            <Globe className="h-3 w-3 text-[#34d399] ml-1" />
           ))}
       </div>
-      <p className="text-xs text-text-secondary mb-3">{ep.description}</p>
+      <p className="text-xs text-[#94a3b8] mb-3 leading-relaxed">{ep.description}</p>
 
       {ep.params && ep.params.length > 0 && <ParamList params={ep.params} />}
 
       {ep.response && (
         <div className="mt-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[#64748b] mb-1.5">
             Response
           </p>
-          <pre className="text-[11px] font-mono text-text-secondary bg-surface-overlay/40 rounded-lg p-3 whitespace-pre-wrap leading-relaxed border border-border-subtle">
+          <pre className="text-[11px] font-mono text-[#94a3b8] bg-[#0a0e1a] rounded-lg p-3 whitespace-pre-wrap leading-relaxed border border-[rgba(255,255,255,0.06)]">
             {ep.response}
           </pre>
         </div>
       )}
     </div>
+  );
+}
+
+// --- Copy permalink button ---
+
+function CopyPermalink({ sectionId }: { sectionId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    const url = `${window.location.origin}${window.location.pathname}#${sectionId}`;
+    window.history.replaceState(null, "", `#${sectionId}`);
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [sectionId]);
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
+      title="Copy permalink"
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-[#34d399]" />
+      ) : (
+        <LinkIcon className="h-3.5 w-3.5 text-[#64748b] hover:text-[#60a5fa] transition-colors" />
+      )}
+    </button>
   );
 }
 
@@ -131,7 +159,7 @@ export default function DocsPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="API Documentation"
-        subtitle={`Complete reference — ${SECTIONS.length} sections covering all endpoints`}
+        subtitle={`Complete reference \u2014 ${SECTIONS.length} sections covering all endpoints`}
         icon={FileText}
       />
 
@@ -148,7 +176,7 @@ export default function DocsPage() {
 
         {/* Scrolling content: ALL sections */}
         <div>
-          {SECTIONS.map((section) => (
+          {SECTIONS.map((section, sectionIndex) => (
             <section
               key={section.id}
               id={section.id}
@@ -157,30 +185,14 @@ export default function DocsPage() {
             >
               {/* LEFT COLUMN: Text + Endpoints + Params */}
               <div className="docs-section-text">
-                <div className="group flex items-center gap-2 mb-3">
-                  <h2 className="text-lg font-bold text-text-primary">
+                <div className="group flex items-center gap-2 mb-4">
+                  <h2 className="text-lg font-bold text-[#e2e8f0]">
                     {section.title}
                   </h2>
-                  <a
-                    href={`#${section.id}`}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      window.history.replaceState(
-                        null,
-                        "",
-                        `#${section.id}`,
-                      );
-                      navigator.clipboard.writeText(
-                        `${window.location.origin}${window.location.pathname}#${section.id}`,
-                      );
-                    }}
-                  >
-                    <LinkIcon className="h-4 w-4 text-text-muted hover:text-primary" />
-                  </a>
+                  <CopyPermalink sectionId={section.id} />
                 </div>
 
-                <p className="text-sm text-text-secondary leading-relaxed mb-6">
+                <p className="text-sm text-[#94a3b8] leading-relaxed mb-6">
                   {section.description}
                 </p>
 
@@ -192,13 +204,13 @@ export default function DocsPage() {
                 ))}
 
                 {section.details && (
-                  <div className="mt-4 space-y-1.5">
+                  <div className="mt-4 space-y-2 rounded-xl border border-[rgba(255,255,255,0.06)] bg-[#141928] p-4">
                     {section.details.map((d, i) => (
                       <p
                         key={i}
-                        className="text-xs text-text-secondary leading-relaxed"
+                        className="text-xs text-[#94a3b8] leading-relaxed"
                       >
-                        <span className="text-text-muted mr-1">—</span>{" "}
+                        <span className="text-[#64748b] mr-1.5">&mdash;</span>
                         {d}
                       </p>
                     ))}
@@ -210,6 +222,11 @@ export default function DocsPage() {
               <div className="docs-section-code">
                 <CodeBlock examples={section.code} />
               </div>
+
+              {/* Section divider (except last) */}
+              {sectionIndex < SECTIONS.length - 1 && (
+                <div className="col-span-full h-px bg-gradient-to-r from-transparent via-[rgba(255,255,255,0.06)] to-transparent" />
+              )}
             </section>
           ))}
         </div>
