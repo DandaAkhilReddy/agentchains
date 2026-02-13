@@ -23,6 +23,16 @@ const createWrapper = () => {
   );
 };
 
+function mockBalance(balance: number): WalletBalanceResponse {
+  return {
+    balance,
+    total_earned: 0,
+    total_spent: 0,
+    total_deposited: balance,
+    total_fees_paid: 0,
+  };
+}
+
 describe("TokenBalance", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -30,19 +40,6 @@ describe("TokenBalance", () => {
 
   test("renders USD amount with formatUSD formatting for small balance", async () => {
     const mockToken = "test-token";
-    const mockData: WalletBalanceResponse = {
-      account: {
-        id: "acc-1",
-        agent_id: null,
-        balance: 123.45,
-        total_deposited: 200,
-        total_earned: 50,
-        total_spent: 126.55,
-        total_fees_paid: 0,
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-01T00:00:00Z",
-      },
-    };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
       token: mockToken,
@@ -51,7 +48,7 @@ describe("TokenBalance", () => {
       isAuthenticated: true,
     });
 
-    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockData);
+    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockBalance(123.45));
 
     const { container } = render(<TokenBalance />, { wrapper: createWrapper() });
 
@@ -68,19 +65,6 @@ describe("TokenBalance", () => {
 
   test("renders USD amount with K suffix for thousands", async () => {
     const mockToken = "test-token";
-    const mockData: WalletBalanceResponse = {
-      account: {
-        id: "acc-1",
-        agent_id: null,
-        balance: 5432.1,
-        total_deposited: 10000,
-        total_earned: 0,
-        total_spent: 4567.9,
-        total_fees_paid: 0,
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-01T00:00:00Z",
-      },
-    };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
       token: mockToken,
@@ -89,7 +73,7 @@ describe("TokenBalance", () => {
       isAuthenticated: true,
     });
 
-    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockData);
+    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockBalance(5432.1));
 
     render(<TokenBalance />, { wrapper: createWrapper() });
 
@@ -101,19 +85,6 @@ describe("TokenBalance", () => {
 
   test("renders USD amount with M suffix for millions", async () => {
     const mockToken = "test-token";
-    const mockData: WalletBalanceResponse = {
-      account: {
-        id: "acc-1",
-        agent_id: null,
-        balance: 2500000,
-        total_deposited: 3000000,
-        total_earned: 0,
-        total_spent: 500000,
-        total_fees_paid: 0,
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-01T00:00:00Z",
-      },
-    };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
       token: mockToken,
@@ -122,7 +93,7 @@ describe("TokenBalance", () => {
       isAuthenticated: true,
     });
 
-    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockData);
+    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockBalance(2500000));
 
     render(<TokenBalance />, { wrapper: createWrapper() });
 
@@ -134,19 +105,6 @@ describe("TokenBalance", () => {
 
   test("handles zero balance correctly", async () => {
     const mockToken = "test-token";
-    const mockData: WalletBalanceResponse = {
-      account: {
-        id: "acc-1",
-        agent_id: null,
-        balance: 0,
-        total_deposited: 0,
-        total_earned: 0,
-        total_spent: 0,
-        total_fees_paid: 0,
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-01T00:00:00Z",
-      },
-    };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
       token: mockToken,
@@ -155,7 +113,7 @@ describe("TokenBalance", () => {
       isAuthenticated: true,
     });
 
-    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockData);
+    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockBalance(0));
 
     render(<TokenBalance />, { wrapper: createWrapper() });
 
@@ -167,19 +125,6 @@ describe("TokenBalance", () => {
 
   test("handles large numbers with millions formatting", async () => {
     const mockToken = "test-token";
-    const mockData: WalletBalanceResponse = {
-      account: {
-        id: "acc-1",
-        agent_id: null,
-        balance: 15750000,
-        total_deposited: 20000000,
-        total_earned: 0,
-        total_spent: 4250000,
-        total_fees_paid: 0,
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-01T00:00:00Z",
-      },
-    };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
       token: mockToken,
@@ -188,7 +133,7 @@ describe("TokenBalance", () => {
       isAuthenticated: true,
     });
 
-    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockData);
+    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockBalance(15750000));
 
     render(<TokenBalance />, { wrapper: createWrapper() });
 
@@ -200,19 +145,6 @@ describe("TokenBalance", () => {
 
   test("displays USD formatted balance", async () => {
     const mockToken = "test-token";
-    const mockData: WalletBalanceResponse = {
-      account: {
-        id: "acc-1",
-        agent_id: null,
-        balance: 999.99,
-        total_deposited: 1000,
-        total_earned: 0,
-        total_spent: 0.01,
-        total_fees_paid: 0,
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-01T00:00:00Z",
-      },
-    };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
       token: mockToken,
@@ -221,7 +153,7 @@ describe("TokenBalance", () => {
       isAuthenticated: true,
     });
 
-    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockData);
+    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockBalance(999.99));
 
     render(<TokenBalance />, { wrapper: createWrapper() });
 
@@ -270,19 +202,6 @@ describe("TokenBalance", () => {
 
   test("applies monospace font to balance", async () => {
     const mockToken = "test-token";
-    const mockData: WalletBalanceResponse = {
-      account: {
-        id: "acc-1",
-        agent_id: null,
-        balance: 500,
-        total_deposited: 500,
-        total_earned: 0,
-        total_spent: 0,
-        total_fees_paid: 0,
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-01T00:00:00Z",
-      },
-    };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
       token: mockToken,
@@ -291,7 +210,7 @@ describe("TokenBalance", () => {
       isAuthenticated: true,
     });
 
-    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockData);
+    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(mockBalance(500));
 
     render(<TokenBalance />, { wrapper: createWrapper() });
 

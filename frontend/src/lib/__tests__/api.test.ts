@@ -259,12 +259,16 @@ describe("api.ts", () => {
       expect(call).toContain("recalculate=true");
     });
 
-    test("expressBuy uses authGet", async () => {
+    test("expressBuy uses authPost", async () => {
       await expressBuy("token", "listing-123");
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/v1/express/listing-123"),
         expect.objectContaining({
-          headers: { Authorization: "Bearer token" },
+          method: "POST",
+          headers: {
+            Authorization: "Bearer token",
+            "Content-Type": "application/json",
+          },
         })
       );
     });
@@ -580,11 +584,11 @@ describe("api.ts", () => {
       );
     });
 
-    test("updateCreatorProfile uses authPost", async () => {
+    test("updateCreatorProfile uses authPut", async () => {
       await updateCreatorProfile("token", { display_name: "New Name" });
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/v1/creators/me"),
-        expect.objectContaining({ method: "POST" })
+        expect.objectContaining({ method: "PUT" })
       );
     });
 

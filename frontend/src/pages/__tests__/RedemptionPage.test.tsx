@@ -18,34 +18,53 @@ describe("RedemptionPage", () => {
 
   const mockWallet = {
     balance: 15.0,
+    total_earned: 0,
+    total_spent: 0,
+    total_deposited: 0,
+    total_fees_paid: 0,
   };
 
-  const mockRedemptions = [
+  const mockRedemptions: import("../../types/api").RedemptionRequest[] = [
     {
       id: "red-1",
+      creator_id: "creator-1",
       redemption_type: "api_credits",
       amount_usd: 0.50,
       currency: "USD",
       status: "completed",
+      payout_ref: null,
+      admin_notes: "",
+      rejection_reason: "",
       created_at: "2026-01-15T10:00:00Z",
+      processed_at: "2026-01-15T10:03:00Z",
       completed_at: "2026-01-15T10:05:00Z",
     },
     {
       id: "red-2",
+      creator_id: "creator-1",
       redemption_type: "gift_card",
       amount_usd: 2.0,
       currency: "USD",
       status: "pending",
+      payout_ref: null,
+      admin_notes: "",
+      rejection_reason: "",
       created_at: "2026-02-01T12:00:00Z",
+      processed_at: null,
       completed_at: null,
     },
     {
       id: "red-3",
+      creator_id: "creator-1",
       redemption_type: "bank_withdrawal",
       amount_usd: 10.0,
       currency: "USD",
       status: "processing",
+      payout_ref: null,
+      admin_notes: "",
+      rejection_reason: "",
       created_at: "2026-02-05T14:00:00Z",
+      processed_at: "2026-02-05T14:01:00Z",
       completed_at: null,
     },
   ];
@@ -53,9 +72,22 @@ describe("RedemptionPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.fetchCreatorWallet).mockResolvedValue(mockWallet);
-    vi.mocked(api.fetchRedemptions).mockResolvedValue({ redemptions: mockRedemptions });
-    vi.mocked(api.createRedemption).mockResolvedValue({ id: "new-red", status: "pending" });
-    vi.mocked(api.cancelRedemption).mockResolvedValue({ success: true });
+    vi.mocked(api.fetchRedemptions).mockResolvedValue({ redemptions: mockRedemptions, total: mockRedemptions.length });
+    vi.mocked(api.createRedemption).mockResolvedValue({
+      id: "new-red",
+      creator_id: "creator-1",
+      redemption_type: "api_credits",
+      amount_usd: 5.0,
+      currency: "USD",
+      status: "pending",
+      payout_ref: null,
+      admin_notes: "",
+      rejection_reason: "",
+      created_at: "2026-02-10T10:00:00Z",
+      processed_at: null,
+      completed_at: null,
+    });
+    vi.mocked(api.cancelRedemption).mockResolvedValue({ message: "Redemption cancelled" });
   });
 
   it("renders page title and description", async () => {
@@ -197,7 +229,20 @@ describe("RedemptionPage", () => {
 
   it("shows loading state during withdrawal submission", async () => {
     vi.mocked(api.createRedemption).mockImplementation(() =>
-      new Promise((resolve) => setTimeout(() => resolve({ id: "new-red", status: "pending" }), 100))
+      new Promise((resolve) => setTimeout(() => resolve({
+        id: "new-red",
+        creator_id: "creator-1",
+        redemption_type: "api_credits",
+        amount_usd: 5.0,
+        currency: "USD",
+        status: "pending",
+        payout_ref: null,
+        admin_notes: "",
+        rejection_reason: "",
+        created_at: "2026-02-10T10:00:00Z",
+        processed_at: null,
+        completed_at: null,
+      }), 100))
     );
 
     renderWithProviders(<RedemptionPage token={mockToken} />);
@@ -261,7 +306,7 @@ describe("RedemptionPage", () => {
   });
 
   it("shows empty state when no withdrawal history exists", async () => {
-    vi.mocked(api.fetchRedemptions).mockResolvedValue({ redemptions: [] });
+    vi.mocked(api.fetchRedemptions).mockResolvedValue({ redemptions: [], total: 0 });
 
     renderWithProviders(<RedemptionPage token={mockToken} />);
 
@@ -335,6 +380,10 @@ describe("RedemptionPage", () => {
   it("disables methods when balance is below minimum threshold", async () => {
     vi.mocked(api.fetchCreatorWallet).mockResolvedValue({
       balance: 0.50,
+      total_earned: 0,
+      total_spent: 0,
+      total_deposited: 0,
+      total_fees_paid: 0,
     });
 
     renderWithProviders(<RedemptionPage token={mockToken} />);
