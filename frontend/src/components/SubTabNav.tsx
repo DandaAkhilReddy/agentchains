@@ -11,15 +11,15 @@ interface Props {
 
 export default function SubTabNav({ tabs, active, onChange }: Props) {
   return (
-    <div className="flex gap-1 rounded-xl bg-surface-overlay/50 border border-border-subtle backdrop-blur-sm p-1">
+    <div className="flex gap-1 p-1">
       {tabs.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 ${
             active === tab.id
-              ? "bg-primary-glow text-primary shadow-[0_0_8px_rgba(59,130,246,0.15)]"
-              : "text-text-secondary hover:text-text-primary"
+              ? "bg-[rgba(96,165,250,0.1)] text-[#60a5fa] border border-[rgba(96,165,250,0.2)]"
+              : "bg-transparent text-[#64748b] border border-transparent hover:text-[#94a3b8]"
           }`}
         >
           {tab.label}

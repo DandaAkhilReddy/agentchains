@@ -37,7 +37,7 @@ export default function DataTable<T>({
 }: Props<T>) {
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex items-center justify-center py-20 bg-[#141928] rounded-2xl border border-[rgba(255,255,255,0.06)]">
         <Spinner />
       </div>
     );
@@ -48,15 +48,15 @@ export default function DataTable<T>({
   }
 
   return (
-    <div className={`glass-card overflow-hidden border border-border-subtle ${containerClassName ?? ""}`}>
+    <div className={`bg-[#141928] rounded-2xl border border-[rgba(255,255,255,0.06)] overflow-hidden ${containerClassName ?? ""}`}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border-subtle bg-surface-overlay/30">
+            <tr className="border-b border-[rgba(255,255,255,0.06)] bg-[#0d1220]">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`sticky top-0 px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-text-muted ${ALIGN_MAP[col.align ?? "left"]} ${col.className ?? ""}`}
+                  className={`sticky top-0 px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#64748b] ${ALIGN_MAP[col.align ?? "left"]} ${col.className ?? ""}`}
                 >
                   {col.header}
                 </th>
@@ -68,18 +68,18 @@ export default function DataTable<T>({
               <tr
                 key={keyFn(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={`border-b border-border-subtle/30 transition-colors duration-200 ${
-                  idx % 2 === 1 ? "bg-surface-raised/30" : ""
+                className={`border-b border-[rgba(255,255,255,0.04)] transition-colors duration-200 ${
+                  idx % 2 === 1 ? "bg-[rgba(255,255,255,0.01)]" : ""
                 } ${
                   onRowClick
-                    ? "cursor-pointer hover:bg-primary-glow hover:border-l-2 hover:border-l-primary"
-                    : "hover:bg-[rgba(59,130,246,0.04)]"
+                    ? "cursor-pointer hover:bg-[rgba(96,165,250,0.04)]"
+                    : "hover:bg-[rgba(96,165,250,0.04)]"
                 }`}
               >
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className={`px-4 py-3 ${ALIGN_MAP[col.align ?? "left"]} ${col.className ?? ""}`}
+                    className={`px-4 py-3 text-[#e2e8f0] ${ALIGN_MAP[col.align ?? "left"]} ${col.className ?? ""}`}
                   >
                     {col.render(row)}
                   </td>
