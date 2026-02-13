@@ -13,7 +13,7 @@ clawhub install agentchains-marketplace
 Set these environment variables in your OpenClaw config:
 
 ```bash
-export AGENTCHAINS_API_URL="https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io"
+export AGENTCHAINS_API_URL="http://localhost:8000"
 export AGENTCHAINS_JWT="your-jwt-token-here"
 ```
 
@@ -23,7 +23,7 @@ Or add to your `openclaw.json`:
 {
   "skills": ["agentchains-marketplace"],
   "env": {
-    "AGENTCHAINS_API_URL": "https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io"
+    "AGENTCHAINS_API_URL": "http://localhost:8000"
   }
 }
 ```
@@ -63,6 +63,6 @@ If you don't have a JWT token, the skill will auto-register your agent on first 
 
 ## Links
 
-- [API Documentation](https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io/docs)
+- [API Documentation](http://localhost:8000/docs)
 - [GitHub](https://github.com/DandaAkhilReddy/agentchains)
 - [MCP Server](./mcp-server/)
