@@ -6,9 +6,19 @@ import SubTabNav from "../components/SubTabNav";
 import DataTable, { type Column } from "../components/DataTable";
 import AnimatedCounter from "../components/AnimatedCounter";
 import CopyButton from "../components/CopyButton";
+import ProgressRing from "../components/ProgressRing";
 import Spinner from "../components/Spinner";
-import { formatUSDC, scoreToPercent } from "../lib/format";
-import { Medal, Trophy } from "lucide-react";
+import { formatUSDC } from "../lib/format";
+import {
+  Medal,
+  Trophy,
+  Search,
+  ArrowRight,
+  Hash,
+  CheckCircle2,
+  ShieldCheck,
+  Banknote,
+} from "lucide-react";
 import type { LeaderboardEntry } from "../types/api";
 import {
   BarChart,
@@ -17,19 +27,34 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  CartesianGrid,
   Cell,
 } from "recharts";
 
-const CHART_TOOLTIP_STYLE = {
-  backgroundColor: "rgba(255, 255, 255, 0.95)",
-  border: "1px solid rgba(59, 130, 246, 0.15)",
+/* ── Dark-glass Tooltip for Recharts ──────────────────────────── */
+
+const DARK_TOOLTIP_STYLE: React.CSSProperties = {
+  backgroundColor: "rgba(20, 25, 40, 0.92)",
+  backdropFilter: "blur(16px)",
+  border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 12,
-  color: "#0f172a",
+  color: "#e2e8f0",
   fontSize: 12,
+  padding: "8px 14px",
+  boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
 };
 
-const RANK_COLORS = ["#f59e0b", "#94a3b8", "#cd7f32"];
+/* ── Medal / Rank Colors ──────────────────────────────────────── */
+
+const RANK_COLORS = ["#fbbf24", "#94a3b8", "#cd7f32"];
+const RANK_GLOWS = [
+  "0 0 12px rgba(251,191,36,0.4)",
+  "0 0 12px rgba(148,163,184,0.3)",
+  "0 0 12px rgba(205,127,50,0.3)",
+];
 const RANK_LABELS = ["Gold", "Silver", "Bronze"];
+
+/* ── Board Tabs ───────────────────────────────────────────────── */
 
 const BOARD_TABS = [
   { id: "helpfulness", label: "Most Helpful" },
@@ -38,28 +63,73 @@ const BOARD_TABS = [
   { id: "category:web_search", label: "Category Leaders" },
 ];
 
+/* ── Stat accent color map ────────────────────────────────────── */
+
+const STAT_ACCENTS: Record<string, { color: string; bg: string }> = {
+  Transactions: { color: "#60a5fa", bg: "rgba(96,165,250,0.08)" },
+  Successful:   { color: "#34d399", bg: "rgba(52,211,153,0.08)" },
+  Verified:     { color: "#a78bfa", bg: "rgba(167,139,250,0.08)" },
+  Volume:       { color: "#fbbf24", bg: "rgba(251,191,36,0.08)" },
+};
+
+const STAT_ICONS: Record<string, typeof Hash> = {
+  Transactions: Hash,
+  Successful:   CheckCircle2,
+  Verified:     ShieldCheck,
+  Volume:       Banknote,
+};
+
+/* ── MedalBadge ───────────────────────────────────────────────── */
+
 function MedalBadge({ rank }: { rank: number }) {
   if (rank > 3) {
     return (
-      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-text-secondary">
+      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-[#64748b]">
         {rank}
       </span>
     );
   }
+  const color = RANK_COLORS[rank - 1];
+  const glow = RANK_GLOWS[rank - 1];
   return (
     <div
       className="inline-flex h-8 w-8 items-center justify-center rounded-full"
-      style={{ background: `${RANK_COLORS[rank - 1]}20` }}
+      style={{ background: `${color}15`, boxShadow: glow }}
       title={RANK_LABELS[rank - 1]}
     >
       {rank === 1 ? (
-        <Trophy className="h-4 w-4" style={{ color: RANK_COLORS[0] }} />
+        <Trophy className="h-4 w-4" style={{ color }} />
       ) : (
-        <Medal className="h-4 w-4" style={{ color: RANK_COLORS[rank - 1] }} />
+        <Medal className="h-4 w-4" style={{ color }} />
       )}
     </div>
   );
 }
+
+/* ── Neon score progress bar (blue -> green gradient) ─────────── */
+
+function ScoreBar({ score, animate = true }: { score: number; animate?: boolean }) {
+  const pct = Math.min(Math.round(score * 100), 100);
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="relative h-2 w-24 overflow-hidden rounded-full bg-[#1a2035]">
+        <div
+          className={`h-full rounded-full ${animate ? "animate-grow-bar" : ""}`}
+          style={{
+            width: `${pct}%`,
+            background: "linear-gradient(90deg, #60a5fa 0%, #34d399 100%)",
+            boxShadow: "0 0 8px rgba(96,165,250,0.35)",
+          }}
+        />
+      </div>
+      <span className="text-sm font-medium text-[#94a3b8] font-mono tabular-nums">
+        {pct}%
+      </span>
+    </div>
+  );
+}
+
+/* ── Main leaderboard columns ─────────────────────────────────── */
 
 const columns: Column<LeaderboardEntry>[] = [
   {
@@ -71,30 +141,18 @@ const columns: Column<LeaderboardEntry>[] = [
   {
     key: "name",
     header: "Agent",
-    render: (e) => <span className="font-medium text-text-primary">{e.agent_name}</span>,
+    render: (e) => <span className="font-medium text-[#e2e8f0]">{e.agent_name}</span>,
   },
   {
     key: "score",
     header: "Score",
-    render: (e) => (
-      <div className="flex items-center gap-2">
-        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-overlay">
-          <div
-            className="h-full rounded-full bg-primary animate-grow-bar"
-            style={{ width: `${Math.round(e.composite_score * 100)}%` }}
-          />
-        </div>
-        <span className="text-sm text-text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
-          {scoreToPercent(e.composite_score)}
-        </span>
-      </div>
-    ),
+    render: (e) => <ScoreBar score={e.composite_score} />,
   },
   {
     key: "txns",
     header: "Transactions",
     render: (e) => (
-      <span className="text-text-secondary">
+      <span className="text-[#94a3b8] font-mono tabular-nums">
         <AnimatedCounter value={e.total_transactions} />
       </span>
     ),
@@ -103,12 +161,29 @@ const columns: Column<LeaderboardEntry>[] = [
     key: "volume",
     header: "Volume",
     render: (e) => (
-      <span style={{ fontFamily: "var(--font-mono)" }}>
+      <span className="font-mono tabular-nums text-[#34d399]">
         {formatUSDC(e.total_volume_usdc)}
       </span>
     ),
   },
 ];
+
+/* ── Chart bar gradient SVG def ───────────────────────────────── */
+
+function ChartGradientDefs() {
+  return (
+    <defs>
+      <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stopColor="#60a5fa" />
+        <stop offset="100%" stopColor="#34d399" />
+      </linearGradient>
+    </defs>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ReputationPage
+   ══════════════════════════════════════════════════════════════════ */
 
 export default function ReputationPage() {
   const { data: leaderboard, isLoading } = useLeaderboard(20);
@@ -124,7 +199,8 @@ export default function ReputationPage() {
   }));
 
   const multiBoardEntries = multiBoard?.entries ?? [];
-  const secondaryLabel = multiBoardEntries.length > 0 ? multiBoardEntries[0].secondary_label : "Score";
+  const secondaryLabel =
+    multiBoardEntries.length > 0 ? multiBoardEntries[0].secondary_label : "Score";
 
   const multiBoardColumns: Column<any>[] = [
     {
@@ -136,32 +212,24 @@ export default function ReputationPage() {
     {
       key: "name",
       header: "Agent",
-      render: (e: any) => <span className="font-medium text-text-primary">{e.agent_name}</span>,
+      render: (e: any) => <span className="font-medium text-[#e2e8f0]">{e.agent_name}</span>,
     },
     {
       key: "primary_score",
       header: secondaryLabel,
-      render: (e: any) => (
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-overlay">
-            <div
-              className="h-full rounded-full bg-primary animate-grow-bar"
-              style={{ width: `${Math.min(Math.round(e.primary_score * 100), 100)}%` }}
-            />
-          </div>
-          <span className="text-sm text-text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
-            {typeof e.primary_score === "number" && e.primary_score <= 1
-              ? scoreToPercent(e.primary_score)
-              : String(e.primary_score)}
-          </span>
-        </div>
-      ),
+      render: (e: any) => {
+        const val =
+          typeof e.primary_score === "number" && e.primary_score <= 1
+            ? e.primary_score
+            : e.primary_score / 100;
+        return <ScoreBar score={Math.min(val, 1)} />;
+      },
     },
     {
       key: "txns",
       header: "Transactions",
       render: (e: any) => (
-        <span className="text-text-secondary">
+        <span className="text-[#94a3b8] font-mono tabular-nums">
           <AnimatedCounter value={e.total_transactions} />
         </span>
       ),
@@ -170,7 +238,7 @@ export default function ReputationPage() {
       key: "earned",
       header: "Earned",
       render: (e: any) => (
-        <span style={{ fontFamily: "var(--font-mono)" }}>
+        <span className="font-mono tabular-nums text-[#34d399]">
           {formatUSDC(e.total_earned_usdc)}
         </span>
       ),
@@ -179,52 +247,85 @@ export default function ReputationPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Reputation & Rankings" subtitle="Agent performance scores and leaderboards" icon={Trophy} />
-      {/* Agent lookup */}
-      <div className="flex gap-3">
-        <input
-          type="text"
-          value={lookupId}
-          onChange={(e) => setLookupId(e.target.value)}
-          placeholder="Agent ID to look up..."
-          className="futuristic-input flex-1 px-3 py-2 text-sm"
-          style={{ fontFamily: "var(--font-mono)" }}
-        />
-        <button
-          onClick={() => setActiveId(lookupId.trim() || null)}
-          disabled={!lookupId.trim()}
-          className="btn-primary px-4 py-2.5 text-sm disabled:opacity-30"
-        >
-          Look up
-        </button>
+      {/* ── Page Header ────────────────────────────────────────── */}
+      <PageHeader
+        title="Reputation & Leaderboard"
+        subtitle="Agent performance scores, rankings, and multi-category leaderboards"
+        icon={Trophy}
+      />
+
+      {/* ── Agent Lookup Section ───────────────────────────────── */}
+      <div
+        className="rounded-2xl border border-[rgba(255,255,255,0.06)] p-5"
+        style={{
+          background: "linear-gradient(135deg, #141928 0%, #1a2035 100%)",
+        }}
+      >
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#e2e8f0]">
+          <Search className="h-4 w-4 text-[#60a5fa]" />
+          Agent Lookup
+        </h3>
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={lookupId}
+              onChange={(e) => setLookupId(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && lookupId.trim()) setActiveId(lookupId.trim());
+              }}
+              placeholder="Enter agent ID to look up..."
+              className="w-full rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0a0e1a] px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] font-mono outline-none transition-all duration-200 focus:border-[rgba(96,165,250,0.3)] focus:shadow-[0_0_0_3px_rgba(96,165,250,0.08)]"
+            />
+          </div>
+          <button
+            onClick={() => setActiveId(lookupId.trim() || null)}
+            disabled={!lookupId.trim()}
+            className="inline-flex items-center gap-2 rounded-xl border border-[rgba(96,165,250,0.25)] bg-[rgba(96,165,250,0.1)] px-5 py-2.5 text-sm font-semibold text-[#60a5fa] transition-all duration-200 hover:bg-[rgba(96,165,250,0.18)] hover:shadow-[0_0_16px_rgba(96,165,250,0.15)] disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            Look Up
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
-      {/* Agent detail card */}
+      {/* ── Agent Detail Card ──────────────────────────────────── */}
       {activeId && (
-        <div className="glass-card gradient-border-card animate-scale-in p-5">
+        <div
+          className="animate-scale-in rounded-2xl border border-[rgba(255,255,255,0.06)] p-6"
+          style={{
+            background: "#141928",
+          }}
+        >
           {repLoading ? (
-            <div className="flex justify-center py-4">
+            <div className="flex justify-center py-8">
               <Spinner />
             </div>
           ) : agentRep ? (
-            <div>
-              <div className="mb-4 flex items-center justify-between">
+            <div className="space-y-5">
+              {/* Header: name + composite score */}
+              <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-text-primary">{agentRep.agent_name}</h3>
-                  <div className="flex items-center gap-1">
-                    <p className="text-xs text-text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
-                      {agentRep.agent_id}
-                    </p>
+                  <h3 className="text-lg font-bold text-[#e2e8f0]">{agentRep.agent_name}</h3>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    <p className="text-xs text-[#64748b] font-mono">{agentRep.agent_id}</p>
                     <CopyButton value={agentRep.agent_id} />
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold gradient-text-success" style={{ fontFamily: "var(--font-mono)" }}>
-                    {scoreToPercent(agentRep.composite_score)}
-                  </p>
-                  <p className="text-xs text-text-secondary">Composite Score</p>
+                {/* Large ProgressRing with glow */}
+                <div className="flex flex-col items-center gap-1">
+                  <ProgressRing
+                    value={Math.round(agentRep.composite_score * 100)}
+                    size={80}
+                    strokeWidth={6}
+                  />
+                  <span className="text-[10px] font-medium uppercase tracking-widest text-[#64748b]">
+                    Composite Score
+                  </span>
                 </div>
               </div>
+
+              {/* Stats grid */}
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <RepStat label="Transactions" value={agentRep.total_transactions} />
                 <RepStat label="Successful" value={agentRep.successful_deliveries} />
@@ -233,21 +334,29 @@ export default function ReputationPage() {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-text-secondary">Agent not found</p>
+            <div className="flex flex-col items-center gap-2 py-8">
+              <Search className="h-8 w-8 text-[#64748b] opacity-40" />
+              <p className="text-sm text-[#64748b]">Agent not found</p>
+            </div>
           )}
         </div>
       )}
 
-      {/* Multi-leaderboard sub-tabs */}
-      <SubTabNav
-        tabs={BOARD_TABS}
-        active={boardType}
-        onChange={setBoardType}
-      />
+      {/* ── Multi-Leaderboard Sub-Tabs ─────────────────────────── */}
+      <div
+        className="rounded-2xl border border-[rgba(255,255,255,0.06)] p-1.5"
+        style={{ background: "#0d1220" }}
+      >
+        <SubTabNav tabs={BOARD_TABS} active={boardType} onChange={setBoardType} />
+      </div>
 
-      {/* Multi-leaderboard table */}
-      <div className="glass-card gradient-border-card p-4">
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">
+      {/* ── Multi-Leaderboard Table ────────────────────────────── */}
+      <div className="space-y-1">
+        <h3 className="flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-widest text-[#64748b]">
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full bg-[#60a5fa]"
+            style={{ boxShadow: "0 0 6px rgba(96,165,250,0.5)" }}
+          />
           {BOARD_TABS.find((t) => t.id === boardType)?.label ?? "Leaderboard"}
         </h3>
         <DataTable
@@ -259,11 +368,16 @@ export default function ReputationPage() {
         />
       </div>
 
-      {/* Main content: table + chart */}
+      {/* ── Main Content: Table + Top 10 Chart ─────────────────── */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">
-            Leaderboard
+        {/* Main leaderboard table */}
+        <div className="space-y-1 lg:col-span-2">
+          <h3 className="flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-widest text-[#64748b]">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full bg-[#a78bfa]"
+              style={{ boxShadow: "0 0 6px rgba(167,139,250,0.5)" }}
+            />
+            Global Leaderboard
           </h3>
           <DataTable
             columns={columns}
@@ -274,40 +388,59 @@ export default function ReputationPage() {
           />
         </div>
 
-        <div>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-text-secondary">
+        {/* Top 10 Horizontal Bar Chart */}
+        <div className="space-y-1">
+          <h3 className="flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-widest text-[#64748b]">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full bg-[#34d399]"
+              style={{ boxShadow: "0 0 6px rgba(52,211,153,0.5)" }}
+            />
             Top 10 Scores
           </h3>
-          <div className="glass-card gradient-border-card p-4">
+          <div
+            className="rounded-2xl border border-[rgba(255,255,255,0.06)] p-4"
+            style={{ background: "#141928" }}
+          >
             {chartData.length === 0 ? (
-              <p className="py-8 text-center text-sm text-text-muted">
-                No data yet
-              </p>
+              <p className="py-12 text-center text-sm text-[#64748b]">No data yet</p>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={320}>
                 <BarChart
                   data={chartData}
                   layout="vertical"
-                  margin={{ left: 0, right: 10, top: 5, bottom: 5 }}
+                  margin={{ left: 0, right: 12, top: 8, bottom: 8 }}
                 >
-                  <XAxis type="number" domain={[0, 100]} hide />
+                  <ChartGradientDefs />
+                  <CartesianGrid
+                    horizontal={false}
+                    stroke="rgba(255,255,255,0.06)"
+                    strokeDasharray="3 3"
+                  />
+                  <XAxis
+                    type="number"
+                    domain={[0, 100]}
+                    tick={{ fill: "#94a3b8", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
                   <YAxis
                     type="category"
                     dataKey="name"
                     width={90}
-                    tick={{ fill: "#475569", fontSize: 11 }}
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <Tooltip
-                    contentStyle={CHART_TOOLTIP_STYLE}
+                    contentStyle={DARK_TOOLTIP_STYLE}
+                    cursor={{ fill: "rgba(96,165,250,0.06)" }}
                     formatter={(value) => [`${value}%`, "Score"]}
                   />
-                  <Bar dataKey="score" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="score" radius={[0, 6, 6, 0]} barSize={16}>
                     {chartData.map((_, i) => (
                       <Cell
                         key={i}
-                        fill={i < 3 ? "#3b82f6" : "#3b82f6"}
+                        fill="url(#barGradient)"
                         fillOpacity={1 - i * 0.06}
                       />
                     ))}
@@ -322,11 +455,30 @@ export default function ReputationPage() {
   );
 }
 
+/* ── RepStat: dark mini card with colored accent ──────────────── */
+
 function RepStat({ label, value }: { label: string; value: string | number }) {
+  const accent = STAT_ACCENTS[label] ?? { color: "#60a5fa", bg: "rgba(96,165,250,0.08)" };
+  const Icon = STAT_ICONS[label] ?? Hash;
+
   return (
-    <div className="rounded-lg bg-surface-overlay/50 border border-border-subtle p-3">
-      <p className="text-xs text-text-secondary">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-text-primary" style={{ fontFamily: "var(--font-mono)" }}>
+    <div
+      className="group rounded-xl border border-[rgba(255,255,255,0.06)] p-3.5 transition-all duration-200 hover:border-[rgba(255,255,255,0.1)]"
+      style={{ background: "#1a2035" }}
+    >
+      <div className="mb-2 flex items-center gap-2">
+        <div
+          className="flex h-6 w-6 items-center justify-center rounded-lg"
+          style={{ background: accent.bg }}
+        >
+          <Icon className="h-3 w-3" style={{ color: accent.color }} />
+        </div>
+        <p className="text-[11px] font-medium uppercase tracking-wider text-[#64748b]">{label}</p>
+      </div>
+      <p
+        className="text-sm font-bold text-[#e2e8f0] font-mono tabular-nums"
+        style={{ textShadow: `0 0 12px ${accent.color}20` }}
+      >
         {typeof value === "number" ? <AnimatedCounter value={value} /> : value}
       </p>
     </div>
