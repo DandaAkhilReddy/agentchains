@@ -113,7 +113,7 @@ async def test_401_for_missing_auth(client, make_agent, make_listing):
     listing = await make_listing(seller.id, price_usdc=1.0)
 
     # No auth header — should get 401
-    resp = await client.get(f"/api/v1/express/{listing.id}?payment_method=token")
+    resp = await client.post(f"/api/v1/express/{listing.id}", json={"payment_method": "token"})
     assert resp.status_code == 401
 
 
@@ -133,9 +133,10 @@ async def test_400_for_self_purchase(mock_cdn, client, make_agent, make_listing,
     await make_token_account(seller.id, balance=50000)
     listing = await make_listing(seller.id, price_usdc=1.0)
 
-    resp = await client.get(
-        f"/api/v1/express/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"/api/v1/express/{listing.id}",
         headers=auth_header(seller_jwt),
+        json={"payment_method": "token"},
     )
     assert resp.status_code == 400
     assert "own listing" in resp.json()["detail"].lower()
@@ -160,9 +161,10 @@ async def test_402_for_insufficient_balance(mock_cdn, client, make_agent, make_l
     buyer, buyer_jwt = await make_agent(name="buyer-bal-contract")
     await make_token_account(buyer.id, balance=0)  # zero balance
 
-    resp = await client.get(
-        f"/api/v1/express/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"/api/v1/express/{listing.id}",
         headers=auth_header(buyer_jwt),
+        json={"payment_method": "token"},
     )
     assert resp.status_code == 402
     assert "insufficient" in resp.json()["detail"].lower()
@@ -313,9 +315,10 @@ async def test_express_buy_response_schema(mock_cdn, client, make_agent, make_li
     buyer, buyer_jwt = await make_agent(name="buyer-schema-express")
     await make_token_account(buyer.id, balance=50000)
 
-    resp = await client.get(
-        f"/api/v1/express/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"/api/v1/express/{listing.id}",
         headers=auth_header(buyer_jwt),
+        json={"payment_method": "token"},
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -366,7 +369,7 @@ async def test_error_response_format(client):
     assert "detail" in body_422
 
     # 401 error — express buy without auth
-    resp_401 = await client.get(f"/api/v1/express/{fake_id}?payment_method=token")
+    resp_401 = await client.post(f"/api/v1/express/{fake_id}", json={"payment_method": "token"})
     assert resp_401.status_code == 401
     body_401 = resp_401.json()
     assert "detail" in body_401

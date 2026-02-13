@@ -492,7 +492,7 @@ async def test_admin_approve_gift_card(client):
     # Admin approve
     approve_resp = await client.post(
         f"{BASE}/admin/{redemption_id}/approve",
-        params={"authorization": f"Bearer {jwt}"},
+        headers={"Authorization": f"Bearer {jwt}"},
         json={"admin_notes": "Approved by admin"},
     )
     assert approve_resp.status_code == 200
@@ -524,7 +524,7 @@ async def test_admin_reject_with_refund(client):
     # Admin reject
     reject_resp = await client.post(
         f"{BASE}/admin/{redemption_id}/reject",
-        params={"authorization": f"Bearer {jwt}"},
+        headers={"Authorization": f"Bearer {jwt}"},
         json={"reason": "Suspicious activity"},
     )
     assert reject_resp.status_code == 200
@@ -556,7 +556,7 @@ async def test_admin_reject_empty_reason(client):
     # Reject with empty reason
     reject_resp = await client.post(
         f"{BASE}/admin/{redemption_id}/reject",
-        params={"authorization": f"Bearer {jwt}"},
+        headers={"Authorization": f"Bearer {jwt}"},
         json={"reason": ""},
     )
     assert reject_resp.status_code == 422

@@ -28,8 +28,8 @@ def _mock_ws(*, should_fail=False, fail_after=0):
     """Create a mock WebSocket with configurable failure behaviour.
 
     Args:
-        should_fail: If True, send_json always raises.
-        fail_after: If > 0, send_json succeeds this many times then raises.
+        should_fail: If True, send_text always raises.
+        fail_after: If > 0, send_text succeeds this many times then raises.
     """
     ws = AsyncMock()
     ws.accept = AsyncMock()
@@ -37,20 +37,20 @@ def _mock_ws(*, should_fail=False, fail_after=0):
     ws.receive_text = AsyncMock(return_value="ping")
 
     if should_fail:
-        ws.send_json = AsyncMock(side_effect=Exception("Connection closed"))
+        ws.send_text = AsyncMock(side_effect=Exception("Connection closed"))
     elif fail_after > 0:
         call_count = {"n": 0}
         original_mock = AsyncMock()
 
-        async def _send_json_with_limit(msg):
+        async def _send_text_with_limit(msg):
             call_count["n"] += 1
             if call_count["n"] > fail_after:
                 raise Exception("Connection closed mid-stream")
             return await original_mock(msg)
 
-        ws.send_json = AsyncMock(side_effect=_send_json_with_limit)
+        ws.send_text = AsyncMock(side_effect=_send_text_with_limit)
     else:
-        ws.send_json = AsyncMock()
+        ws.send_text = AsyncMock()
     return ws
 
 
@@ -92,7 +92,7 @@ class TestDisconnectRecovery:
     # 2
     @pytest.mark.asyncio
     async def test_unexpected_disconnect_during_broadcast(self):
-        """When a WebSocket dies mid-broadcast (send_json raises), the manager
+        """When a WebSocket dies mid-broadcast (send_text raises), the manager
         should remove it from the active list during the same broadcast cycle."""
         mgr = ConnectionManager()
         ws_good = _mock_ws()
@@ -104,7 +104,7 @@ class TestDisconnectRecovery:
 
         assert ws_dead not in mgr.active
         assert ws_good in mgr.active
-        ws_good.send_json.assert_awaited_once()
+        ws_good.send_text.assert_awaited_once()
 
     # 3
     @pytest.mark.asyncio
@@ -124,7 +124,7 @@ class TestDisconnectRecovery:
         assert len(mgr.active) == 1
 
         await mgr.broadcast({"type": "reconnected"})
-        ws.send_json.assert_awaited_with({"type": "reconnected"})
+        ws.send_text.assert_awaited_with(json.dumps({"type": "reconnected"}))
 
     # 4
     @pytest.mark.asyncio
@@ -162,10 +162,10 @@ class TestDisconnectRecovery:
         assert len(mgr.active) == 2
 
         await mgr.broadcast({"type": "post_disconnect"})
-        ws1.send_json.assert_awaited_once()
-        ws3.send_json.assert_awaited_once()
+        ws1.send_text.assert_awaited_once()
+        ws3.send_text.assert_awaited_once()
         # ws2 should NOT have received anything after disconnect
-        ws2.send_json.assert_not_awaited()
+        ws2.send_text.assert_not_awaited()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -291,8 +291,9 @@ class TestBroadcastFiltering:
         msg = {"type": "market_update", "data": {"price": 42.0}}
         await mgr.broadcast(msg)
 
+        expected = json.dumps(msg)
         for ws in sockets:
-            ws.send_json.assert_awaited_once_with(msg)
+            ws.send_text.assert_awaited_once_with(expected)
 
     # 12
     @pytest.mark.asyncio
@@ -307,7 +308,7 @@ class TestBroadcastFiltering:
              patch("marketplace.main._dispatch_openclaw", new_callable=AsyncMock):
             await broadcast_event("demand_spike", {"velocity": 15.0})
 
-        call_args = ws.send_json.call_args[0][0]
+        call_args = json.loads(ws.send_text.call_args[0][0])
         assert call_args["type"] == "demand_spike"
         assert "timestamp" in call_args
         assert call_args["data"] == {"velocity": 15.0}
@@ -356,8 +357,8 @@ class TestBroadcastFiltering:
         msg = {"type": "selective", "data": "hello"}
         await mgr.broadcast(msg)
 
-        ws_stay.send_json.assert_awaited_once_with(msg)
-        ws_leave.send_json.assert_not_awaited()
+        ws_stay.send_text.assert_awaited_once_with(json.dumps(msg))
+        ws_leave.send_text.assert_not_awaited()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -373,7 +374,7 @@ class TestBackpressureHandling:
     # 16
     @pytest.mark.asyncio
     async def test_slow_consumer_evicted_during_broadcast(self):
-        """A consumer whose send_json raises (simulating backpressure / full
+        """A consumer whose send_text raises (simulating backpressure / full
         buffer) is removed from the active list after broadcast."""
         mgr = ConnectionManager()
         ws_fast = _mock_ws()
@@ -423,10 +424,10 @@ class TestBackpressureHandling:
         for i in range(broadcast_count):
             await mgr.broadcast({"type": "rapid", "seq": i})
 
-        assert ws.send_json.await_count == broadcast_count
+        assert ws.send_text.await_count == broadcast_count
         # Verify first and last messages
-        first_call = ws.send_json.call_args_list[0][0][0]
-        last_call = ws.send_json.call_args_list[-1][0][0]
+        first_call = json.loads(ws.send_text.call_args_list[0][0][0])
+        last_call = json.loads(ws.send_text.call_args_list[-1][0][0])
         assert first_call["seq"] == 0
         assert last_call["seq"] == broadcast_count - 1
 
@@ -442,7 +443,7 @@ class TestBackpressureHandling:
         large_data = {"type": "big_payload", "data": "x" * 100_000}
         await mgr.broadcast(large_data)
 
-        ws.send_json.assert_awaited_once_with(large_data)
+        ws.send_text.assert_awaited_once_with(json.dumps(large_data))
         assert ws in mgr.active
 
     # 20
@@ -457,23 +458,23 @@ class TestBackpressureHandling:
 
         await mgr.connect(ws1)
         await mgr.broadcast({"type": "msg1"})
-        assert ws1.send_json.await_count == 1
+        assert ws1.send_text.await_count == 1
 
         await mgr.connect(ws2)
         await mgr.broadcast({"type": "msg2"})
-        assert ws1.send_json.await_count == 2
-        assert ws2.send_json.await_count == 1
+        assert ws1.send_text.await_count == 2
+        assert ws2.send_text.await_count == 1
 
         mgr.disconnect(ws1)
         await mgr.connect(ws3)
         await mgr.broadcast({"type": "msg3"})
 
         # ws1 disconnected before msg3 -- should have exactly 2 total
-        assert ws1.send_json.await_count == 2
+        assert ws1.send_text.await_count == 2
         # ws2 received msg2 + msg3
-        assert ws2.send_json.await_count == 2
+        assert ws2.send_text.await_count == 2
         # ws3 received only msg3
-        assert ws3.send_json.await_count == 1
+        assert ws3.send_text.await_count == 1
         assert len(mgr.active) == 2
 
 
@@ -490,18 +491,18 @@ class TestErrorResilience:
     # 21
     @pytest.mark.asyncio
     async def test_broadcast_malformed_json_still_sends(self):
-        """The broadcast method should send whatever dict it receives, even if
-        the dict contains non-standard types (the mock will accept it; real
-        WebSocket would serialize). Manager should not crash."""
+        """The broadcast method pre-serializes with json.dumps() and sends
+        via send_text. A JSON-serializable dict should be delivered as a
+        JSON string to all connected WebSockets."""
         mgr = ConnectionManager()
         ws = _mock_ws()
         await mgr.connect(ws)
 
-        # Dict with a set (not JSON-serializable) -- manager just calls send_json
-        # which in production would raise; our mock accepts it to test the path
+        # Dict with standard JSON-serializable types -- manager calls
+        # json.dumps(message) then ws.send_text(data)
         weird_msg = {"type": "malformed", "data": {"nested": True, "count": 0}}
         await mgr.broadcast(weird_msg)
-        ws.send_json.assert_awaited_once_with(weird_msg)
+        ws.send_text.assert_awaited_once_with(json.dumps(weird_msg))
 
     # 22
     @pytest.mark.asyncio
@@ -552,8 +553,8 @@ class TestErrorResilience:
             await broadcast_event("test_event", {"key": "value"})
 
         # WebSocket client should still have received the message
-        assert ws.send_json.await_count == 1
-        call_args = ws.send_json.call_args[0][0]
+        assert ws.send_text.await_count == 1
+        call_args = json.loads(ws.send_text.call_args[0][0])
         assert call_args["type"] == "test_event"
         assert call_args["data"] == {"key": "value"}
 

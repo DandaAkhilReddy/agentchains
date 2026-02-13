@@ -169,9 +169,10 @@ async def test_creator_token_on_agent_endpoint(client, db, make_creator, make_ag
     agent, _agent_token = await make_agent("agent-for-creator-test")
 
     # Express endpoint requires agent auth (get_current_agent_id)
-    resp = await client.get(
+    resp = await client.post(
         f"/api/v1/express/{_uuid()}",
         headers=auth_header(creator_token),
+        json={"payment_method": "token"},
     )
     # Creator tokens have type=creator, but agent auth doesn't check type --
     # it will extract sub successfully. However the sub will be the creator_id,

@@ -78,9 +78,10 @@ async def test_express_buy_balance_payment(
     buyer, buyer_jwt = await make_agent(name="buyer-tok")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -111,9 +112,10 @@ async def test_express_buy_fiat_payment(
     buyer, buyer_jwt = await make_agent(name="buyer-fiat")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=fiat",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "fiat"},
     )
 
     assert resp.status_code == 200
@@ -140,9 +142,10 @@ async def test_express_buy_simulated_payment(
     buyer, buyer_jwt = await make_agent(name="buyer-sim")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=simulated",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "simulated"},
     )
 
     assert resp.status_code == 200
@@ -170,9 +173,10 @@ async def test_express_buy_invalid_payment_method(
     buyer, buyer_jwt = await make_agent(name="buyer-inv")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=crypto",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "crypto"},
     )
 
     assert resp.status_code == 422
@@ -196,9 +200,10 @@ async def test_express_buy_inactive_listing(
     buyer, buyer_jwt = await make_agent(name="buyer-inact")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 400
@@ -220,9 +225,10 @@ async def test_express_buy_self_purchase(
     await make_token_account(agent.id, balance=5000.0)
     listing = await make_listing(agent.id, price_usdc=0.005, content="test data")
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {agent_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 400
@@ -244,9 +250,10 @@ async def test_express_buy_nonexistent_listing(
     await make_token_account(buyer.id, balance=5000.0)
 
     fake_id = _new_id()
-    resp = await client.get(
-        f"{EXPRESS_URL}/{fake_id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{fake_id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 404
@@ -270,9 +277,10 @@ async def test_express_buy_insufficient_balance(
     buyer, buyer_jwt = await make_agent(name="buyer-insuf")
     await make_token_account(buyer.id, balance=1.0)  # way too low for 10 USD
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 402
@@ -294,8 +302,9 @@ async def test_express_buy_unauthenticated(
     await make_token_account(seller.id, balance=0.0)
     listing = await make_listing(seller.id, price_usdc=0.005, content="test data")
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 401
@@ -319,9 +328,10 @@ async def test_express_buy_returns_content(
     buyer, buyer_jwt = await make_agent(name="buyer-content")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -348,9 +358,10 @@ async def test_express_buy_returns_transaction_id(
     buyer, buyer_jwt = await make_agent(name="buyer-txid")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -378,9 +389,10 @@ async def test_express_buy_delivery_ms_header(
     buyer, buyer_jwt = await make_agent(name="buyer-hdr")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -408,9 +420,10 @@ async def test_express_buy_cache_hit_field(
     buyer, buyer_jwt = await make_agent(name="buyer-cache")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -438,9 +451,10 @@ async def test_express_buy_buyer_balance_updated(
     initial_balance = 5000.0
     await make_token_account(buyer.id, balance=initial_balance)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -468,9 +482,10 @@ async def test_express_buy_seller_balance_updated(
     buyer, buyer_jwt = await make_agent(name="buyer-sinc")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -496,9 +511,10 @@ async def test_express_buy_creates_transaction_record(
     buyer, buyer_jwt = await make_agent(name="buyer-txdb")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -532,9 +548,10 @@ async def test_express_buy_listing_access_count(
 
     count_before = await _get_listing_access_count(listing.id)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -550,7 +567,7 @@ async def test_express_buy_listing_access_count(
 async def test_express_buy_default_payment_method(
     mock_cdn, client, seed_platform, make_agent, make_listing, make_token_account
 ):
-    """Omitting payment_method query param defaults to 'token'."""
+    """Omitting payment_method from request body defaults to 'token'."""
     mock_cdn.return_value = SAMPLE_CONTENT
 
     seller, _ = await make_agent(name="seller-dflt")
@@ -560,10 +577,11 @@ async def test_express_buy_default_payment_method(
     buyer, buyer_jwt = await make_agent(name="buyer-dflt")
     await make_token_account(buyer.id, balance=5000.0)
 
-    # No payment_method in query string
-    resp = await client.get(
+    # No payment_method in request body
+    resp = await client.post(
         f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={},
     )
 
     assert resp.status_code == 200
@@ -590,9 +608,10 @@ async def test_express_buy_price_usdc_in_response(
     buyer, buyer_jwt = await make_agent(name="buyer-price")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -619,9 +638,10 @@ async def test_express_buy_cost_usd_in_response(
     buyer, buyer_jwt = await make_agent(name="buyer-usd")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -649,9 +669,10 @@ async def test_express_buy_content_hash_in_response(
     buyer, buyer_jwt = await make_agent(name="buyer-hash")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -681,13 +702,15 @@ async def test_express_buy_multiple_purchases(
     buyer2, jwt2 = await make_agent(name="buyer-multi-2")
     await make_token_account(buyer2.id, balance=5000.0)
 
-    resp1 = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp1 = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {jwt1}"},
+        json={"payment_method": "token"},
     )
-    resp2 = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp2 = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {jwt2}"},
+        json={"payment_method": "token"},
     )
 
     assert resp1.status_code == 200
@@ -716,9 +739,10 @@ async def test_express_buy_low_price_listing(
     buyer, buyer_jwt = await make_agent(name="buyer-cheap")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200
@@ -745,9 +769,10 @@ async def test_express_buy_seller_id_in_response(
     buyer, buyer_jwt = await make_agent(name="buyer-sid")
     await make_token_account(buyer.id, balance=5000.0)
 
-    resp = await client.get(
-        f"{EXPRESS_URL}/{listing.id}?payment_method=token",
+    resp = await client.post(
+        f"{EXPRESS_URL}/{listing.id}",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
+        json={"payment_method": "token"},
     )
 
     assert resp.status_code == 200

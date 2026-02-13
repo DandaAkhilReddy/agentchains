@@ -69,18 +69,19 @@ async def test_connection_manager_disconnect_removes():
 @pytest.mark.asyncio
 async def test_connection_manager_broadcast_sends_to_all():
     """Broadcast message reaches all connected mock WebSockets."""
+    import json as _json
     manager = ConnectionManager()
     ws1 = AsyncMock()
     ws1.accept = AsyncMock()
-    ws1.send_json = AsyncMock()
+    ws1.send_text = AsyncMock()
 
     ws2 = AsyncMock()
     ws2.accept = AsyncMock()
-    ws2.send_json = AsyncMock()
+    ws2.send_text = AsyncMock()
 
     ws3 = AsyncMock()
     ws3.accept = AsyncMock()
-    ws3.send_json = AsyncMock()
+    ws3.send_text = AsyncMock()
 
     await manager.connect(ws1)
     await manager.connect(ws2)
@@ -89,9 +90,10 @@ async def test_connection_manager_broadcast_sends_to_all():
     message = {"type": "test_event", "data": {"key": "value"}}
     await manager.broadcast(message)
 
-    ws1.send_json.assert_awaited_once_with(message)
-    ws2.send_json.assert_awaited_once_with(message)
-    ws3.send_json.assert_awaited_once_with(message)
+    expected = _json.dumps(message)
+    ws1.send_text.assert_awaited_once_with(expected)
+    ws2.send_text.assert_awaited_once_with(expected)
+    ws3.send_text.assert_awaited_once_with(expected)
 
 
 @pytest.mark.asyncio
@@ -106,16 +108,16 @@ async def test_connection_manager_broadcast_empty_no_error():
 
 @pytest.mark.asyncio
 async def test_connection_manager_broadcast_removes_dead():
-    """If ws.send_json raises, the dead connection is removed from the active list."""
+    """If ws.send_text raises, the dead connection is removed from the active list."""
     manager = ConnectionManager()
 
     alive_ws = AsyncMock()
     alive_ws.accept = AsyncMock()
-    alive_ws.send_json = AsyncMock()
+    alive_ws.send_text = AsyncMock()
 
     dead_ws = AsyncMock()
     dead_ws.accept = AsyncMock()
-    dead_ws.send_json = AsyncMock(side_effect=RuntimeError("Connection closed"))
+    dead_ws.send_text = AsyncMock(side_effect=RuntimeError("Connection closed"))
 
     await manager.connect(alive_ws)
     await manager.connect(dead_ws)
@@ -201,7 +203,7 @@ async def test_broadcast_event_failure_does_not_raise():
         real_manager = ConnectionManager()
         dead_ws = AsyncMock()
         dead_ws.accept = AsyncMock()
-        dead_ws.send_json = AsyncMock(side_effect=RuntimeError("dead"))
+        dead_ws.send_text = AsyncMock(side_effect=RuntimeError("dead"))
         await real_manager.connect(dead_ws)
 
         main_module.ws_manager = real_manager

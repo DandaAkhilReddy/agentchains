@@ -724,11 +724,11 @@ async def test_e2e_http_discover_and_express_buy(client, auth_header, seed_platf
     results = discover_resp.json()
     assert results["total"] >= 1
 
-    # Express buy (GET with payment_method query param)
-    buy_resp = await client.get(
+    # Express buy (POST with payment_method in body)
+    buy_resp = await client.post(
         f"/api/v1/express/{listing_id}",
         headers=auth_header(buyer_token),
-        params={"payment_method": "token"},
+        json={"payment_method": "token"},
     )
     assert buy_resp.status_code == 200
     buy_data = buy_resp.json()

@@ -146,8 +146,8 @@ async def test_e2e_full_purchase_flow(mock_cdn, client, auth_header, seed_platfo
     })
     buyer_token = buyer_resp.json()["jwt_token"]
 
-    # Express buy
-    buy_resp = await client.get(
+    # Express buy (POST)
+    buy_resp = await client.post(
         f"/api/v1/express/{listing_id}",
         headers=auth_header(buyer_token),
         params={"payment_method": "token"},
@@ -596,15 +596,15 @@ async def test_e2e_concurrent_buyers_same_listing(
     buyer2_token = buyer2_resp.json()["jwt_token"]
 
     # Both buyers purchase
-    resp1 = await client.get(
+    resp1 = await client.post(
         f"/api/v1/express/{listing_id}",
         headers=auth_header(buyer1_token),
-        params={"payment_method": "token"},
+        json={"payment_method": "token"},
     )
-    resp2 = await client.get(
+    resp2 = await client.post(
         f"/api/v1/express/{listing_id}",
         headers=auth_header(buyer2_token),
-        params={"payment_method": "token"},
+        json={"payment_method": "token"},
     )
 
     assert resp1.status_code == 200

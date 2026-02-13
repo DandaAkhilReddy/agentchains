@@ -78,9 +78,10 @@ async def test_express_token_debits_buyer(mock_cdn, client):
 
     buyer_id, jwt, listing_id, _ = await _setup_express_scenario(10000)
 
-    resp = await client.get(
-        f"/api/v1/express/{listing_id}?payment_method=token",
+    resp = await client.post(
+        f"/api/v1/express/{listing_id}",
         headers={"Authorization": f"Bearer {jwt}"},
+        json={"payment_method": "token"},
     )
     assert resp.status_code == 200
 
@@ -94,9 +95,10 @@ async def test_express_response_has_cost_usd(mock_cdn, client):
     mock_cdn.return_value = b'{"result": "data"}'
     _, jwt, listing_id, _ = await _setup_express_scenario(10000)
 
-    resp = await client.get(
-        f"/api/v1/express/{listing_id}?payment_method=token",
+    resp = await client.post(
+        f"/api/v1/express/{listing_id}",
         headers={"Authorization": f"Bearer {jwt}"},
+        json={"payment_method": "token"},
     )
     assert resp.status_code == 200
     assert "cost_usd" in resp.json()
@@ -108,9 +110,10 @@ async def test_express_response_has_payment_method(mock_cdn, client):
     mock_cdn.return_value = b'{"result": "data"}'
     _, jwt, listing_id, _ = await _setup_express_scenario(10000)
 
-    resp = await client.get(
-        f"/api/v1/express/{listing_id}?payment_method=token",
+    resp = await client.post(
+        f"/api/v1/express/{listing_id}",
         headers={"Authorization": f"Bearer {jwt}"},
+        json={"payment_method": "token"},
     )
     assert resp.status_code == 200
     assert resp.json()["payment_method"] == "token"
@@ -122,9 +125,10 @@ async def test_express_fiat_skips_token_debit(mock_cdn, client):
     mock_cdn.return_value = b'{"result": "data"}'
     _, jwt, listing_id, _ = await _setup_express_scenario(0)
 
-    resp = await client.get(
-        f"/api/v1/express/{listing_id}?payment_method=fiat",
+    resp = await client.post(
+        f"/api/v1/express/{listing_id}",
         headers={"Authorization": f"Bearer {jwt}"},
+        json={"payment_method": "fiat"},
     )
     assert resp.status_code == 200
     assert resp.json()["cost_usd"] is None
@@ -137,9 +141,10 @@ async def test_express_insufficient_balance_402(mock_cdn, client):
     mock_cdn.return_value = b'{"result": "data"}'
     _, jwt, listing_id, _ = await _setup_express_scenario(buyer_balance=0.001)
 
-    resp = await client.get(
-        f"/api/v1/express/{listing_id}?payment_method=token",
+    resp = await client.post(
+        f"/api/v1/express/{listing_id}",
         headers={"Authorization": f"Bearer {jwt}"},
+        json={"payment_method": "token"},
     )
     assert resp.status_code == 402
 
@@ -173,9 +178,10 @@ async def test_express_self_purchase_400(mock_cdn, client):
 
         jwt = create_access_token(agent_id, agent.name)
 
-    resp = await client.get(
-        f"/api/v1/express/{listing_id}?payment_method=fiat",
+    resp = await client.post(
+        f"/api/v1/express/{listing_id}",
         headers={"Authorization": f"Bearer {jwt}"},
+        json={"payment_method": "fiat"},
     )
     assert resp.status_code == 400
 
@@ -189,9 +195,10 @@ async def test_express_creates_completed_tx(mock_cdn, client):
     mock_cdn.return_value = b'{"result": "data"}'
     _, jwt, listing_id, _ = await _setup_express_scenario(10000)
 
-    resp = await client.get(
-        f"/api/v1/express/{listing_id}?payment_method=token",
+    resp = await client.post(
+        f"/api/v1/express/{listing_id}",
         headers={"Authorization": f"Bearer {jwt}"},
+        json={"payment_method": "token"},
     )
     assert resp.status_code == 200
     tx_id = resp.json()["transaction_id"]

@@ -119,14 +119,14 @@ async def test_agent_endpoint_no_auth(client):
 # ====================================================================
 
 async def test_agent_endpoint_with_creator_token(client, make_agent, make_listing):
-    """GET /express/{listing_id} with a *creator* JWT is rejected.
+    """POST /express/{listing_id} with a *creator* JWT is rejected.
 
     Creator tokens carry `type: creator` — the agent auth dependency
     (`get_current_agent_id`) does not check token type, but the
     express-buy flow validates the buyer as a registered agent at the
     data layer, so using a creator_id as buyer_id should fail.
 
-    We use GET /express/{listing_id} because it calls
+    We use POST /express/{listing_id} because it calls
     Depends(get_current_agent_id) and then tries to validate buyer
     account and transfer tokens, which fails when the buyer_id is
     actually a creator_id that has no registered agent record.
@@ -138,7 +138,7 @@ async def test_agent_endpoint_with_creator_token(client, make_agent, make_listin
     listing = await make_listing(seller.id, price_usdc=0.50)
 
     # Try to express-buy using the creator JWT
-    resp = await client.get(
+    resp = await client.post(
         f"{_API}/express/{listing.id}",
         headers=_auth(creator_jwt),
     )

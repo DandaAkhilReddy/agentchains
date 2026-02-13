@@ -9,6 +9,7 @@
 """
 
 import asyncio
+import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -214,9 +215,9 @@ def _mock_ws(*, should_fail=False):
     ws = AsyncMock()
     ws.accept = AsyncMock()
     if should_fail:
-        ws.send_json = AsyncMock(side_effect=Exception("Connection closed"))
+        ws.send_text = AsyncMock(side_effect=Exception("Connection closed"))
     else:
-        ws.send_json = AsyncMock()
+        ws.send_text = AsyncMock()
     return ws
 
 
@@ -261,9 +262,10 @@ class TestConnectionManager:
         msg = {"type": "test", "data": "hello"}
         await mgr.broadcast(msg)
 
-        ws1.send_json.assert_awaited_once_with(msg)
-        ws2.send_json.assert_awaited_once_with(msg)
-        ws3.send_json.assert_awaited_once_with(msg)
+        expected = json.dumps(msg)
+        ws1.send_text.assert_awaited_once_with(expected)
+        ws2.send_text.assert_awaited_once_with(expected)
+        ws3.send_text.assert_awaited_once_with(expected)
 
     # 20
     @pytest.mark.asyncio
