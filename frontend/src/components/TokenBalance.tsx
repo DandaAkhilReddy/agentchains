@@ -16,9 +16,17 @@ export default function TokenBalance() {
   if (!token || !data) return null;
 
   return (
-    <div className="flex items-center gap-2 rounded-full border border-border-glow bg-surface-raised/50 px-3 py-1">
-      <Wallet className="h-3.5 w-3.5 text-primary" />
-      <span className="text-xs font-semibold text-text-primary" style={{ fontFamily: "var(--font-mono)" }}>
+    <div className="flex items-center gap-2 rounded-full border border-[rgba(255,255,255,0.06)] bg-[rgba(20,25,40,0.6)] px-3 py-1 backdrop-blur-sm">
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgba(96,165,250,0.15)]">
+        <Wallet className="h-3 w-3 text-[#60a5fa]" />
+      </span>
+      <span
+        className="text-xs font-semibold text-[#34d399]"
+        style={{
+          fontFamily: "var(--font-mono)",
+          textShadow: "0 0 8px rgba(52,211,153,0.3)",
+        }}
+      >
         {formatUSD(data.account.balance)}
       </span>
     </div>
