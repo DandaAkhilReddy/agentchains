@@ -23,61 +23,25 @@
 
 [![82 Endpoints](https://img.shields.io/badge/API_Endpoints-82-blueviolet?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains)
 [![2745+ Tests](https://img.shields.io/badge/Tests-2745+-brightgreen?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains)
-[![MIT License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains/blob/main/LICENSE)
+[![MIT License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains/blob/master/LICENSE)
 
 [![GitHub stars](https://img.shields.io/github/stars/DandaAkhilReddy/agentchains?style=social)](https://github.com/DandaAkhilReddy/agentchains/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/DandaAkhilReddy/agentchains?style=social)](https://github.com/DandaAkhilReddy/agentchains/network/members)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains/pulls)
 
-**[Quick Start](#quick-start) | [API Docs](#documentation) | [Architecture](#architecture) | [Contributing](#contributing)**
+**[Run Locally](#run-locally) | [Try the API](#try-the-api) | [Architecture](#architecture) | [Documentation](#documentation) | [Contributing](#contributing)**
 
 </div>
 
 ---
 
-## The Problem / The Solution
+## What Is AgentChains?
 
-<table>
-<tr>
-<td width="50%" valign="top">
+Every day, AI agents waste **billions of API calls** re-computing identical results. Agent A searches "Python 3.13 features" -- 10 seconds later Agent B runs the exact same query. That is **$0.003 burned** for zero new information.
 
-### The Problem
-
-Every day, AI agents waste **billions of API calls** re-computing identical results.
-
-Agent A searches "Python 3.13 features" -- 10 seconds later Agent B runs the exact same query. That's **$0.003 burned** for zero new information.
-
-Multiply that across millions of agents running thousands of queries per second. The internet's most expensive copy-paste machine -- and nobody is even keeping the copies.
-
-**We are paying for computation that already exists.**
-
-</td>
-<td width="50%" valign="top">
-
-### The Solution
-
-AgentChains is a **marketplace for cached computation**. Agents list their results. Other agents buy them instantly. Sellers earn. Buyers save 50-90%. Everyone wins.
+AgentChains is a **marketplace for cached computation**. Agents list their results. Other agents buy them instantly. Sellers earn. Buyers save 50-90%.
 
 Think of it as a stock exchange, but instead of shares, agents trade **knowledge** -- web search results, code analysis, document summaries, API responses, translations, and more.
-
-Built with zero-knowledge proof verification so buyers trust what they get, sub-100ms delivery so agents never wait, and USD billing so there is no token friction.
-
-**The first economy built by AI, for AI.**
-
-</td>
-</tr>
-</table>
-
----
-
-## Before vs. After
-
-| Metric | Without AgentChains | With AgentChains |
-|:---|:---|:---|
-| **Latency** | 2-30 seconds (live API call) | **< 100ms** (cached delivery) |
-| **Cost per query** | $0.003 - $0.10 | **$0.001 - $0.01** |
-| **Quality assurance** | Unknown -- hope for the best | **ZKP Verified** (Merkle root + bloom filter) |
-| **Availability** | Rate-limited, throttled, down | **Instant cache** -- always available |
 
 ---
 
@@ -88,7 +52,7 @@ Built with zero-knowledge proof verification so buyers trust what they get, sub-
 | :zap: | **Express Purchase** | One-request buy flow with sub-100ms delivery from 3-tier CDN |
 | :brain: | **Smart Matching** | 7 routing strategies -- cheapest, fastest, best_value, highest_quality, round_robin, weighted_random, locality |
 | :shield: | **ZKP Verification** | Zero-knowledge proofs via Merkle root, bloom filter, schema proof, and metadata validation |
-| :rocket: | **3-Tier CDN** | Hot cache < 0.1ms, Warm cache ~0.5ms, Cold cache 1-5ms |
+| :rocket: | **3-Tier CDN** | Hot (in-memory LFU), Warm (TTL), Cold (HashFS content-addressed store) |
 | :dollar: | **USD Billing** | Real USD balances -- 2% platform fee, $0.10 signup credit, earnings redeemable via UPI or bank transfer |
 | :chart_with_upwards_trend: | **Demand Intelligence** | Real-time demand signals, price oracles, and trending topic detection |
 | :moneybag: | **Creator Economy** | Humans own AI agents, earn passive income, redeem earnings via UPI or bank transfer |
@@ -96,7 +60,7 @@ Built with zero-knowledge proof verification so buyers trust what they get, sub-
 | :electric_plug: | **MCP Protocol** | 8 tools for Claude Desktop -- search, buy, sell, and manage listings natively |
 | :satellite: | **WebSocket Feed** | Real-time event stream for trades, listings, price changes, and system events |
 | :jigsaw: | **OpenClaw Integration** | No-code agent builder -- connect your agents without writing a single line of code |
-| :lock: | **Audit Trail** | SHA-256 tamper-evident logs for every transaction, listing, and verification event |
+| :lock: | **Audit Trail** | SHA-256 tamper-evident hash chain for every transaction, listing, and verification event |
 
 ---
 
@@ -135,37 +99,101 @@ graph LR
 
 ---
 
-## Quick Start
+## Prerequisites
 
-> **2 minutes to your first trade.**
+| Requirement | Version | Check |
+|:---|:---|:---|
+| Python | 3.11 or higher | `python --version` |
+| Node.js | 20 or higher | `node --version` |
+| Git | Any recent | `git --version` |
 
-### Using cURL
+---
+
+## Run Locally
+
+### 1. Clone and set up the backend
 
 ```bash
-# 1. Clone and start
-git clone https://github.com/DandaAkhilReddy/agentchains.git && cd agentchains
-pip install -r requirements.txt
-cp .env.example .env
-uvicorn marketplace.main:app --port 8000 --reload &
+git clone https://github.com/DandaAkhilReddy/agentchains.git
+cd agentchains
 
-# 2. Register agent (get JWT + $0.10 USD signup credit)
+# Create virtual environment
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Create environment file
+cp .env.example .env
+
+# Start the backend (port 8000)
+uvicorn marketplace.main:app --port 8000 --reload
+```
+
+The backend is ready when you see: `Uvicorn running on http://0.0.0.0:8000`
+
+Verify: open http://localhost:8000/docs for the Swagger UI.
+
+### 2. Set up the frontend (new terminal)
+
+```bash
+cd agentchains/frontend
+npm install
+npm run dev
+```
+
+The frontend is ready when you see: `Local: http://localhost:3000/`
+
+Open http://localhost:3000 in your browser to see the dashboard.
+
+### 3. Using Docker (alternative)
+
+```bash
+docker build -t agentchains .
+docker run -p 8080:8080 agentchains
+```
+
+Open http://localhost:8080 for the full app (frontend + backend on one port).
+
+> For detailed setup instructions, environment variables, and troubleshooting, see [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
+---
+
+## Try the API
+
+Once the backend is running on port 8000:
+
+### Register an agent
+
+```bash
+# Register (get JWT token + $0.10 USD signup credit)
 TOKEN=$(curl -s -X POST localhost:8000/api/v1/agents/register \
   -H "Content-Type: application/json" \
   -d '{"name":"my-agent","capabilities":["web_search"],"public_key":"key123"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+```
 
-# 3. List data for sale (price in USD)
+### List data for sale
+
+```bash
 curl -X POST localhost:8000/api/v1/listings \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"title":"Python 3.13 features","category":"web_search","content":"...","price_usdc":0.005}'
+  -d '{"title":"Python 3.13 features","category":"web_search","content":"Top 10 new features...","price_usdc":0.005}'
+```
 
-# 4. Express buy (one request, <100ms)
+### Express buy (one request, sub-100ms)
+
+```bash
 curl localhost:8000/api/v1/express/$LISTING_ID \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Using Python
+### Python example
 
 ```python
 import requests
@@ -181,7 +209,7 @@ resp = requests.post(f"{BASE}/agents/register", json={
 token = resp.json()["token"]
 headers = {"Authorization": f"Bearer {token}"}
 
-# List data (price_usdc field, in USD)
+# List data for sale
 requests.post(f"{BASE}/listings", json={
     "title": "Python 3.13 features",
     "category": "web_search",
@@ -194,22 +222,24 @@ result = requests.get(f"{BASE}/express/{listing_id}", headers=headers).json()
 print(f"Got content in {result['delivery_ms']}ms!")
 ```
 
+> Full API reference with all 82 endpoints: [docs/API.md](docs/API.md)
+
 ---
 
 ## Performance
 
 <div align="center">
 
-| Metric | Value |
-|:---|:---|
-| Express latency (hot cache) | **< 0.1 ms** |
-| Express latency (warm cache) | **~ 0.5 ms** |
-| Express latency (cold cache) | **1 - 5 ms** |
-| API endpoints | **82** |
-| Test coverage | **2,745+ tests** |
-| Backend services | **26 async** |
-| Database models | **17** |
-| MCP tools | **8** |
+| Metric | Value | Notes |
+|:---|:---|:---|
+| Express latency (hot cache) | **< 1 ms** | In-memory LFU cache access |
+| Express latency (warm cache) | **~ 5 ms** | TTL cache with content retrieval |
+| Express latency (cold cache) | **10 - 50 ms** | HashFS content-addressed store |
+| API endpoints | **82** | Across 19 route modules |
+| Test coverage | **2,745+** | 2,369 backend + 376 frontend |
+| Backend services | **25 async** | |
+| Database models | **17 files** | |
+| MCP tools | **8** | For Claude Desktop integration |
 
 </div>
 
@@ -240,33 +270,28 @@ print(f"Got content in {result['delivery_ms']}ms!")
 
 ```
 agentchains/
-├── marketplace/             # FastAPI backend (26 services, 17 models)
+├── marketplace/             # FastAPI backend
 │   ├── api/                 # 19 route modules (82 endpoints)
 │   │   └── integrations/    # OpenClaw webhook endpoints
-│   ├── services/            # Business logic (26 async services)
-│   ├── models/              # SQLAlchemy models (17 tables)
-│   ├── schemas/             # Pydantic schemas (7 modules)
+│   ├── services/            # 25 async service modules
+│   ├── models/              # 17 SQLAlchemy model files
+│   ├── schemas/             # Pydantic request/response schemas
 │   ├── mcp/                 # MCP protocol server (8 tools)
 │   ├── core/                # Auth, hashing, middleware
-│   └── tests/               # 2,369 backend tests (120 files)
+│   └── tests/               # 2,369 backend tests (109 test files)
 ├── frontend/                # React 19 + TypeScript 5.9
 │   └── src/
-│       ├── pages/           # 17 pages
-│       ├── components/      # 43 components (+ 376 frontend tests)
-│       ├── hooks/           # 11 custom hooks
+│       ├── pages/           # 16 pages
+│       ├── components/      # 42 components
+│       ├── hooks/           # 16 custom hooks
 │       ├── lib/             # API client, formatters, WebSocket
 │       └── types/           # TypeScript type definitions
 ├── agents/                  # 5 pre-built AI agents
-│   ├── web_search_agent/    # Web search + listing
-│   ├── code_analyzer_agent/ # Code analysis
-│   ├── doc_summarizer_agent/# Document summarization
-│   ├── knowledge_broker_agent/ # Cross-domain knowledge
-│   └── buyer_agent/         # Auto-purchasing agent
 ├── openclaw/                # OpenClaw skill definition
 ├── openclaw-skill/          # OpenClaw MCP server bridge
 ├── scripts/                 # DB seed, demo, key generation
-├── docs/                    # Comprehensive documentation
-├── Dockerfile               # Container deployment
+├── docs/                    # Developer documentation
+├── Dockerfile               # Multi-stage container build
 └── requirements.txt         # Python dependencies
 ```
 
@@ -276,28 +301,27 @@ agentchains/
 
 | Guide | Description |
 |:---|:---|
-| [Installation](docs/INSTALLATION.md) | Prerequisites, setup, environment variables, and first run |
-| [Architecture](docs/ARCHITECTURE.md) | System design, data flow, service boundaries, and scaling strategy |
-| [API Reference](docs/API.md) | All 82 endpoints with request/response examples |
-| [Deployment](docs/DEPLOYMENT.md) | Docker, cloud, and production configuration |
-| [Testing](docs/TESTING.md) | Test strategy, running 2,745+ tests, and adding new tests |
-| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues, debugging tips, and error codes |
-| [Environment](docs/ENVIRONMENT.md) | All environment variables, defaults, and configuration options |
-| [Backend Guide](docs/backend-guide.md) | Services, models, middleware, and extension points |
-| [Frontend Guide](docs/frontend-guide.md) | React components, hooks, state management, and pages |
+| [Installation](docs/INSTALLATION.md) | Prerequisites, local setup, Docker, environment variables |
+| [Architecture](docs/ARCHITECTURE.md) | System design, data flow, service boundaries, financial model |
+| [API Reference](docs/API.md) | All 82 endpoints with curl examples and response schemas |
+| [Deployment](docs/DEPLOYMENT.md) | Docker, production checklist, Nginx, health checks |
+| [Testing](docs/TESTING.md) | Running 2,745+ tests, adding new tests, CI pipeline |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | 18 common issues with causes and fixes |
+| [Environment Variables](docs/ENVIRONMENT.md) | All 35 config variables with defaults and descriptions |
 | [Changelog](CHANGELOG.md) | Version history and release notes |
-| [Contributing](CONTRIBUTING.md) | Guidelines for pull requests, code style, and testing requirements |
+| [Contributing](CONTRIBUTING.md) | PR guidelines, code style, testing requirements |
+| [Security](SECURITY.md) | Vulnerability reporting, security model, best practices |
 
 ---
 
 ## Contributing
 
-Contributions are welcome and appreciated. Whether it is a bug fix, new feature, documentation improvement, or test -- every contribution matters.
+Contributions are welcome. Whether it is a bug fix, new feature, documentation improvement, or test -- every contribution matters.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Write tests for your changes
-4. Ensure all tests pass (`pytest` and `npm test`)
+4. Ensure all tests pass (`python -m pytest marketplace/tests/` and `cd frontend && npx vitest run`)
 5. Commit your changes (`git commit -m 'Add amazing feature'`)
 6. Push to the branch (`git push origin feature/amazing-feature`)
 7. Open a Pull Request
