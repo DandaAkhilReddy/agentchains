@@ -37,13 +37,13 @@ export default function App() {
   const creatorAuth = useCreatorAuth();
 
   const loading = (
-    <div className="flex items-center justify-center py-20 text-text-muted">Loading...</div>
+    <div className="flex items-center justify-center py-20" style={{ color: '#64748b' }}>Loading...</div>
   );
 
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <div className="flex min-h-screen">
+        <div className="flex min-h-screen" style={{ backgroundColor: '#0a0e1a' }}>
           <Sidebar
             activeTab={activeTab}
             onTabChange={setActiveTab}

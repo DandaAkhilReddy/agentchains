@@ -96,12 +96,27 @@ export default function Sidebar({ activeTab, onTabChange, mobileOpen, onMobileCl
   const sidebarContent = (
     <>
       {/* Logo */}
-      <div className="flex h-14 items-center gap-3 border-b border-border-glow px-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary-glow to-secondary-glow">
-          <Hexagon className="h-4 w-4 text-primary" />
+      <div className="flex h-14 items-center gap-3 px-4"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+          style={{
+            background: 'linear-gradient(135deg, rgba(96,165,250,0.15), rgba(167,139,250,0.15))',
+            boxShadow: '0 0 12px rgba(96,165,250,0.2)',
+          }}
+        >
+          <Hexagon className="h-4 w-4" style={{ color: '#60a5fa' }} />
         </div>
         {!collapsed && (
-          <span className="text-sm font-semibold tracking-tight gradient-text whitespace-nowrap">
+          <span
+            className="text-sm font-semibold tracking-tight whitespace-nowrap"
+            style={{
+              background: 'linear-gradient(135deg, #60a5fa, #a78bfa)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
             A2A Marketplace
           </span>
         )}
@@ -109,7 +124,10 @@ export default function Sidebar({ activeTab, onTabChange, mobileOpen, onMobileCl
         {mobileOpen && (
           <button
             onClick={onMobileClose}
-            className="ml-auto rounded-lg p-1 text-text-muted hover:text-text-primary md:hidden"
+            className="ml-auto rounded-lg p-1 md:hidden"
+            style={{ color: '#64748b' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = '#e2e8f0')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
           >
             <X className="h-5 w-5" />
           </button>
@@ -117,11 +135,23 @@ export default function Sidebar({ activeTab, onTabChange, mobileOpen, onMobileCl
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 scrollbar-thin">
+      <nav
+        className="flex-1 overflow-y-auto py-4"
+        style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(255,255,255,0.08) transparent',
+        }}
+      >
         {NAV_GROUPS.map((group) => (
           <div key={group.title} className="mb-4">
             {!collapsed && (
-              <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+              <p
+                className="mb-1 px-4 text-[10px] font-semibold uppercase"
+                style={{
+                  color: '#64748b',
+                  letterSpacing: '0.1em',
+                }}
+              >
                 {group.title}
               </p>
             )}
@@ -132,16 +162,42 @@ export default function Sidebar({ activeTab, onTabChange, mobileOpen, onMobileCl
                   key={item.id}
                   onClick={() => handleNav(item.id)}
                   title={collapsed ? item.label : undefined}
-                  className={`group relative flex w-full items-center gap-3 px-4 py-2.5 text-sm transition-all duration-200 ${
-                    active
-                      ? "text-primary bg-primary-glow"
-                      : "text-text-secondary hover:text-text-primary hover:bg-surface-overlay/50"
-                  }`}
+                  className="group relative flex w-full items-center gap-3 px-4 py-2.5 text-sm transition-all duration-200"
+                  style={{
+                    color: active ? '#ffffff' : '#94a3b8',
+                    backgroundColor: active
+                      ? 'rgba(96,165,250,0.1)'
+                      : 'transparent',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.color = '#e2e8f0';
+                      e.currentTarget.style.backgroundColor = 'rgba(96,165,250,0.08)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.color = '#94a3b8';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }
+                  }}
                 >
                   {active && (
-                    <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-primary shadow-[0_0_8px_rgba(59,130,246,0.4)]" />
+                    <div
+                      className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r"
+                      style={{
+                        backgroundColor: '#60a5fa',
+                        boxShadow: '0 0 8px rgba(96,165,250,0.5)',
+                      }}
+                    />
                   )}
-                  <item.icon className={`h-[18px] w-[18px] shrink-0 ${active ? "text-primary" : "text-text-muted group-hover:text-text-secondary"}`} />
+                  <item.icon
+                    className="h-[18px] w-[18px] shrink-0 transition-colors duration-200"
+                    style={{
+                      color: active ? '#60a5fa' : '#64748b',
+                      filter: active ? 'drop-shadow(0 0 4px rgba(96,165,250,0.4))' : 'none',
+                    }}
+                  />
                   {!collapsed && (
                     <span className="whitespace-nowrap">{item.label}</span>
                   )}
@@ -152,10 +208,16 @@ export default function Sidebar({ activeTab, onTabChange, mobileOpen, onMobileCl
         ))}
       </nav>
 
-      {/* Collapse Toggle — hidden on mobile */}
+      {/* Collapse Toggle -- hidden on mobile */}
       <button
         onClick={() => setCollapsed((c) => !c)}
-        className="hidden md:flex h-12 items-center justify-center border-t border-border-glow text-text-muted hover:text-text-primary transition-colors"
+        className="hidden md:flex h-12 items-center justify-center transition-colors"
+        style={{
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          color: '#64748b',
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = '#e2e8f0')}
+        onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
       >
         {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
       </button>
@@ -166,9 +228,13 @@ export default function Sidebar({ activeTab, onTabChange, mobileOpen, onMobileCl
     <>
       {/* Desktop sidebar */}
       <aside
-        className={`fixed left-0 top-0 z-40 hidden md:flex h-screen flex-col border-r border-border-glow bg-[rgba(255,255,255,0.85)] backdrop-blur-xl transition-all duration-300 ${
+        className={`fixed left-0 top-0 z-40 hidden md:flex h-screen flex-col transition-all duration-300 ${
           collapsed ? "w-16" : "w-60"
         }`}
+        style={{
+          background: 'linear-gradient(180deg, #0d1220 0%, #0a0e1a 100%)',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+        }}
       >
         {sidebarContent}
       </aside>
@@ -177,10 +243,23 @@ export default function Sidebar({ activeTab, onTabChange, mobileOpen, onMobileCl
       {mobileOpen && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+            className="fixed inset-0 z-40 md:hidden"
+            style={{
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+            }}
             onClick={onMobileClose}
           />
-          <aside className="fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-border-glow bg-[rgba(255,255,255,0.92)] backdrop-blur-xl md:hidden animate-slide-in">
+          <aside
+            className="fixed left-0 top-0 z-50 flex h-screen w-64 flex-col md:hidden animate-slide-in"
+            style={{
+              background: 'linear-gradient(180deg, #0d1220 0%, #0a0e1a 100%)',
+              borderRight: '1px solid rgba(255,255,255,0.1)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+            }}
+          >
             {sidebarContent}
           </aside>
         </>
