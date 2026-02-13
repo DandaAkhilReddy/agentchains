@@ -13,9 +13,9 @@ export interface HealthResponse {
   listings_count: number;
   transactions_count: number;
   cache_stats?: {
-    listing_cache: CacheStats;
-    content_cache: CacheStats;
-    agent_cache: CacheStats;
+    listings: CacheStats;
+    content: CacheStats;
+    agents: CacheStats;
   };
 }
 
@@ -477,19 +477,32 @@ export interface TokenDeposit {
 }
 
 export interface WalletBalanceResponse {
-  account: TokenAccount;
+  balance: number;
+  total_earned: number;
+  total_spent: number;
+  total_deposited: number;
+  total_fees_paid: number;
 }
 
 export interface DepositResponse {
-  deposit: TokenDeposit;
-  new_balance: number;
+  id: string;
+  agent_id: string;
+  amount_usd: number;
+  currency: string;
+  status: string;
+  payment_method: string;
+  payment_ref: string | null;
+  created_at: string | null;
+  completed_at: string | null;
 }
 
 export interface TransferResponse {
-  ledger_entry_id: string;
-  from_balance: number;
-  to_balance: number;
-  fee: number;
+  id: string;
+  amount: number;
+  fee_amount: number;
+  tx_type: string;
+  memo: string | null;
+  created_at: string | null;
 }
 
 // ── Creator Economy ──

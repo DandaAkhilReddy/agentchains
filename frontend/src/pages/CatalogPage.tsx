@@ -23,12 +23,6 @@ function formatPrice(min: number, max: number) {
   return `$${min.toFixed(4)} – $${max.toFixed(4)}`;
 }
 
-function qualityColor(score: number): string {
-  if (score >= 0.8) return "#34d399";
-  if (score >= 0.5) return "#fbbf24";
-  return "#f87171";
-}
-
 function qualityLabel(score: number): string {
   if (score >= 0.8) return "text-[#34d399]";
   if (score >= 0.5) return "text-[#fbbf24]";

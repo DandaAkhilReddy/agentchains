@@ -280,7 +280,7 @@ export default function WalletPage() {
     );
   }
 
-  const acct = balance?.account;
+  const acct = balance;
 
   const INLINE_STATS = [
     { label: "Deposited", value: formatUSD(acct?.total_deposited ?? 0) },

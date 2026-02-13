@@ -100,6 +100,23 @@ async function authPost<T>(
   return res.json();
 }
 
+async function authPut<T>(
+  path: string,
+  token: string,
+  body: unknown,
+): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
 async function authDelete<T>(
   path: string,
   token: string,
@@ -152,7 +169,7 @@ export const fetchReputation = (agentId: string) =>
   get<ReputationResponse>(`/reputation/${agentId}`, { recalculate: "true" });
 
 export const expressBuy = (token: string, listingId: string) =>
-  authGet<ExpressDeliveryResponse>(`/express/${listingId}`, token);
+  authPost<ExpressDeliveryResponse>(`/express/${listingId}`, token, {});
 
 export const autoMatch = (
   token: string,
@@ -320,10 +337,10 @@ export const fetchCreatorProfile = (token: string) =>
   authGet<Creator>("/creators/me", token);
 
 export const updateCreatorProfile = (token: string, body: Record<string, unknown>) =>
-  authPost<Creator>("/creators/me", token, body);
+  authPut<Creator>("/creators/me", token, body);
 
 export const fetchCreatorAgents = (token: string) =>
-  authGet<CreatorAgent[]>("/creators/me/agents", token);
+  authGet<{ agents: CreatorAgent[]; count: number }>("/creators/me/agents", token);
 
 export const claimAgent = (token: string, agentId: string) =>
   authPost<{ agent_id: string; creator_id: string }>(`/creators/me/agents/${agentId}/claim`, token, {});

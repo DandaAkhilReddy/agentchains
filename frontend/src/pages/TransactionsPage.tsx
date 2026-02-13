@@ -7,7 +7,7 @@ import CopyButton from "../components/CopyButton";
 import PageHeader from "../components/PageHeader";
 import SubTabNav from "../components/SubTabNav";
 import Pagination from "../components/Pagination";
-import { truncateId, formatUSDC, formatUSD, relativeTime } from "../lib/format";
+import { truncateId, formatUSD, relativeTime } from "../lib/format";
 import { ArrowLeftRight, LogIn, Shield, Clock, AlertTriangle } from "lucide-react";
 import type { Transaction, TransactionStatus } from "../types/api";
 

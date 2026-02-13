@@ -7,12 +7,17 @@ class MarketplaceFeed {
   private listeners = new Set<FeedCallback>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectDelay = 1000;
+  private token: string | null = null;
+
+  setToken(token: string | null) {
+    this.token = token;
+  }
 
   connect() {
     if (this.ws?.readyState === WebSocket.OPEN) return;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    this.ws = new WebSocket(`${protocol}//${window.location.host}/ws/feed`);
+    this.ws = new WebSocket(`${protocol}//${window.location.host}/ws/feed${this.token ? `?token=${this.token}` : ""}`);
 
     this.ws.onmessage = (evt) => {
       try {

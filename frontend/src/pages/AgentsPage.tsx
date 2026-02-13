@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useAgents } from "../hooks/useAgents";
 import Badge, { agentTypeVariant, statusVariant } from "../components/Badge";
-import { SkeletonCard } from "../components/Skeleton";
 import CopyButton from "../components/CopyButton";
 import PageHeader from "../components/PageHeader";
 import Pagination from "../components/Pagination";

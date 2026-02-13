@@ -32,7 +32,7 @@ const EVENT_TYPES = [
   { id: "listing_created", label: "Listing Created", description: "New listings in your categories" },
 ];
 
-const API_DOCS_URL = "https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io/docs";
+const API_DOCS_URL = "/docs";
 
 export default function IntegrationsPage() {
   const { token, login } = useAuth();

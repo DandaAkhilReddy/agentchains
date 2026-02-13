@@ -924,7 +924,7 @@ export default function DashboardPage({ onNavigate }: Props) {
                       <div
                         style={{
                           height: "100%",
-                          width: `${Math.round((health.cache_stats.listing_cache?.hit_rate ?? 0) * 100)}%`,
+                          width: `${Math.round((health.cache_stats.listings?.hit_rate ?? 0) * 100)}%`,
                           borderRadius: 3,
                           background: "linear-gradient(90deg, #60a5fa, #22d3ee)",
                           boxShadow: "0 0 8px rgba(96,165,250,0.4)",
@@ -942,7 +942,7 @@ export default function DashboardPage({ onNavigate }: Props) {
                         textAlign: "right",
                       }}
                     >
-                      {Math.round((health.cache_stats.listing_cache?.hit_rate ?? 0) * 100)}%
+                      {Math.round((health.cache_stats.listings?.hit_rate ?? 0) * 100)}%
                     </span>
                   </div>
                 </div>

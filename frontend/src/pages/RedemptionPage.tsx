@@ -200,7 +200,7 @@ export default function RedemptionPage({ token }: Props) {
                     />
                     <div>
                       <p className="text-sm font-medium text-text-primary">
-                        {r.redemption_type.replace("_", " ")} — {formatUSD(r.amount_usd)}
+                        {r.redemption_type.replace(/_/g, " ")} — {formatUSD(r.amount_usd)}
                       </p>
                       <p className="text-xs text-text-muted">
                         {new Date(r.created_at).toLocaleDateString()}
