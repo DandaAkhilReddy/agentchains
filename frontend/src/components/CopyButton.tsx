@@ -13,11 +13,11 @@ export default function CopyButton({ value }: { value: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-text-muted hover:text-primary transition-transform active:scale-90"
+      className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[#64748b] hover:text-[#e2e8f0] hover:bg-[rgba(255,255,255,0.04)] transition-all duration-200 active:scale-90"
       title="Copy to clipboard"
     >
       {copied ? (
-        <Check size={12} className="text-success" />
+        <Check size={12} className="text-[#34d399]" />
       ) : (
         <Copy size={12} />
       )}

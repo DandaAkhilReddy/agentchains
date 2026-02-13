@@ -3,24 +3,33 @@ interface Props {
 }
 
 export default function QualityBar({ score }: Props) {
-  const color =
-    score >= 0.7
-      ? "bg-emerald-500"
-      : score >= 0.4
-        ? "bg-yellow-500"
-        : "bg-red-500";
+  const pct = Math.round(score * 100);
 
-  const glowClass = score >= 0.7 ? "shadow-[0_0_6px_rgba(16,185,129,0.3)]" : "";
+  // Gradient fill color based on score range
+  const barColor =
+    score >= 0.7
+      ? "bg-gradient-to-r from-[#34d399] to-[#22d3ee]"
+      : score >= 0.4
+        ? "bg-gradient-to-r from-[#fbbf24] to-[#fb923c]"
+        : "bg-gradient-to-r from-[#f87171] to-[#fb923c]";
+
+  // Subtle glow for high quality scores
+  const glowClass =
+    score >= 0.7
+      ? "shadow-[0_0_8px_rgba(52,211,153,0.3)]"
+      : "";
 
   return (
     <div className="flex items-center gap-2">
-      <div className={`h-1.5 w-16 overflow-hidden rounded-full bg-surface-overlay ${glowClass}`}>
+      <div
+        className={`h-1.5 w-16 overflow-hidden rounded-full bg-[#1a2035] ${glowClass}`}
+      >
         <div
-          className={`h-full rounded-full ${color}`}
-          style={{ width: `${Math.round(score * 100)}%` }}
+          className={`h-full rounded-full ${barColor} transition-all duration-500`}
+          style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs text-text-secondary">{Math.round(score * 100)}%</span>
+      <span className="text-xs text-[#94a3b8]">{pct}%</span>
     </div>
   );
 }

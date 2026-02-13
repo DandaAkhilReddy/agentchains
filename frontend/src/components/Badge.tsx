@@ -1,14 +1,30 @@
 const VARIANTS: Record<string, string> = {
-  green:  "bg-[rgba(22,163,74,0.08)] text-[#16a34a] shadow-[0_0_8px_rgba(22,163,74,0.08)]",
-  blue:   "bg-[rgba(59,130,246,0.08)] text-[#3b82f6] shadow-[0_0_8px_rgba(59,130,246,0.08)]",
-  purple: "bg-[rgba(139,92,246,0.08)] text-[#7c3aed] shadow-[0_0_8px_rgba(139,92,246,0.08)]",
-  cyan:   "bg-[rgba(59,130,246,0.08)] text-[#3b82f6] shadow-[0_0_8px_rgba(59,130,246,0.08)]",
-  amber:  "bg-[rgba(217,119,6,0.08)] text-[#d97706] shadow-[0_0_8px_rgba(217,119,6,0.08)]",
-  red:    "bg-[rgba(220,38,38,0.08)] text-[#dc2626] shadow-[0_0_8px_rgba(220,38,38,0.08)]",
-  rose:   "bg-[rgba(225,29,72,0.08)] text-[#e11d48] shadow-[0_0_8px_rgba(225,29,72,0.08)]",
-  orange: "bg-[rgba(249,115,22,0.08)] text-[#ea580c] shadow-[0_0_8px_rgba(249,115,22,0.08)]",
-  yellow: "bg-[rgba(202,138,4,0.08)] text-[#ca8a04] shadow-[0_0_8px_rgba(202,138,4,0.08)]",
-  gray:   "bg-[rgba(100,116,139,0.08)] text-[#64748b]",
+  green:
+    "bg-[rgba(52,211,153,0.1)] text-[#34d399] border border-[rgba(52,211,153,0.2)] shadow-[0_0_8px_rgba(52,211,153,0.08)]",
+  blue:
+    "bg-[rgba(96,165,250,0.1)] text-[#60a5fa] border border-[rgba(96,165,250,0.2)] shadow-[0_0_8px_rgba(96,165,250,0.08)]",
+  purple:
+    "bg-[rgba(167,139,250,0.1)] text-[#a78bfa] border border-[rgba(167,139,250,0.2)] shadow-[0_0_8px_rgba(167,139,250,0.08)]",
+  cyan:
+    "bg-[rgba(34,211,238,0.1)] text-[#22d3ee] border border-[rgba(34,211,238,0.2)] shadow-[0_0_8px_rgba(34,211,238,0.08)]",
+  amber:
+    "bg-[rgba(251,191,36,0.1)] text-[#fbbf24] border border-[rgba(251,191,36,0.2)] shadow-[0_0_8px_rgba(251,191,36,0.08)]",
+  red:
+    "bg-[rgba(248,113,113,0.1)] text-[#f87171] border border-[rgba(248,113,113,0.2)] shadow-[0_0_8px_rgba(248,113,113,0.08)]",
+  rose:
+    "bg-[rgba(251,113,133,0.1)] text-[#fb7185] border border-[rgba(251,113,133,0.2)] shadow-[0_0_8px_rgba(251,113,133,0.08)]",
+  orange:
+    "bg-[rgba(251,146,60,0.1)] text-[#fb923c] border border-[rgba(251,146,60,0.2)] shadow-[0_0_8px_rgba(251,146,60,0.08)]",
+  yellow:
+    "bg-[rgba(250,204,21,0.1)] text-[#facc15] border border-[rgba(250,204,21,0.2)] shadow-[0_0_8px_rgba(250,204,21,0.08)]",
+  gray:
+    "bg-[rgba(148,163,184,0.1)] text-[#94a3b8] border border-[rgba(148,163,184,0.2)]",
+  pink:
+    "bg-[rgba(244,114,182,0.1)] text-[#f472b6] border border-[rgba(244,114,182,0.2)] shadow-[0_0_8px_rgba(244,114,182,0.08)]",
+  indigo:
+    "bg-[rgba(129,140,248,0.1)] text-[#818cf8] border border-[rgba(129,140,248,0.2)] shadow-[0_0_8px_rgba(129,140,248,0.08)]",
+  emerald:
+    "bg-[rgba(52,211,153,0.1)] text-[#34d399] border border-[rgba(52,211,153,0.2)] shadow-[0_0_8px_rgba(52,211,153,0.08)]",
 };
 
 interface Props {
