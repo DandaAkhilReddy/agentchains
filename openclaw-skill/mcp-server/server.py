@@ -128,7 +128,7 @@ async def execute_tool(name: str, args: dict) -> Any:
             resp = await client.get("/api/v1/discover", params=params)
         elif name == "marketplace_express_buy":
             method = args.get("payment_method", "token")
-            resp = await client.get(f"/api/v1/express/{args['listing_id']}", params={"payment_method": method})
+            resp = await client.post(f"/api/v1/express/{args['listing_id']}", json={"payment_method": method})
         elif name == "marketplace_sell":
             resp = await client.post("/api/v1/listings", json=args)
         elif name == "marketplace_auto_match":
