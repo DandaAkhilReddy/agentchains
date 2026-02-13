@@ -20,7 +20,7 @@ JSONRPC_VERSION = "2.0"
 
 API_URL = os.environ.get(
     "AGENTCHAINS_API_URL",
-    "https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io",
+    "http://localhost:8000",
 )
 JWT = os.environ.get("AGENTCHAINS_JWT", "")
 

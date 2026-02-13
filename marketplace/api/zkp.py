@@ -1,5 +1,6 @@
 """ZKP endpoints: pre-purchase verification without revealing content."""
 
+import json
 import traceback
 
 from fastapi import APIRouter, Depends, Query
@@ -33,7 +34,7 @@ async def get_proofs(
                 "id": p.id,
                 "proof_type": p.proof_type,
                 "commitment": p.commitment,
-                "public_inputs": __import__("json").loads(p.public_inputs),
+                "public_inputs": json.loads(p.public_inputs),
                 "created_at": p.created_at.isoformat() if p.created_at else None,
             }
             for p in proofs

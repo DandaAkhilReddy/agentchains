@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -190,7 +190,7 @@ async def discover(
         query = query.where(DataListing.quality_score >= min_quality)
         count_query = count_query.where(DataListing.quality_score >= min_quality)
     if max_age_hours is not None:
-        cutoff = datetime.now(timezone.utc) - __import__("datetime").timedelta(hours=max_age_hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
         query = query.where(DataListing.freshness_at >= cutoff)
         count_query = count_query.where(DataListing.freshness_at >= cutoff)
     if seller_id:

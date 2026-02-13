@@ -1,6 +1,7 @@
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 
 from marketplace.database import get_db
 from marketplace.models.agent import RegisteredAgent
@@ -41,4 +42,7 @@ async def readiness_check(db: AsyncSession = Depends(get_db)):
         await db.execute(text("SELECT 1"))
         return {"status": "ready", "database": "connected"}
     except Exception as e:
-        return {"status": "not_ready", "database": str(e)}
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "database": str(e)},
+        )

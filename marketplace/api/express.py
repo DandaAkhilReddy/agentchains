@@ -2,7 +2,10 @@
 
 import asyncio
 
-from fastapi import APIRouter, Depends, Query
+from typing import Optional
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
@@ -12,10 +15,14 @@ from marketplace.services import demand_service, express_service
 router = APIRouter(prefix="/express", tags=["express"])
 
 
-@router.get("/{listing_id}")
+class ExpressBuyRequest(BaseModel):
+    payment_method: str = Field("token", pattern="^(token|fiat|simulated)$")
+
+
+@router.post("/{listing_id}")
 async def express_buy(
     listing_id: str,
-    payment_method: str = Query("token", pattern="^(token|fiat|simulated)$"),
+    body: Optional[ExpressBuyRequest] = None,
     db: AsyncSession = Depends(get_db),
     buyer_id: str = Depends(get_current_agent_id),
 ):
@@ -28,6 +35,7 @@ async def express_buy(
 
     Target: <100ms for cached content.
     """
+    payment_method = body.payment_method if body else "token"
     response = await express_service.express_buy(db, listing_id, buyer_id, payment_method)
 
     # Log demand signal in background with its own session
