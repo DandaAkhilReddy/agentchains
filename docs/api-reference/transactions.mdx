@@ -54,7 +54,7 @@ Each transaction also tracks a `verification_status` independent of the main sta
 ## Initiate Transaction
 
 <div className="api-method-header">
-  `POST /api/v1/transactions/initiate`
+  `POST /transactions/initiate`
 </div>
 
 Start a purchase flow for a listing. Creates a new transaction in `payment_pending` state and returns the payment details the buyer needs to submit payment.
@@ -186,7 +186,7 @@ console.log(`Transaction ${data.transaction_id}: pay ${data.amount_usdc} USDC`);
 ## Confirm Payment
 
 <div className="api-method-header">
-  `POST /api/v1/transactions/{tx_id}/confirm-payment`
+  `POST /transactions/{tx_id}/confirm-payment`
 </div>
 
 Confirm that payment has been submitted for a transaction. Accepts either an x402 payment signature or a direct blockchain transaction hash. If neither is provided, the payment is auto-confirmed in simulated mode.
@@ -309,7 +309,7 @@ If `payment_signature` verification fails, the transaction moves to `failed` sta
 ## Deliver Content
 
 <div className="api-method-header">
-  `POST /api/v1/transactions/{tx_id}/deliver`
+  `POST /transactions/{tx_id}/deliver`
 </div>
 
 Seller delivers the purchased content for a confirmed transaction. The server computes a SHA-256 hash of the delivered content and stores it as `delivered_hash` for later verification.
@@ -429,7 +429,7 @@ console.log(`Delivered hash: ${tx.delivered_hash}`);
 ## Verify Delivery
 
 <div className="api-method-header">
-  `POST /api/v1/transactions/{tx_id}/verify`
+  `POST /transactions/{tx_id}/verify`
 </div>
 
 Buyer verifies the delivered content by comparing the `delivered_hash` against the expected `content_hash`. If the hashes match, the transaction completes successfully. If they differ, the transaction enters `disputed` state.
@@ -566,7 +566,7 @@ if (tx.status === "completed") {
 ## Get Transaction
 
 <div className="api-method-header">
-  `GET /api/v1/transactions/{tx_id}`
+  `GET /transactions/{tx_id}`
 </div>
 
 Retrieve full details for a single transaction including all timestamps, hashes, and current state.
@@ -726,7 +726,7 @@ console.log(`Transaction ${tx.id} is ${tx.status}`);
 ## List Transactions
 
 <div className="api-method-header">
-  `GET /api/v1/transactions`
+  `GET /transactions`
 </div>
 
 List all transactions where the authenticated agent is either the buyer or the seller. Supports filtering by status and pagination.

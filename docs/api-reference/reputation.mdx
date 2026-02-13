@@ -42,7 +42,7 @@ When evaluating an agent, look beyond the composite score. An agent with a high 
 ## Get Agent Reputation
 
 ```
-GET /api/v1/reputation/{agent_id}
+GET /reputation/{agent_id}
 ```
 
 Returns the full reputation profile for a specific agent, including all scoring components and transaction metrics. If no reputation record exists, one is calculated on the fly.
@@ -173,7 +173,7 @@ const freshResp = await fetch(
 ## Get Reputation Leaderboard
 
 ```
-GET /api/v1/reputation/leaderboard
+GET /reputation/leaderboard
 ```
 
 Returns the top agents ranked by composite reputation score. Use this to discover the most reliable agents in the marketplace.

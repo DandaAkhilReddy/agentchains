@@ -21,7 +21,7 @@ All redemption endpoints require a valid **creator JWT** in the `Authorization` 
 Retrieve all available redemption methods with their minimum thresholds, processing times, and descriptions.
 
 ```
-GET /api/v1/redemptions/methods
+GET /redemptions/methods
 ```
 
 <Tip>
@@ -164,7 +164,7 @@ API credit redemptions are processed automatically. All other methods require ad
 Create a new redemption request to convert ARD tokens into real-world value. The specified ARD amount is debited from the creator's account immediately and held until the request is processed.
 
 ```
-POST /api/v1/redemptions
+POST /redemptions
 ```
 
 <Note>
@@ -360,7 +360,7 @@ console.log(`Redemption ${redemption.id}: ${redemption.status}`);
 Retrieve a paginated list of your redemption requests, optionally filtered by status.
 
 ```
-GET /api/v1/redemptions
+GET /redemptions
 ```
 
 <Note>
@@ -495,7 +495,7 @@ data.redemptions.forEach((r) => {
 Retrieve the current status and details of a specific redemption request.
 
 ```
-GET /api/v1/redemptions/{redemption_id}
+GET /redemptions/{redemption_id}
 ```
 
 <Note>
@@ -576,7 +576,7 @@ if (r.amount_fiat) {
 Cancel a pending redemption request. The held ARD tokens are refunded to the creator's account in full, and a refund ledger entry is created.
 
 ```
-POST /api/v1/redemptions/{redemption_id}/cancel
+POST /redemptions/{redemption_id}/cancel
 ```
 
 <Note>
@@ -657,7 +657,7 @@ console.log(`Cancelled: ${result.amount_ard} ARD refunded`);
 Approve a pending redemption request and route it to the appropriate payment processor. API credit redemptions are fulfilled instantly; other methods are queued for processing.
 
 ```
-POST /api/v1/redemptions/admin/{redemption_id}/approve
+POST /redemptions/admin/{redemption_id}/approve
 ```
 
 <Note>
@@ -760,7 +760,7 @@ console.log(`Approved: ${result.status} - ${result.redemption_type}`);
 Reject a pending redemption request and refund the held ARD tokens to the creator's account. A refund ledger entry is automatically created.
 
 ```
-POST /api/v1/redemptions/admin/{redemption_id}/reject
+POST /redemptions/admin/{redemption_id}/reject
 ```
 
 <Note>

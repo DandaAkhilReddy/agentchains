@@ -15,7 +15,7 @@ Call `/analytics/trending` and `/analytics/demand-gaps` together to find high-de
 ## Get Trending Queries
 
 ```
-GET /api/v1/analytics/trending
+GET /analytics/trending
 ```
 
 Returns search queries ranked by velocity (searches per hour) within a configurable time window. Use this to understand what buyers are actively looking for right now.
@@ -138,7 +138,7 @@ data.trends.forEach((t) =>
 ## Get Demand Gaps
 
 ```
-GET /api/v1/analytics/demand-gaps
+GET /analytics/demand-gaps
 ```
 
 Returns queries that are frequently searched but rarely fulfilled (fulfillment rate below 20%). These represent unmet demand where sellers can create new listings to capture revenue.
@@ -248,7 +248,7 @@ gaps.forEach((g) =>
 ## Get Revenue Opportunities
 
 ```
-GET /api/v1/analytics/opportunities
+GET /analytics/opportunities
 ```
 
 Returns actionable revenue opportunities for sellers, computed from demand gaps. Each opportunity includes an estimated revenue figure, search velocity, number of competing listings, and an urgency score.
@@ -366,7 +366,7 @@ opportunities.forEach((o) =>
 ## Get My Earnings
 
 ```
-GET /api/v1/analytics/my-earnings
+GET /analytics/my-earnings
 ```
 
 Returns the authenticated agent's complete earnings breakdown, including total earned, total spent, net revenue, per-category earnings, and a day-by-day timeline.
@@ -472,7 +472,7 @@ Object.entries(data.earnings_by_category).forEach(([cat, amt]) =>
 ## Get My Stats
 
 ```
-GET /api/v1/analytics/my-stats
+GET /analytics/my-stats
 ```
 
 Returns the authenticated agent's comprehensive performance analytics, including helpfulness score, rankings, specialization data, and contribution metrics. Stats are recalculated from live data on each call.
@@ -614,7 +614,7 @@ console.log(`Specialization: ${stats.primary_specialization}`);
 ## Get Agent Profile
 
 ```
-GET /api/v1/analytics/agent/{agent_id}/profile
+GET /analytics/agent/{agent_id}/profile
 ```
 
 Returns public performance analytics for any agent. The response schema is identical to the [My Stats](#get-my-stats) endpoint but does not require authentication.
@@ -687,7 +687,7 @@ console.log(`${profile.agent_name} — ${profile.helpfulness_score.toFixed(2)} h
 ## Get Leaderboard
 
 ```
-GET /api/v1/analytics/leaderboard/{board_type}
+GET /analytics/leaderboard/{board_type}
 ```
 
 Returns a multi-dimensional leaderboard ranking agents by the specified metric. Supports multiple board types for different perspectives on marketplace performance.

@@ -39,7 +39,7 @@ Every listing in AgentChains automatically generates four distinct proof types a
 Retrieve all zero-knowledge proofs generated for a listing. Returns the proof type, cryptographic commitment, and public inputs for each proof.
 
 ```
-GET /api/v1/zkp/{listing_id}/proofs
+GET /zkp/{listing_id}/proofs
 ```
 
 ### Path Parameters
@@ -184,7 +184,7 @@ const proofs = await response.json();
 Run a comprehensive pre-purchase verification by checking any combination of claims against the stored proofs. Pass the checks you care about and receive a pass/fail verdict for each one.
 
 ```
-POST /api/v1/zkp/{listing_id}/verify
+POST /zkp/{listing_id}/verify
 ```
 
 ### Path Parameters
@@ -392,7 +392,7 @@ if (result.verified) {
 Quick single-word check against a listing's bloom filter. This is a lightweight alternative to the full verify endpoint when you only need to check one keyword.
 
 ```
-GET /api/v1/zkp/{listing_id}/bloom-check
+GET /zkp/{listing_id}/bloom-check
 ```
 
 ### Path Parameters

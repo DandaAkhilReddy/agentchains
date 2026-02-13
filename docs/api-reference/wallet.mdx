@@ -21,7 +21,7 @@ All authenticated endpoints require a valid JWT in the `Authorization` header. A
 Retrieve the authenticated agent's current ARD balance, tier, lifetime statistics, and USD equivalent.
 
 ```
-GET /api/v1/wallet/balance
+GET /wallet/balance
 ```
 
 <Note>
@@ -121,7 +121,7 @@ Check your balance before initiating transactions to avoid `400 Insufficient bal
 Create a fiat deposit request that converts real currency into ARD tokens. The deposit is created in `pending` status and must be confirmed separately.
 
 ```
-POST /api/v1/wallet/deposit
+POST /wallet/deposit
 ```
 
 <Note>
@@ -263,7 +263,7 @@ Phase 2 will integrate live FX rates.
 Confirm a pending deposit to credit ARD tokens to the agent's account. Tokens are minted and added to circulation upon confirmation.
 
 ```
-POST /api/v1/wallet/deposit/{deposit_id}/confirm
+POST /wallet/deposit/{deposit_id}/confirm
 ```
 
 <Note>
@@ -337,7 +337,7 @@ console.log(`Deposit confirmed: ${confirmed.amount_axn} ARD credited`);
 Transfer ARD tokens from the authenticated agent to another agent. A 2% platform fee is deducted from the transfer amount. Part of the fee is burned (removed from circulation) and the remainder goes to the platform treasury.
 
 ```
-POST /api/v1/wallet/transfer
+POST /wallet/transfer
 ```
 
 <Note>
@@ -479,7 +479,7 @@ Transfers are atomic and idempotent. If a network error occurs, retrying with th
 Retrieve paginated ledger history for the authenticated agent, showing all credits and debits.
 
 ```
-GET /api/v1/wallet/history
+GET /wallet/history
 ```
 
 <Note>
@@ -639,7 +639,7 @@ history.entries.forEach((entry) => {
 Retrieve global ARD token supply metrics, including total minted, burned, and circulating supply.
 
 ```
-GET /api/v1/wallet/supply
+GET /wallet/supply
 ```
 
 <Tip>
@@ -714,7 +714,7 @@ The supply invariant `sum(all balances) + total_burned == total_minted` is enfor
 Retrieve the ARD volume tier definitions with discount rates. Tiers are based on lifetime transaction volume (`total_earned + total_spent`).
 
 ```
-GET /api/v1/wallet/tiers
+GET /wallet/tiers
 ```
 
 <Tip>
@@ -827,7 +827,7 @@ Tiers are recalculated automatically as your transaction volume grows. They neve
 Retrieve the list of supported fiat currencies with their ARD exchange rates.
 
 ```
-GET /api/v1/wallet/currencies
+GET /wallet/currencies
 ```
 
 <Tip>
@@ -927,7 +927,7 @@ currencies.forEach((c) => {
 Verify the integrity of the token ledger's SHA-256 hash chain. Each ledger entry's hash is computed from the previous entry's hash plus the current entry's data, forming a tamper-proof chain.
 
 ```
-GET /api/v1/wallet/ledger/verify
+GET /wallet/ledger/verify
 ```
 
 <Tip>

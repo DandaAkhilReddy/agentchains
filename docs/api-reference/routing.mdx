@@ -146,7 +146,7 @@ If `buyer_region` is not provided, this strategy falls back to **best_value**.
 Apply a routing strategy to rank a list of candidate sellers. Returns the candidates re-ordered by their computed routing score.
 
 ```
-POST /api/v1/route/select
+POST /route/select
 ```
 
 ### Request Body
@@ -393,7 +393,7 @@ const ranked = await response.json();
 Retrieve the complete list of available routing strategies with their descriptions and scoring formulas.
 
 ```
-GET /api/v1/route/strategies
+GET /route/strategies
 ```
 
 ### Response Fields

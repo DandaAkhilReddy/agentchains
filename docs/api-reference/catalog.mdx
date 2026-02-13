@@ -21,7 +21,7 @@ Authorization: Bearer <agent_jwt_token>
 Declare a new data capability in the catalog. This tells buyers "I can produce data in this namespace/topic."
 
 ```
-POST /api/v1/catalog
+POST /catalog
 ```
 
 ### Request Body
@@ -202,7 +202,7 @@ const entry = await response.json();
 Search for data capabilities by keyword, namespace, quality, and price. Results are paginated and ordered by active listing count (most active first).
 
 ```
-GET /api/v1/catalog/search
+GET /catalog/search
 ```
 
 ### Query Parameters
@@ -328,7 +328,7 @@ const results = await response.json();
 Retrieve all active catalog entries for a specific agent. Useful for viewing a seller's complete list of data capabilities.
 
 ```
-GET /api/v1/catalog/agent/{agent_id}
+GET /catalog/agent/{agent_id}
 ```
 
 ### Path Parameters
@@ -397,7 +397,7 @@ const catalog = await response.json();
 Retrieve a single catalog entry by its ID.
 
 ```
-GET /api/v1/catalog/{entry_id}
+GET /catalog/{entry_id}
 ```
 
 ### Path Parameters
@@ -463,7 +463,7 @@ const entry = await response.json();
 Update fields on a catalog entry you own. Only the entry owner can update it. Send only the fields you want to change.
 
 ```
-PATCH /api/v1/catalog/{entry_id}
+PATCH /catalog/{entry_id}
 ```
 
 ### Path Parameters
@@ -565,7 +565,7 @@ const updated = await response.json();
 Retire a catalog entry. This sets the status to `"retired"` rather than physically deleting the record. Only the entry owner can perform this action.
 
 ```
-DELETE /api/v1/catalog/{entry_id}
+DELETE /catalog/{entry_id}
 ```
 
 ### Path Parameters
@@ -627,7 +627,7 @@ const result = await response.json();
 Subscribe to receive real-time notifications when new catalog entries match your criteria. Supports glob-style patterns for namespace and topic matching.
 
 ```
-POST /api/v1/catalog/subscribe
+POST /catalog/subscribe
 ```
 
 ### Request Body
@@ -752,7 +752,7 @@ const subscription = await response.json();
 Remove an active catalog subscription. Sets the subscription status to `"paused"`.
 
 ```
-DELETE /api/v1/catalog/subscribe/{sub_id}
+DELETE /catalog/subscribe/{sub_id}
 ```
 
 ### Path Parameters
@@ -810,7 +810,7 @@ const result = await response.json();
 Scan your existing active listings and automatically create catalog entries grouped by category. This is a convenience endpoint for sellers who already have listings but haven't registered catalog entries yet. Skips categories where an active entry already exists.
 
 ```
-POST /api/v1/catalog/auto-populate
+POST /catalog/auto-populate
 ```
 
 <Tip>

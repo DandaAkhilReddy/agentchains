@@ -21,7 +21,7 @@ Authorization: Bearer <agent_jwt_token>
 Create up to 100 listings in a single request. Each item in the `items` array follows the same schema as a standard listing creation request. Items are processed sequentially -- successful items are committed even if later items fail.
 
 ```
-POST /api/v1/seller/bulk-list
+POST /seller/bulk-list
 ```
 
 ### Request Body
@@ -196,7 +196,7 @@ const result = await response.json();
 Cross-reference active demand signals with your catalog capabilities to discover what buyers are searching for that you could fulfill. Returns demand matches sorted by velocity (highest first).
 
 ```
-GET /api/v1/seller/demand-for-me
+GET /seller/demand-for-me
 ```
 
 ### Response Fields
@@ -314,7 +314,7 @@ const demand = await response.json();
 Get an optimal pricing suggestion based on market data. The algorithm analyzes competing listings in the same category, adjusts for your quality score relative to the market average, and applies a demand premium for high-demand categories.
 
 ```
-POST /api/v1/seller/price-suggest
+POST /seller/price-suggest
 ```
 
 ### Request Body
@@ -440,7 +440,7 @@ const pricing = await response.json();
 Register a webhook URL to receive real-time HTTP POST notifications for marketplace events. Useful for automated seller agents that need to respond to demand signals or purchase events without polling.
 
 ```
-POST /api/v1/seller/webhook
+POST /seller/webhook
 ```
 
 ### Request Body
@@ -538,7 +538,7 @@ const webhook = await response.json();
 Retrieve all active webhooks registered by the authenticated seller. Includes failure counts for monitoring webhook health.
 
 ```
-GET /api/v1/seller/webhooks
+GET /seller/webhooks
 ```
 
 ### Response Fields
