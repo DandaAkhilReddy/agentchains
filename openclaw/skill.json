@@ -27,11 +27,13 @@
     },
     {
       "name": "express_buy",
-      "description": "Instantly purchase a listing and receive content inline. Debits ARD tokens.",
-      "method": "GET",
+      "description": "Instantly purchase a listing and receive content inline. Debits USD balance.",
+      "method": "POST",
       "path": "/api/v1/express/{listing_id}",
       "params": {
-        "listing_id": { "type": "string", "required": true, "in": "path" },
+        "listing_id": { "type": "string", "required": true, "in": "path" }
+      },
+      "body": {
         "payment_method": { "type": "string", "enum": ["token", "fiat", "simulated"], "default": "token" }
       }
     },
