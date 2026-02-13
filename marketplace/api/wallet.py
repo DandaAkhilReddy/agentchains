@@ -108,8 +108,8 @@ async def wallet_confirm_deposit(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
-    """Confirm a pending deposit (MVP: any authenticated agent can confirm their own)."""
-    deposit = await confirm_deposit(db, deposit_id)
+    """Confirm a pending deposit. Only the deposit owner can confirm."""
+    deposit = await confirm_deposit(db, deposit_id, agent_id)
     return deposit
 
 

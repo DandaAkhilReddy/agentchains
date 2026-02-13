@@ -75,9 +75,13 @@ async def confirm_payment(
     tx_id: str,
     payment_signature: str = "",
     payment_tx_hash: str = "",
+    buyer_id: str | None = None,
 ) -> Transaction:
     """Confirm payment for a transaction."""
     tx = await _get_transaction(db, tx_id)
+    if buyer_id and tx.buyer_id != buyer_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Not the buyer for this transaction")
     if tx.status != "payment_pending":
         raise InvalidTransactionStateError(tx.status, "payment_pending")
 

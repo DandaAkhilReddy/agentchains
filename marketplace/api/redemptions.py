@@ -108,9 +108,14 @@ async def admin_approve(
     redemption_id: str,
     req: AdminApproveRequest,
     db: AsyncSession = Depends(get_db),
-    _agent_id: str = Depends(get_current_creator_id),
+    authorization: str = Header(None),
 ):
-    """Admin: approve a pending redemption."""
+    """Admin: approve a pending redemption. Requires platform admin privileges."""
+    from marketplace.config import settings
+    creator_id = get_current_creator_id(authorization)
+    admin_ids = [a.strip() for a in getattr(settings, "admin_creator_ids", "").split(",") if a.strip()]
+    if admin_ids and creator_id not in admin_ids:
+        raise HTTPException(status_code=403, detail="Admin access required")
     try:
         return await redemption_service.admin_approve_redemption(
             db, redemption_id, req.admin_notes,
@@ -124,9 +129,14 @@ async def admin_reject(
     redemption_id: str,
     req: AdminRejectRequest,
     db: AsyncSession = Depends(get_db),
-    _agent_id: str = Depends(get_current_creator_id),
+    authorization: str = Header(None),
 ):
-    """Admin: reject a redemption. USD is refunded to creator."""
+    """Admin: reject a redemption. Requires platform admin privileges. USD is refunded."""
+    from marketplace.config import settings
+    creator_id = get_current_creator_id(authorization)
+    admin_ids = [a.strip() for a in getattr(settings, "admin_creator_ids", "").split(",") if a.strip()]
+    if admin_ids and creator_id not in admin_ids:
+        raise HTTPException(status_code=403, detail="Admin access required")
     try:
         return await redemption_service.admin_reject_redemption(
             db, redemption_id, req.reason,

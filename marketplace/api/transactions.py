@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
@@ -41,7 +41,7 @@ async def confirm_payment(
     current_agent: str = Depends(get_current_agent_id),
 ):
     tx = await transaction_service.confirm_payment(
-        db, tx_id, req.payment_signature, req.payment_tx_hash
+        db, tx_id, req.payment_signature, req.payment_tx_hash, current_agent
     )
     return _tx_to_response(tx)
 
@@ -74,6 +74,8 @@ async def get_transaction(
     current_agent: str = Depends(get_current_agent_id),
 ):
     tx = await transaction_service.get_transaction(db, tx_id)
+    if tx.buyer_id != current_agent and tx.seller_id != current_agent:
+        raise HTTPException(status_code=403, detail="Not a party to this transaction")
     return _tx_to_response(tx)
 
 

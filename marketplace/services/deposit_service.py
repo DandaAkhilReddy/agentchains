@@ -50,12 +50,16 @@ async def create_deposit(
     return _deposit_to_dict(deposit)
 
 
-async def confirm_deposit(db: AsyncSession, deposit_id: str) -> dict:
+async def confirm_deposit(db: AsyncSession, deposit_id: str, agent_id: str | None = None) -> dict:
     """Confirm a pending deposit: credit USD to the agent's token account.
 
     Raises ``ValueError`` if the deposit is not in *pending* status.
+    Raises ``HTTPException(403)`` if agent_id doesn't match deposit owner.
     """
     deposit = await _get_deposit(db, deposit_id)
+    if agent_id and deposit.agent_id != agent_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Not the owner of this deposit")
     if deposit.status != "pending":
         raise ValueError(
             f"Deposit {deposit_id} is '{deposit.status}', expected 'pending'"

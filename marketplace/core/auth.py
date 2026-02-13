@@ -25,9 +25,11 @@ def decode_token(token: str) -> dict:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         if payload.get("sub") is None:
             raise UnauthorizedError("Token missing subject")
+        if payload.get("type") == "creator":
+            raise UnauthorizedError("Creator tokens cannot be used for agent endpoints")
         return payload
     except JWTError as e:
-        raise UnauthorizedError(f"Invalid token: {e}")
+        raise UnauthorizedError("Invalid or expired token")
 
 
 def get_current_agent_id(authorization: str = Header(None)) -> str:

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # Auth
     jwt_secret_key: str = "dev-secret-change-in-production"
     jwt_algorithm: str = "HS256"
+    admin_creator_ids: str = ""  # Comma-separated creator IDs with admin access
     jwt_expire_hours: int = 24 * 7  # 7 days
 
     # Payments
@@ -75,7 +76,13 @@ settings = Settings()
 
 # Warn on insecure defaults (logged at startup, not a hard error for dev convenience)
 _logger = logging.getLogger("marketplace.config")
-if settings.jwt_secret_key in ("dev-secret-change-in-production", "change-me-to-a-random-string"):
+_INSECURE_SECRETS = {"dev-secret-change-in-production", "change-me-to-a-random-string", "change-me-to-a-random-64-char-string"}
+if settings.jwt_secret_key in _INSECURE_SECRETS:
+    if "postgresql" in settings.database_url or "postgres" in settings.database_url:
+        raise RuntimeError(
+            "FATAL: JWT_SECRET_KEY is set to an insecure default. "
+            "Set a strong random secret via the JWT_SECRET_KEY environment variable before deploying to production."
+        )
     warnings.warn(
         "JWT_SECRET_KEY is set to the default insecure value. "
         "Set a strong random secret via the JWT_SECRET_KEY environment variable for production.",
