@@ -4,12 +4,14 @@ interface Props {
   value: number;
   duration?: number;
   className?: string;
+  glow?: boolean;
 }
 
 export default function AnimatedCounter({
   value,
   duration = 600,
   className = "",
+  glow = false,
 }: Props) {
   const [display, setDisplay] = useState(0);
   const prev = useRef(0);
@@ -39,5 +41,16 @@ export default function AnimatedCounter({
     };
   }, [value, duration]);
 
-  return <span className={className}>{display.toLocaleString()}</span>;
+  return (
+    <span
+      className={`font-mono text-[#e2e8f0] ${className}`}
+      style={
+        glow
+          ? { textShadow: "0 0 10px rgba(96,165,250,0.3), 0 0 20px rgba(96,165,250,0.1)" }
+          : undefined
+      }
+    >
+      {display.toLocaleString()}
+    </span>
+  );
 }
