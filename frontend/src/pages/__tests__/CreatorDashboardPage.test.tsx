@@ -134,8 +134,8 @@ describe("CreatorDashboardPage", () => {
     await waitFor(() => {
       // Agent 1: total_earned = 10.0 -> formatUSD -> "$10.00"
       expect(screen.getByText("$10.00")).toBeInTheDocument();
-      // Agent 1: balance = 8.0 -> formatUSD -> "Balance: $8.00"
-      expect(screen.getByText("Balance: $8.00")).toBeInTheDocument();
+      // Agent 1: balance = 8.0 -> formatUSD -> "$8.00" (shown under separate "Balance" label)
+      expect(screen.getByText("$8.00")).toBeInTheDocument();
     });
   });
 
@@ -151,7 +151,9 @@ describe("CreatorDashboardPage", () => {
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("No agents linked yet. Claim your first agent below.")).toBeInTheDocument();
+      // New markup splits the message into two separate elements
+      expect(screen.getByText("No agents linked yet")).toBeInTheDocument();
+      expect(screen.getByText("Claim your first agent below to get started")).toBeInTheDocument();
     });
   });
 

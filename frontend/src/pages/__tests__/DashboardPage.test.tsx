@@ -77,29 +77,31 @@ describe("DashboardPage", () => {
 
     const { container } = renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
-    // Should show skeleton cards (using animate-shimmer class)
-    const skeletons = container.querySelectorAll(".animate-shimmer");
+    // Should show skeleton cards (SkeletonCard uses inline skeleton-shimmer animation)
+    const skeletons = container.querySelectorAll(".rounded-2xl");
     expect(skeletons.length).toBeGreaterThan(0);
   });
 
   it("displays health stats correctly", () => {
     renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
-    // Check that all stat card labels are present (4 cards, no ARD Circulating)
+    // Check that all stat card labels are present (4 cards)
     expect(screen.getByText("Agents")).toBeInTheDocument();
     expect(screen.getByText("Listings")).toBeInTheDocument();
-    expect(screen.getByText("Transactions")).toBeInTheDocument();
+    // "Transactions" appears in both stat card and quick action button; use getAllByText
+    expect(screen.getAllByText("Transactions").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Status")).toBeInTheDocument();
 
     // Check string values (Status section)
     expect(screen.getByText("Healthy")).toBeInTheDocument();
-    expect(screen.getByText("v1.2.3")).toBeInTheDocument();
+    // "v1.2.3" appears in both the stat card subtitle and the Platform Health section
+    expect(screen.getAllByText("v1.2.3").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows live feed section with events", () => {
     renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
-    expect(screen.getByText("Live Activity")).toBeInTheDocument();
+    expect(screen.getByText("Live Activity Feed")).toBeInTheDocument();
     expect(screen.getByText("express purchase")).toBeInTheDocument();
     expect(screen.getByText("listing created")).toBeInTheDocument();
     expect(screen.getByText("150ms")).toBeInTheDocument();
@@ -114,9 +116,11 @@ describe("DashboardPage", () => {
   it("renders QuickActions component", () => {
     renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
-    // QuickActions should be present (component exists in the tree)
-    const quickActionsSection = screen.getByText("Live Activity").parentElement?.parentElement;
-    expect(quickActionsSection).toBeTruthy();
+    // QuickActions section should be present with its label
+    expect(screen.getByText("Quick Actions")).toBeInTheDocument();
+    // Verify some quick action buttons are rendered
+    expect(screen.getByText("Register Agent")).toBeInTheDocument();
+    expect(screen.getByText("Create Listing")).toBeInTheDocument();
   });
 
   it("shows empty feed message when no events", () => {
@@ -124,7 +128,7 @@ describe("DashboardPage", () => {
 
     renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
-    expect(screen.getByText("Waiting for marketplace activity...")).toBeInTheDocument();
+    expect(screen.getByText("Listening for activity...")).toBeInTheDocument();
   });
 
   it("handles error state when health data is unavailable", async () => {
@@ -234,8 +238,10 @@ describe("DashboardPage", () => {
   it("applies fade-in animation to main container", () => {
     const { container } = renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
-    const mainDiv = container.querySelector(".animate-fade-in");
+    // The new markup uses inline style animation: "fadeInUp 0.5s ease-out both"
+    const mainDiv = container.firstElementChild;
     expect(mainDiv).toBeTruthy();
+    expect((mainDiv as HTMLElement).style.animation).toContain("fadeInUp");
   });
 
   it("handles multiple events in live feed", () => {
@@ -269,22 +275,23 @@ describe("DashboardPage", () => {
   it("renders stat cards with correct data structure", () => {
     const { container } = renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
-    // Check that StatCard components are rendered
-    const statCards = container.querySelectorAll(".glass-card");
+    // Check that StatCard components are rendered (they use bg-[#141928] class)
+    const statCards = container.querySelectorAll(".bg-\\[\\#141928\\]");
     expect(statCards.length).toBeGreaterThan(0);
 
-    // Verify grid layout
-    const grid = container.querySelector(".grid-cols-2");
+    // Verify grid layout (uses sm:grid-cols-2 and lg:grid-cols-4)
+    const grid = container.querySelector("[class*='grid-cols']");
     expect(grid).toBeTruthy();
   });
 
   it("displays all four stat cards in the grid", () => {
     renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
-    // All 4 stat card labels should be present (no ARD Circulating)
+    // All 4 stat card labels should be present
     expect(screen.getByText("Agents")).toBeInTheDocument();
     expect(screen.getByText("Listings")).toBeInTheDocument();
-    expect(screen.getByText("Transactions")).toBeInTheDocument();
+    // "Transactions" appears in both stat card and quick action button; use getAllByText
+    expect(screen.getAllByText("Transactions").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Status")).toBeInTheDocument();
   });
 });
