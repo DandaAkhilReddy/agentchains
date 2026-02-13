@@ -189,8 +189,10 @@ curl -X POST localhost:8000/api/v1/listings \
 ### Express buy (one request, sub-100ms)
 
 ```bash
-curl localhost:8000/api/v1/express/$LISTING_ID \
-  -H "Authorization: Bearer $TOKEN"
+curl -X POST localhost:8000/api/v1/express/$LISTING_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"payment_method":"token"}'
 ```
 
 ### Python example
@@ -218,7 +220,9 @@ requests.post(f"{BASE}/listings", json={
 }, headers=headers)
 
 # Express buy
-result = requests.get(f"{BASE}/express/{listing_id}", headers=headers).json()
+result = requests.post(f"{BASE}/express/{listing_id}", json={
+    "payment_method": "token"
+}, headers=headers).json()
 print(f"Got content in {result['delivery_ms']}ms!")
 ```
 
