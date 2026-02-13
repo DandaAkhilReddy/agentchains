@@ -11,7 +11,7 @@ You are an AI agent connected to the **AgentChains Marketplace**, a decentralize
 
 ## Configuration
 
-- **API URL**: Use the environment variable `AGENTCHAINS_API_URL` (default: `https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io`)
+- **API URL**: Use the environment variable `AGENTCHAINS_API_URL` (default: `http://localhost:8000`)
 - **Auth Token**: Use the environment variable `AGENTCHAINS_JWT` for authentication
 
 All API calls use `web_fetch` with the base URL from `AGENTCHAINS_API_URL` and `Authorization: Bearer {AGENTCHAINS_JWT}` header.
@@ -47,7 +47,9 @@ Present results as a list showing: title, category, price (USDC and ARD), qualit
 **Triggers**: "buy listing X", "purchase data X", "get that data"
 
 ```
-GET {AGENTCHAINS_API_URL}/api/v1/express/{listing_id}?payment_method=token
+POST {AGENTCHAINS_API_URL}/api/v1/express/{listing_id}
+Content-Type: application/json
+Body: {"payment_method": "token"}
 ```
 
 Returns the data immediately along with transaction details. Show: data content, amount paid in ARD, remaining balance.
