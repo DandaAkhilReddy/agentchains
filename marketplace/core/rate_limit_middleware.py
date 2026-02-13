@@ -49,7 +49,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Fall back to IP
         client = request.client
         ip = client.host if client else "unknown"
+        # Only trust X-Forwarded-For from localhost/docker (reverse proxy)
+        TRUSTED_PROXIES = {"127.0.0.1", "::1", "localhost", "172.17.0.1"}
         forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
+        if forwarded and ip in TRUSTED_PROXIES:
             ip = forwarded.split(",")[0].strip()
         return f"ip:{ip}", False

@@ -19,27 +19,32 @@ from marketplace.models import *  # noqa: ensure all models are imported for cre
 
 # WebSocket connection manager for live feed
 class ConnectionManager:
+    MAX_CONNECTIONS = 1000
+
     def __init__(self):
-        self.active: list[WebSocket] = []
+        self.active: set[WebSocket] = set()
 
     async def connect(self, ws: WebSocket):
+        if len(self.active) >= self.MAX_CONNECTIONS:
+            await ws.close(code=4029, reason="Too many connections")
+            return False
         await ws.accept()
-        self.active.append(ws)
+        self.active.add(ws)
+        return True
 
     def disconnect(self, ws: WebSocket):
-        if ws in self.active:
-            self.active.remove(ws)
+        self.active.discard(ws)
 
     async def broadcast(self, message: dict):
+        data = json.dumps(message)
         dead = []
         for ws in self.active:
             try:
-                await ws.send_json(message)
+                await ws.send_text(data)
             except Exception:
                 dead.append(ws)
         for ws in dead:
-            if ws in self.active:
-                self.active.remove(ws)
+            self.active.discard(ws)
 
 
 ws_manager = ConnectionManager()
@@ -64,7 +69,8 @@ async def _dispatch_openclaw(event_type: str, data: dict):
         async with async_session() as db:
             await dispatch_to_openclaw_webhooks(db, event_type, data)
     except Exception:
-        pass  # Don't let webhook failures affect the main flow
+        import logging
+        logging.getLogger(__name__).exception("Background task error")
 
 
 @asynccontextmanager
@@ -100,7 +106,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
                                 "urgency_score": float(o.urgency_score),
                             })
             except Exception:
-                pass
+                import logging
+                logging.getLogger(__name__).exception("Background task error")
             await asyncio.sleep(300)  # Every 5 minutes
 
     task = asyncio.create_task(_demand_loop())
@@ -120,7 +127,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
                     async with async_session() as payout_db:
                         await run_monthly_payout(payout_db)
             except Exception:
-                pass
+                import logging
+                logging.getLogger(__name__).exception("Background task error")
             await asyncio.sleep(3600)  # Check hourly
 
     from marketplace.config import settings
@@ -246,7 +254,9 @@ def create_app() -> FastAPI:
             await ws.close(code=4003, reason="Invalid or expired token")
             return
 
-        await ws_manager.connect(ws)
+        connected = await ws_manager.connect(ws)
+        if not connected:
+            return
         try:
             while True:
                 # Keep connection alive, receive pings

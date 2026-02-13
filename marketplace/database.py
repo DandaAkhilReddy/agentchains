@@ -13,7 +13,7 @@ if not _is_sqlite:
         "pool_size": 5,
         "max_overflow": 10,
         "pool_timeout": 30,
-        "pool_recycle": 1800,  # Recycle connections every 30 min (Azure PG closes idle)
+        "pool_recycle": 1800,  # Recycle connections every 30 min (prevent stale connections)
     })
 
 engine = create_async_engine(settings.database_url, **_engine_kwargs)

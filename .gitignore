@@ -12,6 +12,7 @@ env/
 
 # Environment
 .env
+.env.production
 
 # Runtime data
 data/marketplace.db
