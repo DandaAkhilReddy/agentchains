@@ -1,13 +1,11 @@
-"""ARD Token Economy — Off-chain double-entry ledger for instant token transfers.
+"""USD Billing Engine — Off-chain double-entry ledger for instant payments.
 
-This is the core engine of the ARD token economy.  Every token movement
-(deposit, purchase, sale, fee, burn, bonus, refund, withdrawal) is recorded
-as an immutable row in ``token_ledger`` with matching balance updates on the
-source and destination ``token_accounts``.
+Every money movement (deposit, purchase, sale, fee, bonus, refund,
+withdrawal) is recorded as an immutable row in ``token_ledger`` with
+matching balance updates on the source and destination ``token_accounts``.
 
 Key design decisions:
-- **Double-entry**: every debit has a matching credit.  The sum of all
-  balances + total_burned always equals total_minted.
+- **Double-entry**: every debit has a matching credit.
 - **Row-level locking** (SELECT ... FOR UPDATE) on PostgreSQL to serialise
   concurrent transfers on the same accounts.  Falls back to simple
   select-then-update on SQLite (WAL mode + busy_timeout provide sufficient
@@ -35,7 +33,6 @@ from marketplace.core.hashing import compute_ledger_hash
 from marketplace.models.token_account import (
     TokenAccount,
     TokenLedger,
-    TokenSupply,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,15 +45,6 @@ _is_sqlite: bool = settings.database_url.startswith("sqlite")
 
 # Canonical platform account marker — agent_id is NULL for the treasury.
 _PLATFORM_AGENT_ID: None = None
-
-# Tier thresholds (lifetime volume = total_earned + total_spent).
-# Ordered descending so the first match wins.
-_TIER_THRESHOLDS: list[tuple[str, Decimal]] = [
-    ("platinum", Decimal("1000000")),
-    ("gold", Decimal("100000")),
-    ("silver", Decimal("10000")),
-    # anything below silver is bronze
-]
 
 
 def _to_decimal(value: float | int | str | Decimal) -> Decimal:
@@ -181,7 +169,7 @@ async def _process_creator_royalty(
     created_at = _utcnow()
     entry_hash = compute_ledger_hash(
         prev_hash, agent_acct.id, creator_acct.id,
-        royalty, Decimal("0"), Decimal("0"), "creator_royalty", created_at.isoformat(),
+        royalty, Decimal("0"), "creator_royalty", created_at.isoformat(),
     )
 
     ledger = TokenLedger(
@@ -190,7 +178,6 @@ async def _process_creator_royalty(
         to_account_id=creator_acct.id,
         amount=royalty,
         fee_amount=Decimal("0"),
-        burn_amount=Decimal("0"),
         tx_type="creator_royalty",
         reference_id=reference_id,
         reference_type="creator_royalty",
@@ -204,7 +191,7 @@ async def _process_creator_royalty(
     await db.flush()
 
     logger.info(
-        "Creator royalty: %s ARD from agent %s → creator %s (ref=%s)",
+        "Creator royalty: $%s USD from agent %s -> creator %s (ref=%s)",
         royalty, agent_id, creator_id, reference_id,
     )
     return ledger
@@ -215,28 +202,16 @@ async def _process_creator_royalty(
 # ---------------------------------------------------------------------------
 
 async def ensure_platform_account(db: AsyncSession) -> TokenAccount:
-    """Get or create the platform treasury account (agent_id=NULL).
-
-    Also ensures the ``TokenSupply`` singleton row exists.
-    """
+    """Get or create the platform treasury account (agent_id=NULL)."""
     account = await _get_account_by_agent(db, _PLATFORM_AGENT_ID)
     if account is None:
         account = TokenAccount(
             id=_new_id(),
             agent_id=None,
             balance=Decimal("0"),
-            tier="platform",
         )
         db.add(account)
         logger.info("Created platform treasury account %s", account.id)
-
-    # Ensure TokenSupply singleton
-    supply_result = await db.execute(
-        select(TokenSupply).where(TokenSupply.id == 1)
-    )
-    if supply_result.scalar_one_or_none() is None:
-        db.add(TokenSupply(id=1))
-        logger.info("Created TokenSupply singleton row")
 
     await db.commit()
     await db.refresh(account)
@@ -265,8 +240,8 @@ async def get_balance(db: AsyncSession, agent_id: str) -> dict:
     """Return the balance summary for an agent.
 
     Returns:
-        dict with keys: balance, tier, total_earned, total_spent,
-        total_deposited, total_fees_paid, usd_equivalent.
+        dict with keys: balance, total_earned, total_spent,
+        total_deposited, total_fees_paid.
     """
     account = await _get_account_by_agent(db, agent_id)
     if account is None:
@@ -275,12 +250,10 @@ async def get_balance(db: AsyncSession, agent_id: str) -> dict:
     balance = Decimal(str(account.balance))
     return {
         "balance": float(balance),
-        "tier": account.tier,
         "total_earned": float(account.total_earned),
         "total_spent": float(account.total_spent),
         "total_deposited": float(account.total_deposited),
         "total_fees_paid": float(account.total_fees_paid),
-        "usd_equivalent": float(balance * _to_decimal(settings.token_peg_usd)),
     }
 
 
@@ -295,15 +268,14 @@ async def transfer(
     idempotency_key: str | None = None,
     memo: str = "",
 ) -> TokenLedger:
-    """Execute an ATOMIC transfer with platform fee + burn.
+    """Execute an ATOMIC transfer with platform fee.
 
     Steps:
         1. Lock both accounts (sorted by ID to prevent deadlocks).
         2. Verify sender has sufficient balance.
-        3. Calculate fee and burn amounts.
-        4. Debit sender, credit receiver (net of fee), credit platform (net of burn).
-        5. Update global ``TokenSupply`` for burn.
-        6. Write an immutable ``TokenLedger`` entry.
+        3. Calculate fee.
+        4. Debit sender, credit receiver (net of fee), credit platform (fee).
+        5. Write an immutable ``TokenLedger`` entry.
 
     Raises:
         ValueError: if either account is missing or balance is insufficient.
@@ -358,13 +330,12 @@ async def transfer(
     if sender_balance < amount_d:
         raise ValueError(
             f"Insufficient balance: agent {from_agent_id} has "
-            f"{sender_balance} ARD, needs {amount_d} ARD"
+            f"${sender_balance:.2f}, needs ${amount_d:.2f}"
         )
 
-    # --- Fee & burn calculation -----------------------------------------------
-    fee_d = _to_decimal(amount_d * _to_decimal(settings.token_platform_fee_pct))
-    burn_d = _to_decimal(fee_d * _to_decimal(settings.token_burn_pct))
-    platform_credit = _to_decimal(fee_d - burn_d)
+    # --- Fee calculation ------------------------------------------------------
+    fee_d = _to_decimal(amount_d * _to_decimal(settings.platform_fee_pct))
+    platform_credit = fee_d
     receiver_credit = _to_decimal(amount_d - fee_d)
 
     # --- Apply balance changes ------------------------------------------------
@@ -380,19 +351,6 @@ async def transfer(
     platform.balance = Decimal(str(platform.balance)) + platform_credit
     platform.updated_at = _utcnow()
 
-    # --- Update global supply -------------------------------------------------
-    supply_stmt = select(TokenSupply).where(TokenSupply.id == 1)
-    if not _is_sqlite:
-        supply_stmt = supply_stmt.with_for_update()
-    supply_row = (await db.execute(supply_stmt)).scalar_one()
-
-    supply_row.total_burned = Decimal(str(supply_row.total_burned)) + burn_d
-    supply_row.circulating = Decimal(str(supply_row.circulating)) - burn_d
-    supply_row.platform_balance = (
-        Decimal(str(supply_row.platform_balance)) + platform_credit
-    )
-    supply_row.last_updated = _utcnow()
-
     # --- Create ledger entry with hash chain ------------------------------------
     latest = await db.execute(
         select(TokenLedger.entry_hash).order_by(TokenLedger.created_at.desc()).limit(1)
@@ -402,7 +360,7 @@ async def transfer(
     created_at = _utcnow()
     entry_hash = compute_ledger_hash(
         prev_hash, sender.id, receiver.id,
-        amount_d, fee_d, burn_d, tx_type, created_at.isoformat(),
+        amount_d, fee_d, tx_type, created_at.isoformat(),
     )
 
     ledger = TokenLedger(
@@ -411,7 +369,6 @@ async def transfer(
         to_account_id=receiver.id,
         amount=amount_d,
         fee_amount=fee_d,
-        burn_amount=burn_d,
         tx_type=tx_type,
         reference_id=reference_id,
         reference_type=reference_type,
@@ -436,16 +393,15 @@ async def transfer(
     await db.commit()
     await db.refresh(ledger)
 
-    # Broadcast token transfer event
+    # Broadcast payment event
     try:
         import asyncio
         from marketplace.main import broadcast_event
-        asyncio.ensure_future(broadcast_event("token_transfer", {
+        asyncio.ensure_future(broadcast_event("payment", {
             "from_agent_id": from_agent_id,
             "to_agent_id": to_agent_id,
             "amount": float(amount_d),
             "fee": float(fee_d),
-            "burn": float(burn_d),
             "tx_type": tx_type,
             "creator_royalty": float(royalty_ledger.amount) if royalty_ledger else 0,
         }))
@@ -453,13 +409,12 @@ async def transfer(
         pass
 
     logger.info(
-        "Transfer %s: %s ARD from %s -> %s (fee=%s, burn=%s) [%s]",
+        "Transfer %s: $%s USD from %s -> %s (fee=$%s) [%s]",
         ledger.id,
         amount_d,
         from_agent_id,
         to_agent_id,
         fee_d,
-        burn_d,
         tx_type,
     )
     return ledger
@@ -468,15 +423,15 @@ async def transfer(
 async def deposit(
     db: AsyncSession,
     agent_id: str,
-    amount_axn: float | Decimal,
+    amount_usd: float | Decimal,
     deposit_id: str | None = None,
     memo: str = "Deposit",
 ) -> TokenLedger:
-    """Credit tokens to an agent from the platform.  No fee is charged.
+    """Credit USD to an agent from the platform.  No fee is charged.
 
     Used for deposits, signup bonuses, refunds, and admin credits.
     """
-    amount_d = _to_decimal(amount_axn)
+    amount_d = _to_decimal(amount_usd)
     if amount_d <= 0:
         raise ValueError("Deposit amount must be positive")
 
@@ -504,16 +459,7 @@ async def deposit(
     target.total_deposited = Decimal(str(target.total_deposited)) + amount_d
     target.updated_at = _utcnow()
 
-    # Update supply — deposits are minted tokens entering circulation
-    supply_stmt = select(TokenSupply).where(TokenSupply.id == 1)
-    if not _is_sqlite:
-        supply_stmt = supply_stmt.with_for_update()
-    supply_row = (await db.execute(supply_stmt)).scalar_one()
-    supply_row.total_minted = Decimal(str(supply_row.total_minted)) + amount_d
-    supply_row.circulating = Decimal(str(supply_row.circulating)) + amount_d
-    supply_row.last_updated = _utcnow()
-
-    # Ledger entry — from_account_id is NULL (mint), with hash chain
+    # Ledger entry — from_account_id is NULL (external deposit), with hash chain
     idempotency = f"deposit-{deposit_id}" if deposit_id else None
 
     latest = await db.execute(
@@ -524,7 +470,7 @@ async def deposit(
     created_at = _utcnow()
     entry_hash = compute_ledger_hash(
         prev_hash, None, target.id,
-        amount_d, Decimal("0"), Decimal("0"), "deposit", created_at.isoformat(),
+        amount_d, Decimal("0"), "deposit", created_at.isoformat(),
     )
 
     ledger = TokenLedger(
@@ -533,7 +479,6 @@ async def deposit(
         to_account_id=target.id,
         amount=amount_d,
         fee_amount=Decimal("0"),
-        burn_amount=Decimal("0"),
         tx_type="deposit",
         reference_id=deposit_id,
         reference_type="deposit",
@@ -548,19 +493,19 @@ async def deposit(
     await db.commit()
     await db.refresh(ledger)
 
-    # Broadcast token deposit event
+    # Broadcast deposit event
     try:
         import asyncio
         from marketplace.main import broadcast_event
-        asyncio.ensure_future(broadcast_event("token_deposit", {
+        asyncio.ensure_future(broadcast_event("deposit", {
             "agent_id": agent_id,
-            "amount_axn": float(amount_d),
+            "amount_usd": float(amount_d),
         }))
     except Exception:
         pass
 
     logger.info(
-        "Deposit %s: +%s ARD to agent %s (%s)",
+        "Deposit %s: +$%s USD to agent %s (%s)",
         ledger.id,
         amount_d,
         agent_id,
@@ -574,34 +519,28 @@ async def debit_for_purchase(
     buyer_id: str,
     seller_id: str,
     amount_usdc: float | Decimal,
-    listing_quality: float,
     tx_id: str,
 ) -> dict:
-    """Execute the full purchase flow: USD -> ARD conversion, transfer, quality bonus.
+    """Execute the full purchase flow: transfer USD with platform fee.
 
     Args:
         buyer_id:  Agent ID of the buyer.
         seller_id: Agent ID of the seller.
         amount_usdc: Purchase price in USD.
-        listing_quality: Quality score of the listing (0.0 - 1.0).
         tx_id: Transaction ID for reference / idempotency.
 
     Returns:
-        dict with keys: ledger_id, amount_axn, fee_axn, burn_axn,
-        quality_bonus_axn, buyer_balance, seller_balance.
+        dict with keys: ledger_id, amount_usd, fee_usd,
+        buyer_balance, seller_balance.
     """
-    # Convert USD to ARD
-    peg = _to_decimal(settings.token_peg_usd)
-    if peg <= 0:
-        raise ValueError("token_peg_usd must be positive")
-    amount_axn = _to_decimal(Decimal(str(amount_usdc)) / peg)
+    amount_d = _to_decimal(amount_usdc)
 
     # Main transfer
     ledger = await transfer(
         db=db,
         from_agent_id=buyer_id,
         to_agent_id=seller_id,
-        amount=amount_axn,
+        amount=amount_d,
         tx_type="purchase",
         reference_id=tx_id,
         reference_type="transaction",
@@ -609,34 +548,7 @@ async def debit_for_purchase(
         memo=f"Purchase for transaction {tx_id}",
     )
 
-    fee_axn = Decimal(str(ledger.fee_amount))
-    burn_axn = Decimal(str(ledger.burn_amount))
-    quality_bonus_axn = Decimal("0")
-
-    # Quality bonus — if listing exceeds threshold, bonus the seller
-    if listing_quality >= settings.token_quality_threshold:
-        receiver_credit = _to_decimal(amount_axn - fee_axn)
-        bonus = _to_decimal(
-            receiver_credit * _to_decimal(settings.token_quality_bonus_pct)
-        )
-        if bonus > 0:
-            await deposit(
-                db=db,
-                agent_id=seller_id,
-                amount_axn=bonus,
-                deposit_id=f"quality-bonus-{tx_id}",
-                memo=(
-                    f"Quality bonus ({listing_quality:.0%}) "
-                    f"for transaction {tx_id}"
-                ),
-            )
-            quality_bonus_axn = bonus
-            logger.info(
-                "Quality bonus: +%s ARD to seller %s (quality=%.2f)",
-                bonus,
-                seller_id,
-                listing_quality,
-            )
+    fee_usd = Decimal(str(ledger.fee_amount))
 
     # Fetch updated balances
     buyer_balance = await get_balance(db, buyer_id)
@@ -644,35 +556,10 @@ async def debit_for_purchase(
 
     return {
         "ledger_id": ledger.id,
-        "amount_axn": float(amount_axn),
-        "fee_axn": float(fee_axn),
-        "burn_axn": float(burn_axn),
-        "quality_bonus_axn": float(quality_bonus_axn),
+        "amount_usd": float(amount_d),
+        "fee_usd": float(fee_usd),
         "buyer_balance": buyer_balance["balance"],
         "seller_balance": seller_balance["balance"],
-    }
-
-
-async def get_supply(db: AsyncSession) -> dict:
-    """Return global ARD token supply statistics."""
-    result = await db.execute(select(TokenSupply).where(TokenSupply.id == 1))
-    supply = result.scalar_one_or_none()
-    if supply is None:
-        return {
-            "total_minted": 0.0,
-            "total_burned": 0.0,
-            "circulating": 0.0,
-            "platform_balance": 0.0,
-            "last_updated": None,
-        }
-    return {
-        "total_minted": float(supply.total_minted),
-        "total_burned": float(supply.total_burned),
-        "circulating": float(supply.circulating),
-        "platform_balance": float(supply.platform_balance),
-        "last_updated": (
-            supply.last_updated.isoformat() if supply.last_updated else None
-        ),
     }
 
 
@@ -722,7 +609,6 @@ async def get_history(
                 "direction": direction,
                 "amount": float(entry.amount),
                 "fee_amount": float(entry.fee_amount),
-                "burn_amount": float(entry.burn_amount),
                 "tx_type": entry.tx_type,
                 "reference_id": entry.reference_id,
                 "reference_type": entry.reference_type,
@@ -736,105 +622,6 @@ async def get_history(
     return items, total
 
 
-async def recalculate_tier(db: AsyncSession, agent_id: str) -> str:
-    """Recalculate and persist the tier for an agent based on lifetime volume.
-
-    Tier thresholds (total_earned + total_spent):
-        - platinum: >= 1,000,000 ARD
-        - gold:     >= 100,000 ARD
-        - silver:   >= 10,000 ARD
-        - bronze:   < 10,000 ARD
-
-    Returns:
-        The new tier string.
-    """
-    account = await _get_account_by_agent(db, agent_id)
-    if account is None:
-        raise ValueError(f"No token account for agent {agent_id}")
-
-    volume = Decimal(str(account.total_earned)) + Decimal(str(account.total_spent))
-    new_tier = "bronze"
-    for tier_name, threshold in _TIER_THRESHOLDS:
-        if volume >= threshold:
-            new_tier = tier_name
-            break
-
-    if account.tier != new_tier:
-        old_tier = account.tier
-        account.tier = new_tier
-        account.updated_at = _utcnow()
-        await db.commit()
-        logger.info(
-            "Tier change for agent %s: %s -> %s (volume=%s ARD)",
-            agent_id,
-            old_tier,
-            new_tier,
-            volume,
-        )
-    return new_tier
-
-
-async def verify_ledger_chain(db: AsyncSession) -> dict:
-    """Walk the full ledger and verify every SHA-256 hash link.
-
-    Returns:
-        dict with keys: valid (bool), total_entries (int), errors (list).
-    """
-    stmt = select(TokenLedger).order_by(TokenLedger.created_at.asc())
-    result = await db.execute(stmt)
-    entries = result.scalars().all()
-
-    errors: list[dict] = []
-    prev_hash: str | None = None
-
-    for entry in entries:
-        if entry.entry_hash is None:
-            continue  # Legacy entries before hash chain was enabled
-
-        # Normalize timestamp: SQLite may strip timezone, so ensure +00:00
-        ts = ""
-        if entry.created_at:
-            dt = entry.created_at
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            ts = dt.isoformat()
-
-        expected = compute_ledger_hash(
-            prev_hash,
-            entry.from_account_id,
-            entry.to_account_id,
-            Decimal(str(entry.amount)),
-            Decimal(str(entry.fee_amount)),
-            Decimal(str(entry.burn_amount)),
-            entry.tx_type,
-            ts,
-        )
-
-        if entry.entry_hash != expected:
-            errors.append({
-                "ledger_id": entry.id,
-                "expected_hash": expected,
-                "actual_hash": entry.entry_hash,
-                "created_at": entry.created_at.isoformat() if entry.created_at else None,
-            })
-
-        if entry.prev_hash != prev_hash:
-            errors.append({
-                "ledger_id": entry.id,
-                "error": "prev_hash mismatch",
-                "expected_prev": prev_hash,
-                "actual_prev": entry.prev_hash,
-            })
-
-        prev_hash = entry.entry_hash
-
-    return {
-        "valid": len(errors) == 0,
-        "total_entries": len(entries),
-        "errors": errors[:20],  # Cap error output
-    }
-
-
 async def get_creator_balance(db: AsyncSession, creator_id: str) -> dict:
     """Return the balance summary for a creator account."""
     account = await _get_account_by_creator(db, creator_id)
@@ -844,10 +631,8 @@ async def get_creator_balance(db: AsyncSession, creator_id: str) -> dict:
     balance = Decimal(str(account.balance))
     return {
         "balance": float(balance),
-        "tier": account.tier,
         "total_earned": float(account.total_earned),
         "total_spent": float(account.total_spent),
         "total_deposited": float(account.total_deposited),
         "total_fees_paid": float(account.total_fees_paid),
-        "usd_equivalent": float(balance * _to_decimal(settings.token_peg_usd)),
     }

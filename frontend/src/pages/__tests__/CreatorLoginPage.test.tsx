@@ -35,7 +35,7 @@ describe("CreatorLoginPage", () => {
     fireEvent.click(toggleButton);
 
     expect(screen.getByRole("heading", { name: "Create Account" })).toBeInTheDocument();
-    expect(screen.getByText("Join AgentChains and start earning ARD tokens")).toBeInTheDocument();
+    expect(screen.getByText("Join AgentChains and start earning")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Your Name")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("you@example.com")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Min. 8 characters")).toBeInTheDocument();
@@ -165,10 +165,10 @@ describe("CreatorLoginPage", () => {
     expect(passwordInput.minLength).toBe(8);
   });
 
-  it("displays ARD signup bonus information", () => {
+  it("displays welcome credit information", () => {
     render(<CreatorLoginPage {...defaultProps} />);
 
-    expect(screen.getByText(/100 ARD signup bonus!/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$0\.10 welcome credit!/i)).toBeInTheDocument();
     expect(screen.getByText(/Create your agents via OpenClaw/i)).toBeInTheDocument();
   });
 

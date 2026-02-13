@@ -1,9 +1,8 @@
-"""Integration tests for the FULL ARD token economy lifecycle.
+"""Integration tests for the FULL USD billing lifecycle.
 
 Tests exercise the service layer end-to-end: account creation, deposits,
-transfers (with fee + burn), purchases, quality bonuses, tier progression,
-ledger hash-chain integrity, pagination, concurrent deposits, and supply
-tracking.
+transfers (with platform fee), purchases, idempotency, pagination, and
+concurrent deposits.
 
 Uses in-memory SQLite via conftest fixtures (TestSession, db, seed_platform,
 make_agent, make_token_account).
@@ -20,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
-from marketplace.models.token_account import TokenAccount, TokenLedger, TokenSupply
+from marketplace.models.token_account import TokenAccount, TokenLedger
 from marketplace.services import token_service
 from marketplace.tests.conftest import TestSession
 
@@ -31,20 +30,13 @@ from marketplace.tests.conftest import TestSession
 
 @pytest.mark.asyncio
 async def test_platform_account_creation(db: AsyncSession):
-    """ensure_platform_account creates treasury (agent_id=NULL) + TokenSupply singleton."""
+    """ensure_platform_account creates treasury (agent_id=NULL)."""
     platform = await token_service.ensure_platform_account(db)
 
     # Treasury account exists with no agent owner
     assert platform is not None
     assert platform.agent_id is None
-    assert platform.tier == "platform"
     assert float(platform.balance) == 0.0
-
-    # TokenSupply singleton row exists
-    result = await db.execute(select(TokenSupply).where(TokenSupply.id == 1))
-    supply = result.scalar_one_or_none()
-    assert supply is not None
-    assert float(supply.total_minted) == 1_000_000_000.0
 
 
 # ---------------------------------------------------------------------------
@@ -53,14 +45,13 @@ async def test_platform_account_creation(db: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_create_account(db: AsyncSession, seed_platform, make_agent):
-    """create_account for an agent produces a bronze-tier account with zero balance."""
+    """create_account for an agent produces an account with zero balance."""
     agent, _ = await make_agent()
     account = await token_service.create_account(db, agent.id)
 
     assert isinstance(account, TokenAccount)
     assert account.agent_id == agent.id
     assert float(account.balance) == 0.0
-    assert account.tier == "bronze"
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +74,7 @@ async def test_create_account_idempotent(db: AsyncSession, seed_platform, make_a
 
 @pytest.mark.asyncio
 async def test_deposit_credits_agent(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """Deposit adds balance and creates a ledger entry of type 'deposit'."""
+    """Deposit adds USD balance and creates a ledger entry of type 'deposit'."""
     agent, _ = await make_agent()
     await make_token_account(agent.id, balance=0.0)
 
@@ -98,37 +89,16 @@ async def test_deposit_credits_agent(db: AsyncSession, seed_platform, make_agent
     assert isinstance(ledger, TokenLedger)
     assert ledger.tx_type == "deposit"
     assert float(ledger.amount) == 500.0
-    assert ledger.from_account_id is None  # mint — no sender
+    assert ledger.from_account_id is None  # deposit — no sender
 
 
 # ---------------------------------------------------------------------------
-# 5. Deposit updates supply
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_deposit_updates_supply(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """After a deposit, total_minted and circulating increase by the deposited amount."""
-    agent, _ = await make_agent()
-    await make_token_account(agent.id, balance=0.0)
-
-    supply_before = await token_service.get_supply(db)
-    minted_before = supply_before["total_minted"]
-    circ_before = supply_before["circulating"]
-
-    await token_service.deposit(db, agent.id, 1000)
-
-    supply_after = await token_service.get_supply(db)
-    assert supply_after["total_minted"] == minted_before + 1000.0
-    assert supply_after["circulating"] == circ_before + 1000.0
-
-
-# ---------------------------------------------------------------------------
-# 6. Basic transfer with fee and burn
+# 5. Basic transfer with platform fee
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_transfer_basic(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """Transfer from A to B applies 2% fee and 50% burn on the fee."""
+    """Transfer from A to B applies 2% platform fee."""
     alice, _ = await make_agent("alice_basic")
     bob, _ = await make_agent("bob_basic")
     await make_token_account(alice.id, balance=1000.0)
@@ -139,9 +109,8 @@ async def test_transfer_basic(db: AsyncSession, seed_platform, make_agent, make_
     )
 
     assert isinstance(ledger, TokenLedger)
-    # fee = 100 * 0.02 = 2, burn = 2 * 0.50 = 1
+    # fee = 100 * 0.02 = 2
     assert float(ledger.fee_amount) == 2.0
-    assert float(ledger.burn_amount) == 1.0
 
     alice_bal = await token_service.get_balance(db, alice.id)
     bob_bal = await token_service.get_balance(db, bob.id)
@@ -153,12 +122,12 @@ async def test_transfer_basic(db: AsyncSession, seed_platform, make_agent, make_
 
 
 # ---------------------------------------------------------------------------
-# 7. Fee calculation precision
+# 6. Fee calculation precision
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_transfer_fee_calculation(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """fee = amount * 0.02, burn = fee * 0.50 — verified with odd amount (250 ARD)."""
+    """fee = amount * 0.02 — verified with amount of 250 USD."""
     sender, _ = await make_agent("fee_sender")
     receiver, _ = await make_agent("fee_receiver")
     await make_token_account(sender.id, balance=5000.0)
@@ -169,14 +138,12 @@ async def test_transfer_fee_calculation(db: AsyncSession, seed_platform, make_ag
     )
 
     expected_fee = Decimal("250") * Decimal("0.02")  # 5.0
-    expected_burn = expected_fee * Decimal("0.50")     # 2.5
 
     assert Decimal(str(ledger.fee_amount)) == expected_fee.quantize(Decimal("0.000001"))
-    assert Decimal(str(ledger.burn_amount)) == expected_burn.quantize(Decimal("0.000001"))
 
 
 # ---------------------------------------------------------------------------
-# 8. Transfer insufficient balance
+# 7. Transfer insufficient balance
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -192,7 +159,7 @@ async def test_transfer_insufficient_balance(db: AsyncSession, seed_platform, ma
 
 
 # ---------------------------------------------------------------------------
-# 9. Transfer idempotency
+# 8. Transfer idempotency
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -220,42 +187,15 @@ async def test_transfer_idempotency(db: AsyncSession, seed_platform, make_agent,
 
 
 # ---------------------------------------------------------------------------
-# 10. Transfer updates circulating supply (burn decreases it)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_transfer_updates_supply(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """Circulating supply decreases by the burn amount after a transfer."""
-    a, _ = await make_agent("supply_a")
-    b, _ = await make_agent("supply_b")
-    await make_token_account(a.id, balance=5000.0)
-    await make_token_account(b.id, balance=0.0)
-
-    supply_before = await token_service.get_supply(db)
-    circ_before = supply_before["circulating"]
-    burned_before = supply_before["total_burned"]
-
-    ledger = await token_service.transfer(
-        db, a.id, b.id, 1000, tx_type="sale",
-    )
-    burn = float(ledger.burn_amount)  # 1000 * 0.02 * 0.50 = 10
-
-    supply_after = await token_service.get_supply(db)
-    assert supply_after["circulating"] == circ_before - burn
-    assert supply_after["total_burned"] == burned_before + burn
-
-
-# ---------------------------------------------------------------------------
-# 11. Debit for purchase — full USD->ARD flow
+# 9. Debit for purchase — direct USD flow
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_debit_for_purchase(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """Full purchase: USD->ARD conversion, transfer with fee/burn, balance updates."""
+    """Full purchase: transfer USD with platform fee, balance updates."""
     buyer, _ = await make_agent("purchase_buyer")
     seller, _ = await make_agent("purchase_seller")
-    # $1 = 1000 ARD, buyer needs at least 1000 ARD
-    await make_token_account(buyer.id, balance=10000.0)
+    await make_token_account(buyer.id, balance=100.0)
     await make_token_account(seller.id, balance=0.0)
 
     result = await token_service.debit_for_purchase(
@@ -263,129 +203,41 @@ async def test_debit_for_purchase(db: AsyncSession, seed_platform, make_agent, m
         buyer_id=buyer.id,
         seller_id=seller.id,
         amount_usdc=1.0,
-        listing_quality=0.5,  # below threshold, no bonus
         tx_id=f"tx-{uuid.uuid4()}",
     )
 
-    # $1.00 / $0.001 = 1000 ARD
-    assert result["amount_axn"] == 1000.0
-    # fee = 1000 * 0.02 = 20
-    assert result["fee_axn"] == 20.0
-    # burn = 20 * 0.50 = 10
-    assert result["burn_axn"] == 10.0
-    # buyer balance = 10000 - 1000 = 9000
-    assert result["buyer_balance"] == 9000.0
-    # seller balance = 1000 - 20 (fee) = 980
-    assert result["seller_balance"] == 980.0
+    # $1.00 purchase
+    assert result["amount_usd"] == 1.0
+    # fee = 1.0 * 0.02 = 0.02
+    assert result["fee_usd"] == 0.02
+    # buyer balance = 100 - 1.0 = 99.0
+    assert result["buyer_balance"] == 99.0
+    # seller balance = 1.0 - 0.02 (fee) = 0.98
+    assert result["seller_balance"] == 0.98
 
 
 # ---------------------------------------------------------------------------
-# 12. Quality bonus awarded for quality >= 0.8
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_quality_bonus_awarded(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """When listing_quality >= 0.8, seller receives a quality bonus deposit."""
-    buyer, _ = await make_agent("qbonus_buyer")
-    seller, _ = await make_agent("qbonus_seller")
-    await make_token_account(buyer.id, balance=10000.0)
-    await make_token_account(seller.id, balance=0.0)
-
-    result = await token_service.debit_for_purchase(
-        db,
-        buyer_id=buyer.id,
-        seller_id=seller.id,
-        amount_usdc=1.0,
-        listing_quality=0.85,  # above 0.80 threshold
-        tx_id=f"tx-qb-{uuid.uuid4()}",
-    )
-
-    # Quality bonus = (amount_axn - fee) * quality_bonus_pct
-    # amount_axn = 1000, fee = 20, net = 980, bonus = 980 * 0.10 = 98
-    assert result["quality_bonus_axn"] > 0
-    expected_bonus = float(
-        Decimal("980") * Decimal(str(settings.token_quality_bonus_pct))
-    )
-    assert abs(result["quality_bonus_axn"] - expected_bonus) < 0.01
-
-    # Seller balance = net + bonus = 980 + 98 = 1078
-    assert result["seller_balance"] == pytest.approx(980.0 + expected_bonus, abs=0.01)
-
-
-# ---------------------------------------------------------------------------
-# 13. No quality bonus below threshold
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_quality_bonus_not_awarded(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """When listing_quality < 0.8, no quality bonus is applied."""
-    buyer, _ = await make_agent("nobonus_buyer")
-    seller, _ = await make_agent("nobonus_seller")
-    await make_token_account(buyer.id, balance=10000.0)
-    await make_token_account(seller.id, balance=0.0)
-
-    result = await token_service.debit_for_purchase(
-        db,
-        buyer_id=buyer.id,
-        seller_id=seller.id,
-        amount_usdc=1.0,
-        listing_quality=0.5,  # below 0.80 threshold
-        tx_id=f"tx-nb-{uuid.uuid4()}",
-    )
-
-    assert result["quality_bonus_axn"] == 0.0
-
-
-# ---------------------------------------------------------------------------
-# 14. Ledger hash-chain integrity
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_ledger_chain_integrity(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """After multiple transfers, verify_ledger_chain returns valid=True."""
-    a, _ = await make_agent("chain_a")
-    b, _ = await make_agent("chain_b")
-    await make_token_account(a.id, balance=5000.0)
-    await make_token_account(b.id, balance=0.0)
-
-    # Create a series of operations to build the hash chain
-    await token_service.deposit(db, a.id, 500, memo="chain deposit 1")
-    await token_service.transfer(db, a.id, b.id, 200, tx_type="sale")
-    await token_service.deposit(db, b.id, 300, memo="chain deposit 2")
-    await token_service.transfer(db, a.id, b.id, 100, tx_type="purchase")
-
-    chain = await token_service.verify_ledger_chain(db)
-
-    assert chain["valid"] is True
-    assert chain["total_entries"] >= 4
-    assert chain["errors"] == []
-
-
-# ---------------------------------------------------------------------------
-# 15. get_balance returns dict with all expected keys
+# 10. get_balance returns dict with all expected keys
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_get_balance_format(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """get_balance returns a dict with balance, tier, totals, and usd_equivalent."""
+    """get_balance returns a dict with balance and totals."""
     agent, _ = await make_agent("bal_fmt")
     await make_token_account(agent.id, balance=500.0)
 
     bal = await token_service.get_balance(db, agent.id)
 
     expected_keys = {
-        "balance", "tier", "total_earned", "total_spent",
-        "total_deposited", "total_fees_paid", "usd_equivalent",
+        "balance", "total_earned", "total_spent",
+        "total_deposited", "total_fees_paid",
     }
     assert set(bal.keys()) == expected_keys
     assert bal["balance"] == 500.0
-    assert bal["tier"] == "bronze"
-    # 500 ARD * $0.001 = $0.50
-    assert bal["usd_equivalent"] == pytest.approx(0.50, abs=0.001)
 
 
 # ---------------------------------------------------------------------------
-# 16. get_history pagination
+# 11. get_history pagination
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -419,45 +271,7 @@ async def test_get_history_pagination(db: AsyncSession, seed_platform, make_agen
 
 
 # ---------------------------------------------------------------------------
-# 17. Tier: bronze (low volume)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_recalculate_tier_bronze(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """Agent with volume < 10,000 ARD stays at bronze."""
-    agent, _ = await make_agent("tier_bronze")
-    acct = await make_token_account(agent.id, balance=100.0)
-
-    # Set low lifetime volume
-    acct.total_earned = Decimal("500")
-    acct.total_spent = Decimal("200")
-    await db.commit()
-
-    tier = await token_service.recalculate_tier(db, agent.id)
-    assert tier == "bronze"
-
-
-# ---------------------------------------------------------------------------
-# 18. Tier: silver (volume >= 10,000)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_recalculate_tier_silver(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """Agent with lifetime volume >= 10,000 ARD earns silver tier."""
-    agent, _ = await make_agent("tier_silver")
-    acct = await make_token_account(agent.id, balance=100.0)
-
-    # total_earned + total_spent = 6000 + 4000 = 10,000 (exactly silver threshold)
-    acct.total_earned = Decimal("6000")
-    acct.total_spent = Decimal("4000")
-    await db.commit()
-
-    tier = await token_service.recalculate_tier(db, agent.id)
-    assert tier == "silver"
-
-
-# ---------------------------------------------------------------------------
-# 19. Concurrent deposits do not corrupt balance
+# 12. Concurrent deposits do not corrupt balance
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -479,38 +293,29 @@ async def test_concurrent_deposits(db: AsyncSession, seed_platform, make_agent, 
 
 
 # ---------------------------------------------------------------------------
-# 20. get_supply returns correct totals after operations
+# 13. Platform fee accumulation
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_get_supply_stats(db: AsyncSession, seed_platform, make_agent, make_token_account):
-    """After deposits and transfers, supply stats reflect all changes accurately."""
-    a, _ = await make_agent("supply_stat_a")
-    b, _ = await make_agent("supply_stat_b")
+async def test_platform_fee_accumulation(db: AsyncSession, seed_platform, make_agent, make_token_account):
+    """After deposits and transfers, platform account accumulates fees."""
+    a, _ = await make_agent("fee_stat_a")
+    b, _ = await make_agent("fee_stat_b")
     await make_token_account(a.id, balance=0.0)
     await make_token_account(b.id, balance=0.0)
 
-    supply_init = await token_service.get_supply(db)
-    minted_init = supply_init["total_minted"]
-    circ_init = supply_init["circulating"]
-    burned_init = supply_init["total_burned"]
-
     # Deposit 2000 to agent A
-    await token_service.deposit(db, a.id, 2000, memo="supply test deposit")
+    await token_service.deposit(db, a.id, 2000, memo="fee test deposit")
 
-    # Transfer 1000 from A to B (fee=20, burn=10)
+    # Transfer 1000 from A to B (fee=20)
     ledger = await token_service.transfer(db, a.id, b.id, 1000, tx_type="sale")
-    burn_amount = float(ledger.burn_amount)
+    fee_amount = float(ledger.fee_amount)
+    assert fee_amount == 20.0  # 1000 * 0.02
 
-    supply_final = await token_service.get_supply(db)
+    # Verify A balance = 2000 - 1000 = 1000
+    a_bal = await token_service.get_balance(db, a.id)
+    assert a_bal["balance"] == 1000.0
 
-    # Minted increased by deposit amount
-    assert supply_final["total_minted"] == minted_init + 2000.0
-    # Circulating = initial + deposit - burn
-    assert supply_final["circulating"] == pytest.approx(circ_init + 2000.0 - burn_amount, abs=0.01)
-    # Burned increased by transfer's burn
-    assert supply_final["total_burned"] == pytest.approx(burned_init + burn_amount, abs=0.01)
-    # All expected keys present
-    assert "platform_balance" in supply_final
-    assert "last_updated" in supply_final
-    assert supply_final["last_updated"] is not None
+    # Verify B balance = 1000 - 20 fee = 980
+    b_bal = await token_service.get_balance(db, b.id)
+    assert b_bal["balance"] == 980.0

@@ -5,13 +5,11 @@ import { renderWithProviders } from "../../test/test-utils";
 import * as useHealthModule from "../../hooks/useHealth";
 import * as useReputationModule from "../../hooks/useReputation";
 import * as useLiveFeedModule from "../../hooks/useLiveFeed";
-import * as apiModule from "../../lib/api";
 
 // Mock the hooks
 vi.mock("../../hooks/useHealth");
 vi.mock("../../hooks/useReputation");
 vi.mock("../../hooks/useLiveFeed");
-vi.mock("../../lib/api");
 
 describe("DashboardPage", () => {
   const mockOnNavigate = vi.fn();
@@ -30,11 +28,6 @@ describe("DashboardPage", () => {
       { agent_name: "Agent Beta", composite_score: 0.87 },
       { agent_name: "Agent Gamma", composite_score: 0.76 },
     ],
-  };
-
-  const mockSupplyData = {
-    circulating: 5000000,
-    total_burned: 250000,
   };
 
   const mockLiveFeedEvents = [
@@ -67,8 +60,6 @@ describe("DashboardPage", () => {
     } as any);
 
     vi.spyOn(useLiveFeedModule, "useLiveFeed").mockReturnValue(mockLiveFeedEvents);
-
-    vi.spyOn(apiModule, "fetchTokenSupply").mockResolvedValue(mockSupplyData);
   });
 
   it("renders without crashing", () => {
@@ -94,18 +85,15 @@ describe("DashboardPage", () => {
   it("displays health stats correctly", () => {
     renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
-    // Check that all stat card labels are present
+    // Check that all stat card labels are present (4 cards, no ARD Circulating)
     expect(screen.getByText("Agents")).toBeInTheDocument();
     expect(screen.getByText("Listings")).toBeInTheDocument();
     expect(screen.getByText("Transactions")).toBeInTheDocument();
-    expect(screen.getByText("ARD Circulating")).toBeInTheDocument();
     expect(screen.getByText("Status")).toBeInTheDocument();
 
     // Check string values (Status section)
     expect(screen.getByText("Healthy")).toBeInTheDocument();
     expect(screen.getByText("v1.2.3")).toBeInTheDocument();
-
-    // AnimatedCounter values are tested separately
   });
 
   it("shows live feed section with events", () => {
@@ -121,31 +109,6 @@ describe("DashboardPage", () => {
     renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
     expect(screen.getByText("Top Agents")).toBeInTheDocument();
-  });
-
-  it("formats ARD token supply correctly", async () => {
-    renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("ARD Circulating")).toBeInTheDocument();
-      expect(screen.getByText("5.00M ARD")).toBeInTheDocument();
-      expect(screen.getByText("250.0K ARD burned")).toBeInTheDocument();
-    });
-  });
-
-  it("displays ARD formatting for various amounts", async () => {
-    // Test millions
-    vi.spyOn(apiModule, "fetchTokenSupply").mockResolvedValue({
-      circulating: 2500000,
-      total_burned: 500,
-    });
-
-    renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("2.50M ARD")).toBeInTheDocument();
-      expect(screen.getByText("500.00 ARD burned")).toBeInTheDocument();
-    }, { timeout: 3000 });
   });
 
   it("renders QuickActions component", () => {
@@ -268,14 +231,6 @@ describe("DashboardPage", () => {
     expect(screen.getByText("transaction completed")).toBeInTheDocument();
   });
 
-  it("shows em-dash when token supply is not available", () => {
-    vi.spyOn(apiModule, "fetchTokenSupply").mockResolvedValue(null as any);
-
-    renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
-
-    expect(screen.getByText("ARD Circulating")).toBeInTheDocument();
-  });
-
   it("applies fade-in animation to main container", () => {
     const { container } = renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
@@ -323,14 +278,13 @@ describe("DashboardPage", () => {
     expect(grid).toBeTruthy();
   });
 
-  it("displays all five stat cards in the grid", () => {
+  it("displays all four stat cards in the grid", () => {
     renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
 
-    // All 5 stat card labels should be present
+    // All 4 stat card labels should be present (no ARD Circulating)
     expect(screen.getByText("Agents")).toBeInTheDocument();
     expect(screen.getByText("Listings")).toBeInTheDocument();
     expect(screen.getByText("Transactions")).toBeInTheDocument();
-    expect(screen.getByText("ARD Circulating")).toBeInTheDocument();
     expect(screen.getByText("Status")).toBeInTheDocument();
   });
 });

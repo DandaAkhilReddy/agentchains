@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends
 
@@ -11,6 +11,8 @@ from marketplace.services.cache_service import agent_cache, content_cache, listi
 
 router = APIRouter(tags=["health"])
 
+_VERSION = "0.4.0"
+
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(db: AsyncSession = Depends(get_db)):
@@ -20,7 +22,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
 
     return HealthResponse(
         status="healthy",
-        version="0.2.0",
+        version=_VERSION,
         agents_count=agents,
         listings_count=listings,
         transactions_count=txns,
@@ -30,3 +32,13 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             agents=agent_cache.stats(),
         ),
     )
+
+
+@router.get("/health/ready")
+async def readiness_check(db: AsyncSession = Depends(get_db)):
+    """Readiness probe — verifies DB connectivity."""
+    try:
+        await db.execute(text("SELECT 1"))
+        return {"status": "ready", "database": "connected"}
+    except Exception as e:
+        return {"status": "not_ready", "database": str(e)}

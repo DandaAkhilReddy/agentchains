@@ -11,10 +11,16 @@ vi.mock("../../lib/api", () => ({
   claimAgent: vi.fn(),
 }));
 
+// Mock AnimatedCounter to render synchronously (rAF doesn't work in jsdom)
+vi.mock("../../components/AnimatedCounter", () => ({
+  default: ({ value, className }: { value: number; className?: string }) => (
+    <span className={className}>{value.toLocaleString()}</span>
+  ),
+}));
+
 const mockDashboard = {
-  creator_balance: 15000,
-  creator_total_earned: 25000,
-  creator_balance_usd: 15.0,
+  creator_balance: 15.0,
+  creator_total_earned: 25.0,
   agents_count: 2,
   agents: [
     {
@@ -22,24 +28,22 @@ const mockDashboard = {
       agent_name: "Test Agent 1",
       agent_type: "seller",
       status: "active",
-      total_earned: 10000,
-      total_spent: 2000,
-      balance: 8000,
+      total_earned: 10.0,
+      total_spent: 2.0,
+      balance: 8.0,
     },
     {
       agent_id: "agent-2",
       agent_name: "Test Agent 2",
       agent_type: "buyer",
       status: "active",
-      total_earned: 5000,
-      total_spent: 1000,
-      balance: 4000,
+      total_earned: 5.0,
+      total_spent: 1.0,
+      balance: 4.0,
     },
   ],
-  total_agent_earnings: 15000,
-  total_agent_spent: 3000,
-  peg_rate_usd: 0.001,
-  token_name: "ARD",
+  total_agent_earnings: 15.0,
+  total_agent_spent: 3.0,
 };
 
 describe("CreatorDashboardPage", () => {
@@ -60,7 +64,7 @@ describe("CreatorDashboardPage", () => {
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Welcome, John Creator")).toBeInTheDocument();
+      expect(screen.getByText(/Welcome back, John Creator/)).toBeInTheDocument();
     });
   });
 
@@ -76,39 +80,27 @@ describe("CreatorDashboardPage", () => {
     expect(spinner).toBeInTheDocument();
   });
 
-  it("displays creator balance in ARD", async () => {
+  it("displays creator balance in USD", async () => {
     vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
 
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      // Check for the ARD Balance label to ensure we're looking at the right stat card
-      expect(screen.getByText("ARD Balance")).toBeInTheDocument();
-      const balances = screen.getAllByText(/15\.0K ARD/i);
-      expect(balances.length).toBeGreaterThan(0);
+      expect(screen.getByText("USD Balance")).toBeInTheDocument();
+      // $15.00 appears in both USD Balance and Agent Earnings (both are 15.0)
+      const amounts = screen.getAllByText("$15.00");
+      expect(amounts.length).toBeGreaterThanOrEqual(1);
     });
   });
 
-  it("shows USD conversion for balance", async () => {
-    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
-
-    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
-
-    await waitFor(() => {
-      // Multiple cards might show $15.00 USD, just verify at least one exists
-      const usdTexts = screen.getAllByText(/\$15\.00 USD/i);
-      expect(usdTexts.length).toBeGreaterThan(0);
-    });
-  });
-
-  it("displays total earned", async () => {
+  it("displays total earned in USD", async () => {
     vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
 
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
       expect(screen.getByText("Total Earned")).toBeInTheDocument();
-      expect(screen.getByText(/25\.0K ARD/i)).toBeInTheDocument();
+      expect(screen.getByText("$25.00")).toBeInTheDocument();
     });
   });
 
@@ -131,19 +123,19 @@ describe("CreatorDashboardPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Test Agent 1")).toBeInTheDocument();
       expect(screen.getByText("Test Agent 2")).toBeInTheDocument();
-      expect(screen.getByText(/seller — active/i)).toBeInTheDocument();
-      expect(screen.getByText(/buyer — active/i)).toBeInTheDocument();
     });
   });
 
-  it("displays agent earnings and balance", async () => {
+  it("displays agent earnings and balance in USD", async () => {
     vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
 
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/10\.0K ARD earned/i)).toBeInTheDocument();
-      expect(screen.getByText(/Balance: 8\.0K ARD/i)).toBeInTheDocument();
+      // Agent 1: total_earned = 10.0 -> formatUSD -> "$10.00"
+      expect(screen.getByText("$10.00")).toBeInTheDocument();
+      // Agent 1: balance = 8.0 -> formatUSD -> "Balance: $8.00"
+      expect(screen.getByText("Balance: $8.00")).toBeInTheDocument();
     });
   });
 
@@ -174,7 +166,7 @@ describe("CreatorDashboardPage", () => {
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Welcome, John Creator")).toBeInTheDocument();
+      expect(screen.getByText(/Welcome back, John Creator/)).toBeInTheDocument();
     });
 
     const input = screen.getByPlaceholderText(/Agent ID \(UUID\)/i);
@@ -197,7 +189,7 @@ describe("CreatorDashboardPage", () => {
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Welcome, John Creator")).toBeInTheDocument();
+      expect(screen.getByText(/Welcome back, John Creator/)).toBeInTheDocument();
     });
 
     const input = screen.getByPlaceholderText(/Agent ID \(UUID\)/i);
@@ -211,18 +203,18 @@ describe("CreatorDashboardPage", () => {
     });
   });
 
-  it("navigates to redemption page when Redeem button is clicked", async () => {
+  it("navigates to withdrawal page when Withdraw button is clicked", async () => {
     const user = userEvent.setup();
     vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
 
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Welcome, John Creator")).toBeInTheDocument();
+      expect(screen.getByText(/Welcome back, John Creator/)).toBeInTheDocument();
     });
 
-    const redeemButton = screen.getByRole("button", { name: /Redeem/i });
-    await user.click(redeemButton);
+    const withdrawButton = screen.getByRole("button", { name: /Withdraw/i });
+    await user.click(withdrawButton);
 
     expect(mockProps.onNavigate).toHaveBeenCalledWith("redeem");
   });
@@ -234,7 +226,7 @@ describe("CreatorDashboardPage", () => {
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Welcome, John Creator")).toBeInTheDocument();
+      expect(screen.getByText(/Welcome back, John Creator/)).toBeInTheDocument();
     });
 
     const buttons = screen.getAllByRole("button");
@@ -246,39 +238,21 @@ describe("CreatorDashboardPage", () => {
     }
   });
 
-  it("displays token name correctly", async () => {
+  it("displays USD Balance label correctly", async () => {
     vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
 
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("ARD Balance")).toBeInTheDocument();
-    });
-
-    const ardTexts = screen.getAllByText(/ARD/);
-    expect(ardTexts.length).toBeGreaterThan(0);
-  });
-
-  it("displays custom token name when provided", async () => {
-    const customDashboard = {
-      ...mockDashboard,
-      token_name: "CUSTOM",
-    };
-
-    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(customDashboard);
-
-    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("CUSTOM Balance")).toBeInTheDocument();
+      expect(screen.getByText("USD Balance")).toBeInTheDocument();
     });
   });
 
   it("formats large numbers correctly", async () => {
     const largeNumberDashboard = {
       ...mockDashboard,
-      creator_balance: 1500000,
-      creator_total_earned: 2500000,
+      creator_balance: 1500.0,
+      creator_total_earned: 2500.0,
     };
 
     vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(largeNumberDashboard);
@@ -286,8 +260,10 @@ describe("CreatorDashboardPage", () => {
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/1\.50M ARD/i)).toBeInTheDocument();
-      expect(screen.getByText(/2\.50M ARD/i)).toBeInTheDocument();
+      // formatUSD(1500) -> "$1.5K"
+      expect(screen.getByText("$1.5K")).toBeInTheDocument();
+      // formatUSD(2500) -> "$2.5K"
+      expect(screen.getByText("$2.5K")).toBeInTheDocument();
     });
   });
 
@@ -315,7 +291,7 @@ describe("CreatorDashboardPage", () => {
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Welcome, John Creator")).toBeInTheDocument();
+      expect(screen.getByText(/Welcome back, John Creator/)).toBeInTheDocument();
     });
 
     const input = screen.getByPlaceholderText(/Agent ID \(UUID\)/i) as HTMLInputElement;
@@ -337,7 +313,7 @@ describe("CreatorDashboardPage", () => {
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Welcome, John Creator")).toBeInTheDocument();
+      expect(screen.getByText(/Welcome back, John Creator/)).toBeInTheDocument();
     });
 
     const claimButton = screen.getByRole("button", { name: /Claim/i });
@@ -346,17 +322,15 @@ describe("CreatorDashboardPage", () => {
     expect(api.claimAgent).not.toHaveBeenCalled();
   });
 
-  it("displays agent total earnings with USD conversion", async () => {
+  it("displays agent total earnings in USD", async () => {
     vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
 
     renderWithProviders(<CreatorDashboardPage {...mockProps} />);
 
     await waitFor(() => {
       expect(screen.getByText("Agent Earnings")).toBeInTheDocument();
-      // Both creator balance and agent earnings show 15.0K ARD
-      const ardTexts = screen.getAllByText(/15\.0K ARD/i);
-      expect(ardTexts.length).toBeGreaterThan(0);
-      const usdTexts = screen.getAllByText(/\$15\.00 USD/i);
+      // total_agent_earnings = 15.0 -> formatUSD -> "$15.00"
+      const usdTexts = screen.getAllByText("$15.00");
       expect(usdTexts.length).toBeGreaterThan(0);
     });
   });

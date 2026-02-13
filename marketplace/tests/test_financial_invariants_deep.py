@@ -1,7 +1,7 @@
-"""Deep financial invariant tests for the ARD token economy.
+"""Deep financial invariant tests for the USD billing model.
 
-15 tests verifying that financial rules (fee, burn, quality bonus, peg,
-double-entry, deposit/redemption lifecycle) hold across multi-step flows.
+10 tests verifying that financial rules (fee, double-entry,
+deposit/redemption lifecycle) hold across multi-step flows.
 
 All monetary assertions use ``Decimal`` to avoid floating-point drift.
 """
@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
-from marketplace.models.token_account import TokenAccount, TokenLedger, TokenSupply
+from marketplace.models.token_account import TokenAccount, TokenLedger
 from marketplace.models.redemption import RedemptionRequest
 from marketplace.services import token_service, deposit_service, redemption_service
 
@@ -64,17 +64,15 @@ async def _setup_purchase(
     }
 
 
-async def _do_purchase(db: AsyncSession, ctx: dict, quality_override: float | None = None) -> dict:
+async def _do_purchase(db: AsyncSession, ctx: dict) -> dict:
     """Execute debit_for_purchase using the standard context."""
     listing = ctx["listing"]
-    quality = quality_override if quality_override is not None else float(listing.quality_score)
     tx_id = f"tx-{_new_id()}"
     result = await token_service.debit_for_purchase(
         db,
         buyer_id=ctx["buyer"].id,
         seller_id=ctx["seller"].id,
         amount_usdc=float(listing.price_usdc),
-        listing_quality=quality,
         tx_id=tx_id,
     )
     result["tx_id"] = tx_id
@@ -86,7 +84,7 @@ async def _make_creator_with_balance(
     make_creator,
     balance: float = 50_000.0,
 ) -> tuple:
-    """Create a Creator + TokenAccount with the given ARD balance."""
+    """Create a Creator + TokenAccount with the given USD balance."""
     creator, token = await make_creator()
     account = TokenAccount(
         id=_new_id(),
@@ -107,59 +105,38 @@ async def _make_creator_with_balance(
 async def test_purchase_fee_is_2_percent(
     db: AsyncSession, seed_platform, make_agent, make_token_account, make_listing,
 ):
-    """fee_amount = price_in_ard * settings.token_platform_fee_pct (0.02)."""
+    """fee_amount = price_usd * settings.platform_fee_pct (0.02)."""
     ctx = await _setup_purchase(
         db, seed_platform, make_agent, make_token_account, make_listing,
         price_usdc=5.0, quality_score=0.50,
     )
     result = await _do_purchase(db, ctx)
 
-    price_ard = _d(Decimal(str(ctx["listing"].price_usdc)) / _d(settings.token_peg_usd))
-    expected_fee = _d(price_ard * _d(settings.token_platform_fee_pct))
+    price_usd = _d(ctx["listing"].price_usdc)
+    expected_fee = _d(price_usd * _d(settings.platform_fee_pct))
 
-    assert _d(result["fee_axn"]) == expected_fee, (
-        f"Fee mismatch: got {result['fee_axn']}, expected {expected_fee}"
+    assert _d(result["fee_usd"]) == expected_fee, (
+        f"Fee mismatch: got {result['fee_usd']}, expected {expected_fee}"
     )
 
 
 # ===========================================================================
-# 2. test_burn_is_50_percent_of_fee
-# ===========================================================================
-
-async def test_burn_is_50_percent_of_fee(
-    db: AsyncSession, seed_platform, make_agent, make_token_account, make_listing,
-):
-    """burn_amount = fee * settings.token_burn_pct (0.50)."""
-    ctx = await _setup_purchase(
-        db, seed_platform, make_agent, make_token_account, make_listing,
-        price_usdc=5.0, quality_score=0.50,
-    )
-    result = await _do_purchase(db, ctx)
-
-    expected_burn = _d(Decimal(str(result["fee_axn"])) * _d(settings.token_burn_pct))
-
-    assert _d(result["burn_axn"]) == expected_burn, (
-        f"Burn mismatch: got {result['burn_axn']}, expected {expected_burn}"
-    )
-
-
-# ===========================================================================
-# 3. test_seller_receives_price_minus_fee
+# 2. test_seller_receives_price_minus_fee
 # ===========================================================================
 
 async def test_seller_receives_price_minus_fee(
     db: AsyncSession, seed_platform, make_agent, make_token_account, make_listing,
 ):
-    """Seller balance = price_in_ard - fee (no quality bonus when quality < 0.8)."""
+    """Seller balance = price_usd - fee (no quality bonus when quality < 0.8)."""
     ctx = await _setup_purchase(
         db, seed_platform, make_agent, make_token_account, make_listing,
         price_usdc=5.0, quality_score=0.50,
     )
     result = await _do_purchase(db, ctx)
 
-    price_ard = _d(Decimal(str(ctx["listing"].price_usdc)) / _d(settings.token_peg_usd))
-    fee = _d(price_ard * _d(settings.token_platform_fee_pct))
-    expected_seller_balance = _d(price_ard - fee)
+    price_usd = _d(ctx["listing"].price_usdc)
+    fee = _d(price_usd * _d(settings.platform_fee_pct))
+    expected_seller_balance = _d(price_usd - fee)
 
     assert _d(result["seller_balance"]) == expected_seller_balance, (
         f"Seller balance mismatch: got {result['seller_balance']}, expected {expected_seller_balance}"
@@ -167,13 +144,13 @@ async def test_seller_receives_price_minus_fee(
 
 
 # ===========================================================================
-# 4. test_buyer_debited_full_price
+# 3. test_buyer_debited_full_price
 # ===========================================================================
 
 async def test_buyer_debited_full_price(
     db: AsyncSession, seed_platform, make_agent, make_token_account, make_listing,
 ):
-    """Buyer balance decreases by the full price in ARD (before fee split)."""
+    """Buyer balance decreases by the full price in USD (before fee split)."""
     initial_balance = Decimal("50000")
     ctx = await _setup_purchase(
         db, seed_platform, make_agent, make_token_account, make_listing,
@@ -181,8 +158,8 @@ async def test_buyer_debited_full_price(
     )
     result = await _do_purchase(db, ctx)
 
-    price_ard = _d(Decimal("5.0") / _d(settings.token_peg_usd))
-    expected_buyer_balance = _d(initial_balance - price_ard)
+    price_usd = _d(Decimal("5.0"))
+    expected_buyer_balance = _d(initial_balance - price_usd)
 
     assert _d(result["buyer_balance"]) == expected_buyer_balance, (
         f"Buyer balance mismatch: got {result['buyer_balance']}, expected {expected_buyer_balance}"
@@ -190,61 +167,13 @@ async def test_buyer_debited_full_price(
 
 
 # ===========================================================================
-# 5. test_quality_bonus_awarded
-# ===========================================================================
-
-async def test_quality_bonus_awarded(
-    db: AsyncSession, seed_platform, make_agent, make_token_account, make_listing,
-):
-    """When quality >= 0.8, seller receives quality_bonus = (price - fee) * bonus_pct."""
-    ctx = await _setup_purchase(
-        db, seed_platform, make_agent, make_token_account, make_listing,
-        price_usdc=5.0, quality_score=0.90,
-    )
-    result = await _do_purchase(db, ctx, quality_override=0.90)
-
-    price_ard = _d(Decimal("5.0") / _d(settings.token_peg_usd))
-    fee = _d(price_ard * _d(settings.token_platform_fee_pct))
-    net = _d(price_ard - fee)
-    expected_bonus = _d(net * _d(settings.token_quality_bonus_pct))
-
-    assert _d(result["quality_bonus_axn"]) == expected_bonus, (
-        f"Quality bonus mismatch: got {result['quality_bonus_axn']}, expected {expected_bonus}"
-    )
-    assert _d(result["quality_bonus_axn"]) > Decimal("0")
-
-    # Seller balance = net + bonus
-    expected_seller = _d(net + expected_bonus)
-    assert _d(result["seller_balance"]) == expected_seller
-
-
-# ===========================================================================
-# 6. test_no_quality_bonus_below_threshold
-# ===========================================================================
-
-async def test_no_quality_bonus_below_threshold(
-    db: AsyncSession, seed_platform, make_agent, make_token_account, make_listing,
-):
-    """When quality < 0.8, quality_bonus_axn == 0."""
-    ctx = await _setup_purchase(
-        db, seed_platform, make_agent, make_token_account, make_listing,
-        price_usdc=5.0, quality_score=0.70,
-    )
-    result = await _do_purchase(db, ctx, quality_override=0.70)
-
-    assert _d(result["quality_bonus_axn"]) == Decimal("0.000000"), (
-        f"Expected zero quality bonus, got {result['quality_bonus_axn']}"
-    )
-
-
-# ===========================================================================
-# 7. test_signup_bonus_equals_settings
+# 4. test_signup_bonus_equals_settings
 # ===========================================================================
 
 async def test_signup_bonus_equals_settings(
     db: AsyncSession, seed_platform, make_agent, make_token_account,
 ):
-    """Signup bonus credits exactly settings.token_signup_bonus ARD."""
+    """Signup bonus credits exactly settings.signup_bonus_usd."""
     agent, _ = await make_agent("signup_invariant")
     await make_token_account(agent.id, balance=0)
 
@@ -253,28 +182,28 @@ async def test_signup_bonus_equals_settings(
     assert result["status"] == "completed"
 
     bal = await token_service.get_balance(db, agent.id)
-    expected = _d(settings.token_signup_bonus)
+    expected = _d(settings.signup_bonus_usd)
     assert _d(bal["balance"]) == expected, (
         f"Signup bonus mismatch: got {bal['balance']}, expected {expected}"
     )
 
 
 # ===========================================================================
-# 8. test_deposit_confirm_exact_ard
+# 7. test_deposit_confirm_exact_usd
 # ===========================================================================
 
-async def test_deposit_confirm_exact_ard(
+async def test_deposit_confirm_exact_usd(
     db: AsyncSession, seed_platform, make_agent, make_token_account,
 ):
-    """Deposit $10 at $0.001/ARD = exactly 10000.000000 ARD."""
+    """Deposit $10 credits exactly $10.000000 USD."""
     agent, _ = await make_agent("dep_exact")
     await make_token_account(agent.id, balance=0)
 
-    dep = await deposit_service.create_deposit(db, agent.id, 10.0, "USD")
+    dep = await deposit_service.create_deposit(db, agent.id, 10.0)
     await deposit_service.confirm_deposit(db, dep["id"])
 
     bal = await token_service.get_balance(db, agent.id)
-    expected = _d(Decimal("10") / _d(settings.token_peg_usd))  # 10 / 0.001 = 10000
+    expected = _d(Decimal("10"))
 
     assert _d(bal["balance"]) == expected, (
         f"Deposit balance mismatch: got {bal['balance']}, expected {expected}"
@@ -282,13 +211,13 @@ async def test_deposit_confirm_exact_ard(
 
 
 # ===========================================================================
-# 9. test_redemption_cancel_exact_refund
+# 8. test_redemption_cancel_exact_refund
 # ===========================================================================
 
 async def test_redemption_cancel_exact_refund(
     db: AsyncSession, seed_platform, make_creator,
 ):
-    """Cancelling a pending redemption restores the exact ARD amount."""
+    """Cancelling a pending redemption restores the exact USD amount."""
     initial_balance = Decimal("50000")
     creator, _, acct = await _make_creator_with_balance(db, make_creator, float(initial_balance))
 
@@ -316,13 +245,13 @@ async def test_redemption_cancel_exact_refund(
 
 
 # ===========================================================================
-# 10. test_admin_reject_exact_refund
+# 9. test_admin_reject_exact_refund
 # ===========================================================================
 
 async def test_admin_reject_exact_refund(
     db: AsyncSession, seed_platform, make_creator,
 ):
-    """Admin reject restores the exact ARD amount to the creator."""
+    """Admin reject restores the exact USD amount to the creator."""
     initial_balance = Decimal("50000")
     creator, _, acct = await _make_creator_with_balance(db, make_creator, float(initial_balance))
 
@@ -346,37 +275,14 @@ async def test_admin_reject_exact_refund(
 
 
 # ===========================================================================
-# 11. test_exchange_rate_decimal_precision
-# ===========================================================================
-
-async def test_exchange_rate_decimal_precision(
-    db: AsyncSession, seed_platform, make_agent, make_token_account,
-):
-    """No float drift in INR conversion: 840 INR / 0.084 = exactly 10000 ARD."""
-    agent, _ = await make_agent("inr_precision")
-    await make_token_account(agent.id, balance=0)
-
-    dep = await deposit_service.create_deposit(db, agent.id, 840.0, "INR")
-    await deposit_service.confirm_deposit(db, dep["id"])
-
-    bal = await token_service.get_balance(db, agent.id)
-
-    # 840 / 0.084 = 10000 exactly (Decimal division, no float)
-    expected = _d(Decimal("840") / Decimal("0.084000"))
-    assert _d(bal["balance"]) == expected, (
-        f"INR conversion drift: got {bal['balance']}, expected {expected}"
-    )
-
-
-# ===========================================================================
-# 12. test_ledger_debits_equal_credits
+# 10. test_ledger_debits_equal_credits
 # ===========================================================================
 
 async def test_ledger_debits_equal_credits(
     db: AsyncSession, seed_platform, make_agent, make_token_account, make_listing,
 ):
     """Double-entry invariant: sum of from_account entries = sum of to_account entries
-    (within the purchase transfer flow, excluding mint/deposit entries)."""
+    (within the purchase transfer flow, excluding deposit entries)."""
     ctx = await _setup_purchase(
         db, seed_platform, make_agent, make_token_account, make_listing,
         price_usdc=5.0, quality_score=0.50,
@@ -385,7 +291,7 @@ async def test_ledger_debits_equal_credits(
 
     # Query all ledger entries that are NOT deposits (i.e., have a from_account_id)
     # For transfer-type entries: the total amount debited should equal
-    # total credited + total burned
+    # total credited + total fee to platform
     transfer_entries = (await db.execute(
         select(TokenLedger).where(
             TokenLedger.from_account_id.isnot(None),
@@ -399,27 +305,26 @@ async def test_ledger_debits_equal_credits(
         for e in transfer_entries
     )
     total_platform_credit = sum(
-        Decimal(str(e.fee_amount)) - Decimal(str(e.burn_amount))
+        Decimal(str(e.fee_amount))
         for e in transfer_entries
     )
-    total_burned = sum(Decimal(str(e.burn_amount)) for e in transfer_entries)
 
-    # Invariant: debited = credited_to_receiver + platform_credit + burned
-    reconstructed = _d(total_credited_to_receiver + total_platform_credit + total_burned)
+    # Invariant: debited = credited_to_receiver + platform_credit
+    reconstructed = _d(total_credited_to_receiver + total_platform_credit)
     assert _d(total_debited) == reconstructed, (
         f"Double-entry violation: debited={total_debited}, "
-        f"receiver={total_credited_to_receiver} + platform={total_platform_credit} + burned={total_burned} = {reconstructed}"
+        f"receiver={total_credited_to_receiver} + platform={total_platform_credit} = {reconstructed}"
     )
 
 
 # ===========================================================================
-# 13. test_platform_treasury_grows_by_fee_minus_burn
+# 11. test_platform_treasury_grows_by_fee
 # ===========================================================================
 
-async def test_platform_treasury_grows_by_fee_minus_burn(
+async def test_platform_treasury_grows_by_fee(
     db: AsyncSession, seed_platform, make_agent, make_token_account, make_listing,
 ):
-    """Platform treasury balance increases by exactly (fee - burn)."""
+    """Platform treasury balance increases by exactly the fee."""
     # Record initial platform balance
     platform_acct = await db.execute(
         select(TokenAccount).where(
@@ -435,9 +340,7 @@ async def test_platform_treasury_grows_by_fee_minus_burn(
     )
     result = await _do_purchase(db, ctx)
 
-    fee = _d(result["fee_axn"])
-    burn = _d(result["burn_axn"])
-    expected_platform_credit = _d(fee - burn)
+    fee = _d(result["fee_usd"])
 
     # Refresh platform balance
     platform_acct_after = await db.execute(
@@ -449,13 +352,13 @@ async def test_platform_treasury_grows_by_fee_minus_burn(
     platform_after = Decimal(str(platform_acct_after.scalar_one().balance))
 
     actual_growth = _d(platform_after - platform_before)
-    assert actual_growth == expected_platform_credit, (
-        f"Platform treasury growth mismatch: got {actual_growth}, expected {expected_platform_credit}"
+    assert actual_growth == fee, (
+        f"Platform treasury growth mismatch: got {actual_growth}, expected {fee}"
     )
 
 
 # ===========================================================================
-# 14. test_multi_purchase_balance_consistency
+# 12. test_multi_purchase_balance_consistency
 # ===========================================================================
 
 async def test_multi_purchase_balance_consistency(
@@ -471,7 +374,6 @@ async def test_multi_purchase_balance_consistency(
     cumulative_buyer_spent = Decimal("0")
     cumulative_seller_received = Decimal("0")
     cumulative_platform = Decimal("0")
-    cumulative_burn = Decimal("0")
 
     prices_usdc = [1.0, 2.5, 7.0]
 
@@ -483,19 +385,16 @@ async def test_multi_purchase_balance_consistency(
             buyer_id=buyer.id,
             seller_id=seller.id,
             amount_usdc=price_usdc,
-            listing_quality=0.50,  # below quality threshold, no bonus
             tx_id=tx_id,
         )
 
-        price_ard = _d(Decimal(str(price_usdc)) / _d(settings.token_peg_usd))
-        fee = _d(price_ard * _d(settings.token_platform_fee_pct))
-        burn = _d(fee * _d(settings.token_burn_pct))
-        net = _d(price_ard - fee)
+        price_usd = _d(Decimal(str(price_usdc)))
+        fee = _d(price_usd * _d(settings.platform_fee_pct))
+        net = _d(price_usd - fee)
 
-        cumulative_buyer_spent += price_ard
+        cumulative_buyer_spent += price_usd
         cumulative_seller_received += net
-        cumulative_platform += _d(fee - burn)
-        cumulative_burn += burn
+        cumulative_platform += fee
 
     # Verify buyer balance
     buyer_bal = await token_service.get_balance(db, buyer.id)
@@ -523,21 +422,19 @@ async def test_multi_purchase_balance_consistency(
 
 
 # ===========================================================================
-# 15. test_zero_balance_after_spending_all
+# 13. test_zero_balance_after_spending_all
 # ===========================================================================
 
 async def test_zero_balance_after_spending_all(
     db: AsyncSession, seed_platform, make_agent, make_token_account, make_listing,
 ):
-    """Spending exact balance leaves 0.000000 ARD (not negative)."""
-    # Set buyer balance to exactly the price in ARD for a $1 purchase:
-    # $1 / $0.001 = 1000 ARD
+    """Spending exact balance leaves 0.000000 USD (not negative)."""
     price_usdc = 1.0
-    exact_ard = _d(Decimal(str(price_usdc)) / _d(settings.token_peg_usd))  # 1000.000000
+    exact_usd = _d(Decimal(str(price_usdc)))  # 1.000000
 
     buyer, _ = await make_agent("zero_buyer")
     seller, _ = await make_agent("zero_seller")
-    buyer_acct = await make_token_account(buyer.id, balance=float(exact_ard))
+    buyer_acct = await make_token_account(buyer.id, balance=float(exact_usd))
     seller_acct = await make_token_account(seller.id, balance=0)
 
     listing = await make_listing(seller.id, price_usdc=price_usdc, quality_score=0.50)
@@ -548,7 +445,6 @@ async def test_zero_balance_after_spending_all(
         buyer_id=buyer.id,
         seller_id=seller.id,
         amount_usdc=price_usdc,
-        listing_quality=0.50,
         tx_id=tx_id,
     )
 

@@ -37,7 +37,7 @@ async def _register_creator(db: AsyncSession, email: str, name: str = "SM Tester
 
 
 async def _fund_creator(db: AsyncSession, creator_id: str, amount: float):
-    """Set a creator's token-account balance to *amount* ARD."""
+    """Set a creator's token-account balance to *amount* USD."""
     from marketplace.models.token_account import TokenAccount
     result = await db.execute(
         select(TokenAccount).where(TokenAccount.creator_id == creator_id)
@@ -284,7 +284,7 @@ async def test_redemption_api_credits_auto_completes(
 
     assert result["status"] == "completed"
     assert result["redemption_type"] == "api_credits"
-    assert result["payout_ref"] == "api_credits_500"
+    assert result["payout_ref"] == "api_credits_500000"
 
 
 async def test_redemption_gift_card_to_processing(

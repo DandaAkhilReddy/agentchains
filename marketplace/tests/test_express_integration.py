@@ -1,7 +1,7 @@
 """Integration tests for the express buy flow (20 tests).
 
 Covers the full purchase lifecycle: token payment, fiat/simulated payment,
-balance mutations, fee/burn calculations, ledger entries, idempotency,
+balance mutations, fee calculations, ledger entries, idempotency,
 error cases, listing stat updates, and response format validation.
 
 Uses the shared conftest fixtures (client, make_agent, make_listing,
@@ -15,7 +15,7 @@ import pytest
 
 from marketplace.config import settings
 from marketplace.core.auth import create_access_token
-from marketplace.models.token_account import TokenAccount, TokenLedger, TokenSupply
+from marketplace.models.token_account import TokenAccount, TokenLedger
 from marketplace.models.transaction import Transaction
 from marketplace.models.listing import DataListing
 from marketplace.tests.conftest import TestSession, _new_id
@@ -32,7 +32,7 @@ SAMPLE_CONTENT = b'{"data": "express integration test payload"}'
 
 
 async def _seed_platform():
-    """Ensure platform treasury account and TokenSupply singleton exist."""
+    """Ensure platform treasury account exists."""
     async with TestSession() as db:
         result = await db.execute(
             select(TokenAccount).where(TokenAccount.agent_id.is_(None))
@@ -40,9 +40,8 @@ async def _seed_platform():
         if result.scalar_one_or_none() is None:
             db.add(TokenAccount(
                 id=_new_id(), agent_id=None,
-                balance=Decimal("0"), tier="platform",
+                balance=Decimal("0"),
             ))
-            db.add(TokenSupply(id=1))
             await db.commit()
 
 
@@ -161,7 +160,7 @@ async def test_express_buy_creates_transaction(mock_cdn, client, make_agent, mak
 
 @patch(CDN_PATCH, new_callable=AsyncMock)
 async def test_express_buy_debits_buyer(mock_cdn, client, make_agent, make_listing, make_token_account):
-    """Buyer balance decreases by the total amount (price converted to ARD)."""
+    """Buyer balance decreases by the total USD cost."""
     mock_cdn.return_value = SAMPLE_CONTENT
     await _seed_platform()
 
@@ -179,9 +178,9 @@ async def test_express_buy_debits_buyer(mock_cdn, client, make_agent, make_listi
     )
 
     assert resp.status_code == 200
-    amount_axn = resp.json()["amount_axn"]
+    cost_usd = resp.json()["cost_usd"]
     new_balance = await _get_token_balance(buyer.id)
-    expected = Decimal(str(initial_balance)) - Decimal(str(amount_axn))
+    expected = Decimal(str(initial_balance)) - Decimal(str(cost_usd))
     assert abs(float(new_balance) - float(expected)) < 0.01
 
 
@@ -218,7 +217,7 @@ async def test_express_buy_credits_seller(mock_cdn, client, make_agent, make_lis
 
 @patch(CDN_PATCH, new_callable=AsyncMock)
 async def test_express_buy_fee_calculated(mock_cdn, client, make_agent, make_listing, make_token_account):
-    """Platform fee of 2% is correctly applied to the ARD transfer."""
+    """Platform fee of 2% is correctly applied to the USD transfer."""
     mock_cdn.return_value = SAMPLE_CONTENT
     await _seed_platform()
 
@@ -242,27 +241,27 @@ async def test_express_buy_fee_calculated(mock_cdn, client, make_agent, make_lis
 
     amount = Decimal(str(ledger.amount))
     fee = Decimal(str(ledger.fee_amount))
-    expected_fee = (amount * Decimal(str(settings.token_platform_fee_pct))).quantize(
+    expected_fee = (amount * Decimal(str(settings.platform_fee_pct))).quantize(
         Decimal("0.000001")
     )
     assert abs(fee - expected_fee) < Decimal("0.001")
 
 
 # ---------------------------------------------------------------------------
-# 6. test_express_buy_burn_amount
+# 6. test_express_buy_fee_deducted
 # ---------------------------------------------------------------------------
 
 @patch(CDN_PATCH, new_callable=AsyncMock)
-async def test_express_buy_burn_amount(mock_cdn, client, make_agent, make_listing, make_token_account):
-    """50% of the platform fee is burned."""
+async def test_express_buy_fee_deducted(mock_cdn, client, make_agent, make_listing, make_token_account):
+    """Platform fee is deducted from the purchase."""
     mock_cdn.return_value = SAMPLE_CONTENT
     await _seed_platform()
 
-    seller, _ = await make_agent(name="seller-burn")
+    seller, _ = await make_agent(name="seller-fee2")
     await make_token_account(seller.id, balance=0)
     listing = await make_listing(seller.id, price_usdc=2.0, quality_score=0.5)
 
-    buyer, buyer_jwt = await make_agent(name="buyer-burn")
+    buyer, buyer_jwt = await make_agent(name="buyer-fee2")
     await make_token_account(buyer.id, balance=100000)
 
     resp = await client.get(
@@ -276,11 +275,7 @@ async def test_express_buy_burn_amount(mock_cdn, client, make_agent, make_listin
     assert ledger is not None
 
     fee = Decimal(str(ledger.fee_amount))
-    burn = Decimal(str(ledger.burn_amount))
-    expected_burn = (fee * Decimal(str(settings.token_burn_pct))).quantize(
-        Decimal("0.000001")
-    )
-    assert abs(burn - expected_burn) < Decimal("0.001")
+    assert fee > 0
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +332,7 @@ async def test_express_buy_fiat_mode(mock_cdn, client, make_agent, make_listing,
     assert resp.status_code == 200
     body = resp.json()
     assert body["payment_method"] == "simulated"
-    assert body["amount_axn"] is None  # no token transfer for fiat
+    assert body["cost_usd"] is None  # no balance transfer for fiat
     assert body["content"] == SAMPLE_CONTENT.decode("utf-8")
 
 
@@ -546,14 +541,14 @@ async def test_express_buy_idempotency(mock_cdn, client, make_agent, make_listin
         headers={"Authorization": f"Bearer {buyer_jwt}"},
     )
     assert resp1.status_code == 200
-    amount1 = Decimal(str(resp1.json()["amount_axn"]))
+    amount1 = Decimal(str(resp1.json()["cost_usd"]))
 
     resp2 = await client.get(
         f"/api/v1/express/{listing.id}?payment_method=token",
         headers={"Authorization": f"Bearer {buyer_jwt}"},
     )
     assert resp2.status_code == 200
-    amount2 = Decimal(str(resp2.json()["amount_axn"]))
+    amount2 = Decimal(str(resp2.json()["cost_usd"]))
 
     balance_after = await _get_token_balance(buyer.id)
     total_debited = balance_before - balance_after
@@ -595,45 +590,7 @@ async def test_express_buy_zero_price_listing(mock_cdn, client, make_agent, make
 
 
 # ---------------------------------------------------------------------------
-# 18. test_express_buy_quality_bonus
-# ---------------------------------------------------------------------------
-
-@patch(CDN_PATCH, new_callable=AsyncMock)
-async def test_express_buy_quality_bonus(mock_cdn, client, make_agent, make_listing, make_token_account):
-    """High-quality listing (>= threshold) earns the seller a quality bonus."""
-    mock_cdn.return_value = SAMPLE_CONTENT
-    await _seed_platform()
-
-    seller, _ = await make_agent(name="seller-bonus")
-    await make_token_account(seller.id, balance=0)
-    # Quality score above the threshold (0.80)
-    listing = await make_listing(seller.id, price_usdc=1.0, quality_score=0.95)
-
-    buyer, buyer_jwt = await make_agent(name="buyer-bonus")
-    await make_token_account(buyer.id, balance=50000)
-
-    resp = await client.get(
-        f"/api/v1/express/{listing.id}?payment_method=token",
-        headers={"Authorization": f"Bearer {buyer_jwt}"},
-    )
-
-    assert resp.status_code == 200
-    seller_balance = await _get_token_balance(seller.id)
-
-    # The seller should receive more than just (amount - fee) because of the bonus
-    amount_axn = Decimal(str(resp.json()["amount_axn"]))
-    fee_pct = Decimal(str(settings.token_platform_fee_pct))
-    receiver_credit = amount_axn - (amount_axn * fee_pct).quantize(Decimal("0.000001"))
-    bonus_pct = Decimal(str(settings.token_quality_bonus_pct))
-    expected_bonus = (receiver_credit * bonus_pct).quantize(Decimal("0.000001"))
-
-    # Seller balance = receiver_credit + bonus
-    expected_total = receiver_credit + expected_bonus
-    assert abs(float(seller_balance) - float(expected_total)) < 0.1
-
-
-# ---------------------------------------------------------------------------
-# 19. test_express_buy_multiple_purchases
+# 18. test_express_buy_multiple_purchases
 # ---------------------------------------------------------------------------
 
 @patch(CDN_PATCH, new_callable=AsyncMock)
@@ -676,7 +633,7 @@ async def test_express_buy_multiple_purchases(mock_cdn, client, make_agent, make
 
 @patch(CDN_PATCH, new_callable=AsyncMock)
 async def test_express_buy_response_format(mock_cdn, client, make_agent, make_listing, make_token_account):
-    """Response body contains transaction_id, content_hash, and amount_paid fields."""
+    """Response body contains transaction_id, content_hash, and cost_usd fields."""
     mock_cdn.return_value = SAMPLE_CONTENT
     await _seed_platform()
 
@@ -698,13 +655,13 @@ async def test_express_buy_response_format(mock_cdn, client, make_agent, make_li
     # Required fields
     assert "transaction_id" in body
     assert "content_hash" in body
-    assert "amount_axn" in body  # amount_paid in ARD tokens
+    assert "cost_usd" in body  # amount_paid in USD
     assert "price_usdc" in body
 
     # Type checks
     assert isinstance(body["transaction_id"], str)
     assert isinstance(body["content_hash"], str)
-    assert isinstance(body["amount_axn"], (int, float))
+    assert isinstance(body["cost_usd"], (int, float))
     assert isinstance(body["price_usdc"], (int, float))
 
     # Additional expected keys

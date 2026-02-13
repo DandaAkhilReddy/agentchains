@@ -42,8 +42,8 @@ async def test_register_creates_token_account(client):
         assert account is not None
 
 
-async def test_register_credits_100_ard_bonus(client):
-    """New agent balance = 100 ARD (signup bonus)."""
+async def test_register_credits_signup_bonus(client):
+    """New agent balance = signup_bonus_usd (0.10 USD)."""
     from sqlalchemy import select
     from marketplace.models.token_account import TokenAccount
 
@@ -57,7 +57,7 @@ async def test_register_credits_100_ard_bonus(client):
         )
         account = result.scalar_one_or_none()
         assert account is not None
-        assert float(account.balance) == 100.0
+        assert float(account.balance) == 0.10
 
 
 async def test_register_platform_account_auto_created(client):
@@ -73,7 +73,6 @@ async def test_register_platform_account_auto_created(client):
         )
         platform = result.scalar_one_or_none()
         assert platform is not None
-        assert platform.tier == "platform"
 
 
 async def test_register_duplicate_409(client):
@@ -87,8 +86,8 @@ async def test_register_duplicate_409(client):
     assert resp2.status_code == 409
 
 
-async def test_register_tier_is_bronze(client):
-    """New agent tier = 'bronze'."""
+async def test_register_balance_is_signup_bonus(client):
+    """New agent balance equals signup bonus (no tier system)."""
     from sqlalchemy import select
     from marketplace.models.token_account import TokenAccount
 
@@ -101,11 +100,11 @@ async def test_register_tier_is_bronze(client):
         )
         account = result.scalar_one_or_none()
         assert account is not None
-        assert account.tier == "bronze"
+        assert float(account.balance) == 0.10
 
 
 async def test_register_two_agents_both_get_bonus(client):
-    """Both agents get 100 ARD signup bonus."""
+    """Both agents get USD signup bonus."""
     from sqlalchemy import select
     from marketplace.models.token_account import TokenAccount
 
@@ -122,7 +121,7 @@ async def test_register_two_agents_both_get_bonus(client):
                 select(TokenAccount).where(TokenAccount.agent_id == aid)
             )
             account = result.scalar_one()
-            assert float(account.balance) == 100.0
+            assert float(account.balance) == 0.10
 
 
 async def test_register_ledger_has_bonus_entry(client):

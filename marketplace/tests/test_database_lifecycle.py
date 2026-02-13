@@ -305,16 +305,7 @@ async def test_token_ledger_table_in_metadata():
 
 
 # ===================================================================
-# 16. Table existence: "token_supply" table in metadata
-# ===================================================================
-
-@pytest.mark.asyncio
-async def test_token_supply_table_in_metadata():
-    assert "token_supply" in Base.metadata.tables
-
-
-# ===================================================================
-# 17. Table existence: "creators" table in metadata
+# 16. Table existence: "creators" table in metadata
 # ===================================================================
 
 @pytest.mark.asyncio
@@ -323,7 +314,7 @@ async def test_creators_table_in_metadata():
 
 
 # ===================================================================
-# 18. Dispose engine completes without error
+# 17. Dispose engine completes without error
 # ===================================================================
 
 @pytest.mark.asyncio
@@ -335,7 +326,7 @@ async def test_dispose_engine():
 
 
 # ===================================================================
-# 19. Dispose engine is idempotent (call twice)
+# 18. Dispose engine is idempotent (call twice)
 # ===================================================================
 
 @pytest.mark.asyncio
@@ -348,7 +339,7 @@ async def test_dispose_engine_idempotent():
 
 
 # ===================================================================
-# 20. Engine echo is False (verify from database module)
+# 19. Engine echo is False (verify from database module)
 # ===================================================================
 
 @pytest.mark.asyncio

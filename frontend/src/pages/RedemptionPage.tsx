@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { CreditCard, Gift, Building2, Smartphone, Loader2, CheckCircle, XCircle, Clock, ArrowRight } from "lucide-react";
 import { createRedemption, fetchRedemptions, cancelRedemption, fetchCreatorWallet } from "../lib/api";
+import { formatUSD } from "../lib/format";
+import type { RedemptionRequest } from "../types/api";
 import PageHeader from "../components/PageHeader";
 import Badge from "../components/Badge";
 import AnimatedCounter from "../components/AnimatedCounter";
@@ -9,22 +11,11 @@ interface Props {
   token: string;
 }
 
-interface Redemption {
-  id: string;
-  redemption_type: string;
-  amount_ard: number;
-  amount_fiat: number | null;
-  currency: string;
-  status: string;
-  created_at: string;
-  completed_at: string | null;
-}
-
 const METHODS = [
-  { type: "api_credits", label: "API Credits", icon: CreditCard, min: 100, time: "Instant", desc: "Convert ARD to API call credits" },
-  { type: "gift_card", label: "Gift Card", icon: Gift, min: 1000, time: "24 hours", desc: "Amazon gift card delivery" },
-  { type: "upi", label: "UPI Transfer", icon: Smartphone, min: 5000, time: "Minutes", desc: "Direct to your UPI ID (India)" },
-  { type: "bank_withdrawal", label: "Bank Transfer", icon: Building2, min: 10000, time: "3-7 days", desc: "Wire to your bank account" },
+  { type: "api_credits", label: "API Credits", icon: CreditCard, min: 0.10, time: "Instant", desc: "Convert to API call credits" },
+  { type: "gift_card", label: "Gift Card", icon: Gift, min: 1.00, time: "24 hours", desc: "Amazon gift card delivery" },
+  { type: "upi", label: "UPI Transfer", icon: Smartphone, min: 5.00, time: "Minutes", desc: "Direct to your UPI ID (India)" },
+  { type: "bank_withdrawal", label: "Bank Transfer", icon: Building2, min: 10.00, time: "3-7 days", desc: "Wire to your bank account" },
 ];
 
 const STATUS_ICONS: Record<string, any> = {
@@ -43,22 +34,18 @@ const STATUS_VARIANTS: Record<string, "yellow" | "blue" | "green" | "red" | "gra
   rejected: "red",
 };
 
-const fmtARD = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toFixed(0));
-
 export default function RedemptionPage({ token }: Props) {
   const [balance, setBalance] = useState(0);
-  const [balanceUsd, setBalanceUsd] = useState(0);
   const [selectedType, setSelectedType] = useState("");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState<Redemption[]>([]);
+  const [history, setHistory] = useState<RedemptionRequest[]>([]);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const loadData = async () => {
     try {
       const wallet = await fetchCreatorWallet(token);
       setBalance(wallet.balance);
-      setBalanceUsd(wallet.balance_usd);
     } catch {}
     try {
       const res = await fetchRedemptions(token);
@@ -75,14 +62,14 @@ export default function RedemptionPage({ token }: Props) {
     try {
       await createRedemption(token, {
         redemption_type: selectedType,
-        amount_ard: parseFloat(amount),
+        amount_usd: parseFloat(amount),
       });
-      setMsg({ type: "ok", text: "Redemption request created successfully!" });
+      setMsg({ type: "ok", text: "Withdrawal request created successfully!" });
       setAmount("");
       setSelectedType("");
       loadData();
     } catch (e: any) {
-      setMsg({ type: "err", text: e.message || "Redemption failed" });
+      setMsg({ type: "err", text: e.message || "Withdrawal failed" });
     } finally {
       setLoading(false);
     }
@@ -98,8 +85,8 @@ export default function RedemptionPage({ token }: Props) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Redeem ARD"
-        subtitle="Convert your earnings to real value — API credits, gift cards, or cash"
+        title="Withdraw Funds"
+        subtitle="Convert your earnings to API credits, gift cards, or cash"
         icon={Gift}
       />
 
@@ -109,9 +96,8 @@ export default function RedemptionPage({ token }: Props) {
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-text-secondary">Available Balance</p>
             <p className="mt-1 text-3xl font-bold gradient-text" style={{ fontFamily: "var(--font-mono)" }}>
-              <AnimatedCounter value={balance} /> ARD
+              $<AnimatedCounter value={balance} decimals={2} />
             </p>
-            <p className="text-sm text-text-muted">${balanceUsd.toFixed(2)} USD</p>
           </div>
         </div>
       </div>
@@ -138,7 +124,7 @@ export default function RedemptionPage({ token }: Props) {
               <p className="font-semibold text-text-primary">{m.label}</p>
               <p className="text-xs text-text-muted">{m.desc}</p>
               <div className="mt-2 flex items-center justify-between">
-                <span className="text-xs text-text-muted">Min: {fmtARD(m.min)} ARD</span>
+                <span className="text-xs text-text-muted">Min: {formatUSD(m.min)}</span>
                 <span className="text-xs text-text-secondary">{m.time}</span>
               </div>
             </button>
@@ -158,15 +144,10 @@ export default function RedemptionPage({ token }: Props) {
                 onChange={(e) => setAmount(e.target.value)}
                 min={METHODS.find((m) => m.type === selectedType)?.min || 0}
                 max={balance}
-                placeholder="Amount in ARD"
+                placeholder="Amount in USD"
                 className="futuristic-input w-full px-4 py-3 text-lg"
                 style={{ fontFamily: "var(--font-mono)" }}
               />
-              {amount && (
-                <p className="mt-1 text-sm text-text-muted" style={{ fontFamily: "var(--font-mono)" }}>
-                  = ${(parseFloat(amount) * 0.001).toFixed(2)} USD
-                </p>
-              )}
             </div>
             <button
               onClick={() => setAmount(String(balance))}
@@ -181,7 +162,7 @@ export default function RedemptionPage({ token }: Props) {
             className="btn-primary mt-4 flex w-full items-center justify-center gap-2 py-3 text-sm font-bold disabled:opacity-50"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-            Redeem {amount ? `${fmtARD(parseFloat(amount))} ARD` : ""}
+            Withdraw {amount ? formatUSD(parseFloat(amount)) : ""}
           </button>
           {msg && (
             <p className={`mt-2 text-sm ${msg.type === "ok" ? "text-success" : "text-danger"}`}>
@@ -193,11 +174,11 @@ export default function RedemptionPage({ token }: Props) {
 
       {/* History */}
       <div className="glass-card gradient-border-card p-5">
-        <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-text-secondary">Redemption History</h2>
+        <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-text-secondary">Withdrawal History</h2>
         {history.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-text-muted">
             <Gift className="mb-3 h-8 w-8 opacity-40" />
-            <p className="text-sm">No redemptions yet.</p>
+            <p className="text-sm">No withdrawals yet.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -219,7 +200,7 @@ export default function RedemptionPage({ token }: Props) {
                     />
                     <div>
                       <p className="text-sm font-medium text-text-primary">
-                        {r.redemption_type.replace("_", " ")} — {fmtARD(r.amount_ard)} ARD
+                        {r.redemption_type.replace("_", " ")} — {formatUSD(r.amount_usd)}
                       </p>
                       <p className="text-xs text-text-muted">
                         {new Date(r.created_at).toLocaleDateString()}

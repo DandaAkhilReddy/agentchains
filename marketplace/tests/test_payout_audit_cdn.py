@@ -36,8 +36,8 @@ async def test_monthly_payout_eligible_creators(db, make_creator):
     creator, _ = await make_creator(email="payout1@test.com")
 
     # Create token account with balance above minimum
-    min_balance = settings.creator_min_withdrawal_ard
-    original_balance = min_balance + 1000
+    min_balance = settings.creator_min_withdrawal_usd
+    original_balance = min_balance + 10.00
     account = TokenAccount(
         creator_id=creator.id,
         balance=Decimal(str(original_balance)),
@@ -64,7 +64,7 @@ async def test_monthly_payout_eligible_creators(db, make_creator):
     assert redemption is not None
     assert redemption.redemption_type == "upi"
     # Check that the redemption amount matches the original balance
-    assert float(redemption.amount_ard) == original_balance
+    assert float(redemption.amount_usd) == original_balance
 
 
 @pytest.mark.asyncio
@@ -73,10 +73,10 @@ async def test_monthly_payout_below_threshold(db, make_creator):
     creator, _ = await make_creator(email="payout2@test.com")
 
     # Create token account with balance BELOW minimum
-    min_balance = settings.creator_min_withdrawal_ard
+    min_balance = settings.creator_min_withdrawal_usd
     account = TokenAccount(
         creator_id=creator.id,
-        balance=Decimal(str(min_balance - 100)),
+        balance=Decimal(str(min_balance - 1.00)),
     )
     db.add(account)
 
@@ -103,10 +103,10 @@ async def test_monthly_payout_no_payout_method(db, make_creator):
     """Test monthly payout skips creators with payout_method='none'."""
     creator, _ = await make_creator(email="payout3@test.com")
 
-    min_balance = settings.creator_min_withdrawal_ard
+    min_balance = settings.creator_min_withdrawal_usd
     account = TokenAccount(
         creator_id=creator.id,
-        balance=Decimal(str(min_balance + 500)),
+        balance=Decimal(str(min_balance + 5.00)),
     )
     db.add(account)
 
@@ -131,10 +131,10 @@ async def test_monthly_payout_inactive_creator(db, make_creator):
     """Test monthly payout skips inactive creators."""
     creator, _ = await make_creator(email="payout4@test.com")
 
-    min_balance = settings.creator_min_withdrawal_ard
+    min_balance = settings.creator_min_withdrawal_usd
     account = TokenAccount(
         creator_id=creator.id,
-        balance=Decimal(str(min_balance + 500)),
+        balance=Decimal(str(min_balance + 5.00)),
     )
     db.add(account)
 
@@ -161,13 +161,13 @@ async def test_monthly_payout_maps_payout_methods(db, make_creator):
         ("gift_card", "gift_card"),
     ]
 
-    min_balance = settings.creator_min_withdrawal_ard
+    min_balance = settings.creator_min_withdrawal_usd
 
     for idx, (payout_method, expected_redemption_type) in enumerate(creators_data):
         creator, _ = await make_creator(email=f"payout_map{idx}@test.com")
         account = TokenAccount(
             creator_id=creator.id,
-            balance=Decimal(str(min_balance + 1000)),
+            balance=Decimal(str(min_balance + 10.00)),
         )
         db.add(account)
         creator.payout_method = payout_method
@@ -194,12 +194,12 @@ async def test_monthly_payout_error_handling(db, make_creator):
     creator1, _ = await make_creator(email="error1@test.com")
     creator2, _ = await make_creator(email="error2@test.com")
 
-    min_balance = settings.creator_min_withdrawal_ard
+    min_balance = settings.creator_min_withdrawal_usd
 
     for creator in [creator1, creator2]:
         account = TokenAccount(
             creator_id=creator.id,
-            balance=Decimal(str(min_balance + 1000)),
+            balance=Decimal(str(min_balance + 10.00)),
         )
         db.add(account)
         creator.payout_method = "upi"
@@ -242,9 +242,7 @@ async def test_process_pending_payouts(db, make_creator):
         redemption = RedemptionRequest(
             creator_id=creator.id,
             redemption_type=r_type,
-            amount_ard=Decimal("1000"),
-            amount_fiat=Decimal("1.0") if r_type != "api_credits" else None,
-            currency="USD",
+            amount_usd=Decimal("10.00"),
             status="pending",
         )
         db.add(redemption)
@@ -351,7 +349,7 @@ async def test_audit_log_with_creator_id(db, make_creator):
         db,
         "creator_withdrawal_requested",
         creator_id=creator.id,
-        details={"amount_ard": 10000},
+        details={"amount_usd": 100.00},
         severity="warn",
     )
     await db.commit()

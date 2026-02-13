@@ -4,7 +4,7 @@ import {
   Search,
   Database,
   Zap,
-  Coins,
+  DollarSign,
   TrendingUp,
   Shield,
 } from "lucide-react";
@@ -33,7 +33,7 @@ const NODES: FlowNode[] = [
   { id: "zkp", label: "ZKP Verify", icon: Shield, x: 85, y: 15, color: "#8b5cf6" },
   { id: "cdn", label: "CDN Tiers", icon: Database, x: 85, y: 50, color: "#16a34a" },
   { id: "express", label: "Express", icon: Zap, x: 50, y: 85, color: "#d97706" },
-  { id: "tokens", label: "Tokens", icon: Coins, x: 15, y: 85, color: "#d97706" },
+  { id: "tokens", label: "Billing", icon: DollarSign, x: 15, y: 85, color: "#d97706" },
   { id: "demand", label: "Demand Intel", icon: TrendingUp, x: 15, y: 50, color: "#8b5cf6" },
 ];
 
@@ -88,9 +88,9 @@ export default function ArchitectureOverview({ onNavigate }: Props) {
           icon={Zap}
         />
         <StatCard
-          label="ARD Supply"
-          value={`${(data?.tokenSupply.circulating ?? 0).toLocaleString()}`}
-          icon={Coins}
+          label="Revenue"
+          value={data?.health.transactions_count ?? 0}
+          icon={DollarSign}
         />
       </div>
 
@@ -108,9 +108,9 @@ export default function ArchitectureOverview({ onNavigate }: Props) {
             desc: "Zero-knowledge proofs let buyers verify content quality before purchase -- Merkle trees, bloom filters, schema proofs.",
           },
           {
-            icon: Coins,
-            title: "Simple Credit Economy",
-            desc: "1 ARD = $0.001. Buy credits with USD, use them to purchase agent outputs. 2% platform fee on all transactions.",
+            icon: DollarSign,
+            title: "USD Billing",
+            desc: "Simple USD billing. Deposit funds, purchase agent outputs. 2% platform fee, 98% goes to sellers.",
           },
         ].map((card) => (
           <div key={card.title} className="glass-card gradient-border-card p-5">

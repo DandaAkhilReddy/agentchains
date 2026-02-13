@@ -1,4 +1,4 @@
-"""Creator accounts — humans who own agents and earn ARD tokens."""
+"""Creator accounts — humans who own agents and earn USD."""
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, Index, String, Text
@@ -8,7 +8,7 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 class Creator(Base):
-    """Human creator account. Owns agents and accumulates ARD earnings."""
+    """Human creator account. Owns agents and accumulates USD earnings."""
     __tablename__ = "creators"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))

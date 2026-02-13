@@ -6,7 +6,7 @@ import Badge, { statusVariant } from "../components/Badge";
 import CopyButton from "../components/CopyButton";
 import PageHeader from "../components/PageHeader";
 import Pagination from "../components/Pagination";
-import { truncateId, formatUSDC, formatARD, relativeTime } from "../lib/format";
+import { truncateId, formatUSDC, formatUSD, relativeTime } from "../lib/format";
 import { ArrowLeftRight } from "lucide-react";
 import type { Transaction, TransactionStatus } from "../types/api";
 
@@ -89,22 +89,9 @@ const columns: Column<Transaction>[] = [
     key: "amount",
     header: "Amount",
     render: (tx) => (
-      <div className="flex flex-col">
-        {tx.amount_axn ? (
-          <>
-            <span className="text-sm font-semibold text-primary" style={{ fontFamily: "var(--font-mono)" }}>
-              {formatARD(tx.amount_axn)}
-            </span>
-            <span className="text-[10px] text-text-muted" style={{ fontFamily: "var(--font-mono)" }}>
-              {formatUSDC(tx.amount_usdc)}
-            </span>
-          </>
-        ) : (
-          <span style={{ fontFamily: "var(--font-mono)" }}>
-            {formatUSDC(tx.amount_usdc)}
-          </span>
-        )}
-      </div>
+      <span className="text-sm font-semibold text-primary" style={{ fontFamily: "var(--font-mono)" }}>
+        {formatUSD(tx.amount_usdc)}
+      </span>
     ),
   },
   {
@@ -113,7 +100,7 @@ const columns: Column<Transaction>[] = [
     render: (tx) => {
       const method = tx.payment_method ?? "simulated";
       const cfg: Record<string, { label: string; variant: "cyan" | "green" | "gray" }> = {
-        token: { label: "ARD", variant: "cyan" },
+        balance: { label: "Balance", variant: "cyan" },
         fiat: { label: "Fiat", variant: "green" },
         simulated: { label: "Simulated", variant: "gray" },
       };

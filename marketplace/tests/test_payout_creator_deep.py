@@ -21,7 +21,7 @@ Covers:
     17  get_creator_agents_with_earnings — shows agent balance/earnings
     18  get_dashboard_aggregation — totals across agents
     19  get_wallet_with_account — returns all fields
-    20  get_wallet_no_account — returns defaults (balance=0, tier=bronze)
+    20  get_wallet_no_account — returns defaults (balance=0)
 
   Payout Service (5):
     21  monthly_payout_processes_eligible — creates redemption for eligible creator
@@ -118,7 +118,7 @@ class TestRegisterCreator:
                 TokenAccount.creator_id == result["creator"]["id"]
             )
         )).scalar_one()
-        assert float(acct.balance) == 100.0  # default signup bonus
+        assert float(acct.balance) == 0.10  # $0.10 signup bonus
 
     # 2
     async def test_register_creator_duplicate_email(self, db):
@@ -475,12 +475,9 @@ class TestCreatorAgentsAndDashboard:
         assert dashboard["agents_count"] == 2
         assert dashboard["total_agent_earnings"] == pytest.approx(3500.0)  # 2000 + 1500
         assert dashboard["total_agent_spent"] == pytest.approx(800.0)  # 500 + 300
-        assert dashboard["token_name"] == "ARD"
-        assert dashboard["peg_rate_usd"] == 0.001
 
-        # Creator's own balance (signup bonus of 100)
-        assert dashboard["creator_balance"] == pytest.approx(100.0)
-        assert dashboard["creator_balance_usd"] == pytest.approx(100.0 * 0.001)
+        # Creator's own balance ($0.10 signup bonus)
+        assert dashboard["creator_balance"] == pytest.approx(0.10)
 
         # Agents list should be included
         assert len(dashboard["agents"]) == 2
@@ -499,15 +496,11 @@ class TestCreatorWallet:
 
         wallet = await creator_service.get_creator_wallet(db, creator_id)
 
-        assert wallet["balance"] == 100.0  # signup bonus
-        assert wallet["balance_usd"] == pytest.approx(100.0 * 0.001)
+        assert wallet["balance"] == 0.10  # $0.10 signup bonus
         assert wallet["total_earned"] == 0.0
         assert wallet["total_spent"] == 0.0
-        assert wallet["total_deposited"] == 100.0  # signup bonus counts as deposit
+        assert wallet["total_deposited"] == 0.10  # signup bonus counts as deposit
         assert wallet["total_fees_paid"] == 0.0
-        assert wallet["tier"] == "bronze"
-        assert wallet["token_name"] == "ARD"
-        assert wallet["peg_rate_usd"] == 0.001
 
     # 20
     async def test_get_wallet_no_account(self, db):
@@ -530,10 +523,6 @@ class TestCreatorWallet:
         assert wallet["balance"] == 0
         assert wallet["total_earned"] == 0
         assert wallet["total_spent"] == 0
-        assert wallet["tier"] == "bronze"
-        # Should not have the extended fields
-        assert "balance_usd" not in wallet
-        assert "token_name" not in wallet
 
 
 # ===========================================================================
@@ -548,7 +537,7 @@ class TestMonthlyPayoutDeep:
     async def test_monthly_payout_processes_eligible(self, db, make_creator):
         """An eligible creator (active, payout_method set, balance >= min) gets a redemption."""
         creator, acct = await _setup_creator_for_payout(
-            db, make_creator, 20_000.0, payout_method="upi",
+            db, make_creator, 20.00, payout_method="upi",
         )
 
         result = await payout_service.run_monthly_payout(db)
@@ -563,13 +552,13 @@ class TestMonthlyPayoutDeep:
             )
         )).scalar_one()
         assert rr.redemption_type == "upi"
-        assert float(rr.amount_ard) == pytest.approx(20_000.0)
+        assert float(rr.amount_usd) == pytest.approx(20.0)
 
     # 22
     async def test_monthly_payout_skips_inactive(self, db, make_creator):
         """Creators with status != 'active' are excluded from payout."""
         await _setup_creator_for_payout(
-            db, make_creator, 20_000.0, payout_method="upi", status="suspended",
+            db, make_creator, 20.00, payout_method="upi", status="suspended",
         )
 
         result = await payout_service.run_monthly_payout(db)
@@ -585,7 +574,7 @@ class TestMonthlyPayoutDeep:
     async def test_monthly_payout_skips_no_method(self, db, make_creator):
         """Creators with payout_method='none' are excluded by SQL filter."""
         await _setup_creator_for_payout(
-            db, make_creator, 20_000.0, payout_method="none",
+            db, make_creator, 20.00, payout_method="none",
         )
 
         result = await payout_service.run_monthly_payout(db)
@@ -602,13 +591,13 @@ class TestMonthlyPayoutDeep:
         upi -> upi, bank -> bank_withdrawal, gift_card -> gift_card.
         """
         c_upi, _ = await _setup_creator_for_payout(
-            db, make_creator, 20_000.0, payout_method="upi",
+            db, make_creator, 20.00, payout_method="upi",
         )
         c_bank, _ = await _setup_creator_for_payout(
-            db, make_creator, 20_000.0, payout_method="bank",
+            db, make_creator, 20.00, payout_method="bank",
         )
         c_gift, _ = await _setup_creator_for_payout(
-            db, make_creator, 20_000.0, payout_method="gift_card",
+            db, make_creator, 20.00, payout_method="gift_card",
         )
 
         result = await payout_service.run_monthly_payout(db)
@@ -640,19 +629,19 @@ class TestProcessPendingPayoutsDeep:
         """process_pending_payouts finds and processes all pending RedemptionRequests."""
         # Create a creator with enough balance for multiple redemptions
         creator, acct = await _setup_creator_for_payout(
-            db, make_creator, 100_000.0, payout_method="upi",
+            db, make_creator, 1000.00, payout_method="upi",
         )
 
         # Create some pending redemptions directly
         # (gift_card and bank_withdrawal stay pending; api_credits auto-completes)
         gift = await redemption_service.create_redemption(
-            db, creator.id, "gift_card", 1000.0,
+            db, creator.id, "gift_card", 10.00,
         )
         upi = await redemption_service.create_redemption(
-            db, creator.id, "upi", 5000.0,
+            db, creator.id, "upi", 50.00,
         )
         bank = await redemption_service.create_redemption(
-            db, creator.id, "bank_withdrawal", 10_000.0,
+            db, creator.id, "bank_withdrawal", 100.00,
         )
 
         assert gift["status"] == "pending"

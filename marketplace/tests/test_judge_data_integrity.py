@@ -1,4 +1,4 @@
-"""J-3 DATA INTEGRITY JUDGE — 15 tests for database constraints, foreign keys,
+"""J-3 DATA INTEGRITY JUDGE — 13 tests for database constraints, foreign keys,
 default values, and auto-population.
 
 Verifies that the SQLAlchemy models enforce uniqueness, set correct defaults,
@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.listing import DataListing
-from marketplace.models.token_account import TokenAccount, TokenLedger, TokenSupply
+from marketplace.models.token_account import TokenAccount, TokenLedger
 from marketplace.models.transaction import Transaction
 from marketplace.models.reputation import ReputationScore
 from marketplace.models.catalog import DataCatalogEntry
@@ -164,24 +164,7 @@ async def test_token_account_default_balance_zero(db: AsyncSession, seed_platfor
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 6. test_token_account_default_tier_bronze
-# ═══════════════════════════════════════════════════════════════════════════
-
-async def test_token_account_default_tier_bronze(db: AsyncSession, seed_platform):
-    """A new TokenAccount should default to tier='bronze'."""
-    account = TokenAccount(
-        id=_new_id(),
-        agent_id=_new_id(),
-    )
-    db.add(account)
-    await db.commit()
-    await db.refresh(account)
-
-    assert account.tier == "bronze"
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 7. test_transaction_timestamps_auto
+# 6. test_transaction_timestamps_auto
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def test_transaction_timestamps_auto(
@@ -214,7 +197,7 @@ async def test_transaction_timestamps_auto(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 8. test_agent_created_at_auto
+# 7. test_agent_created_at_auto
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def test_agent_created_at_auto(db: AsyncSession, seed_platform):
@@ -242,7 +225,7 @@ async def test_agent_created_at_auto(db: AsyncSession, seed_platform):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 9. test_listing_seller_must_exist
+# 8. test_listing_seller_must_exist
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def test_listing_seller_must_exist(db: AsyncSession, seed_platform):
@@ -281,26 +264,7 @@ async def test_listing_seller_must_exist(db: AsyncSession, seed_platform):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 10. test_token_supply_singleton
-# ═══════════════════════════════════════════════════════════════════════════
-
-async def test_token_supply_singleton(db: AsyncSession, seed_platform):
-    """Only one TokenSupply row (id=1) should be allowed; a second insert must fail."""
-    # seed_platform already creates the singleton via ensure_platform_account
-    result = await db.execute(select(TokenSupply).where(TokenSupply.id == 1))
-    existing = result.scalar_one_or_none()
-    assert existing is not None, "seed_platform should create TokenSupply(id=1)"
-
-    # Attempting a second row with the same PK must raise
-    dup = TokenSupply(id=1, total_minted=Decimal("999"))
-    db.add(dup)
-    with pytest.raises(Exception):
-        await db.commit()
-    await db.rollback()
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 11. test_ledger_entry_immutable
+# 9. test_ledger_entry_immutable
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def test_ledger_entry_immutable(db: AsyncSession, seed_platform, make_agent, make_token_account):
@@ -313,7 +277,6 @@ async def test_ledger_entry_immutable(db: AsyncSession, seed_platform, make_agen
 
     amount = Decimal("10.000000")
     fee = Decimal("0.500000")
-    burn = Decimal("0.000000")
 
     expected_hash = compute_ledger_hash(
         prev_hash=None,
@@ -321,7 +284,6 @@ async def test_ledger_entry_immutable(db: AsyncSession, seed_platform, make_agen
         to_account_id=None,
         amount=amount,
         fee_amount=fee,
-        burn_amount=burn,
         tx_type="withdrawal",
         timestamp_iso=ts_iso,
     )
@@ -332,7 +294,6 @@ async def test_ledger_entry_immutable(db: AsyncSession, seed_platform, make_agen
         to_account_id=None,
         amount=amount,
         fee_amount=fee,
-        burn_amount=burn,
         tx_type="withdrawal",
         created_at=ts,
         prev_hash=None,
@@ -353,7 +314,6 @@ async def test_ledger_entry_immutable(db: AsyncSession, seed_platform, make_agen
         to_account_id=entry.to_account_id,
         amount=entry.amount,
         fee_amount=entry.fee_amount,
-        burn_amount=entry.burn_amount,
         tx_type=entry.tx_type,
         timestamp_iso=ts_iso,
     )
@@ -361,7 +321,7 @@ async def test_ledger_entry_immutable(db: AsyncSession, seed_platform, make_agen
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 12. test_reputation_defaults
+# 10. test_reputation_defaults
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def test_reputation_defaults(db: AsyncSession, seed_platform, make_agent):
@@ -384,7 +344,7 @@ async def test_reputation_defaults(db: AsyncSession, seed_platform, make_agent):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 13. test_catalog_entry_defaults
+# 11. test_catalog_entry_defaults
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def test_catalog_entry_defaults(db: AsyncSession, seed_platform, make_agent):
@@ -407,7 +367,7 @@ async def test_catalog_entry_defaults(db: AsyncSession, seed_platform, make_agen
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 14. test_demand_signal_defaults
+# 12. test_demand_signal_defaults
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def test_demand_signal_defaults(db: AsyncSession, seed_platform):
@@ -428,7 +388,7 @@ async def test_demand_signal_defaults(db: AsyncSession, seed_platform):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 15. test_redemption_status_lifecycle
+# 13. test_redemption_status_lifecycle
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def test_redemption_status_lifecycle(db: AsyncSession, seed_platform):
@@ -443,7 +403,7 @@ async def test_redemption_status_lifecycle(db: AsyncSession, seed_platform):
     )
     creator_id = reg["creator"]["id"]
 
-    # Fund the creator sufficiently for a gift_card redemption (min 1000 ARD)
+    # Fund the creator sufficiently for a gift_card redemption
     await _fund_creator(db, creator_id, 5000)
 
     # Step 1: create_redemption -> status = "pending"

@@ -30,13 +30,8 @@ export function scoreToPercent(score: number): string {
   return `${Math.round(score * 100)}%`;
 }
 
-export function formatARD(amount: number): string {
-  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(2)}M ARD`;
-  if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}K ARD`;
-  return `${amount.toFixed(2)} ARD`;
-}
-
-export function ardToUSD(amount: number, pegRate = 0.001): string {
-  const usd = amount * pegRate;
-  return `$${usd.toFixed(2)}`;
+export function formatUSD(amount: number): string {
+  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `$${(amount / 1_000).toFixed(1)}K`;
+  return `$${amount.toFixed(2)}`;
 }

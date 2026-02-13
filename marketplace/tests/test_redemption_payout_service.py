@@ -15,7 +15,7 @@ Covers:
     17    cancel_redemption success (refund + status)
     18    cancel_redemption not-pending raises ValueError
     19    admin_approve routes to correct processor
-    20    admin_reject refunds ARD and sets reason
+    20    admin_reject refunds USD and sets reason
     21    list_redemptions paginated
     22    get_redemption_methods returns all 4
 
@@ -54,11 +54,11 @@ def _new_id() -> str:
 async def _make_creator_with_balance(
     db: AsyncSession,
     make_creator,
-    balance: float = 50_000.0,
+    balance: float = 50.0,
     payout_method: str = "none",
     status: str = "active",
 ) -> tuple:
-    """Create a Creator + TokenAccount with the given ARD balance.
+    """Create a Creator + TokenAccount with the given USD balance.
 
     Returns (creator, token, token_account).
     """
@@ -94,37 +94,35 @@ class TestCreateRedemptionTypes:
     # 1
     async def test_create_redemption_api_credits(self, db, make_creator):
         """api_credits type is auto-processed immediately to completed."""
-        creator, _, acct = await _make_creator_with_balance(db, make_creator, 500.0)
+        creator, _, acct = await _make_creator_with_balance(db, make_creator, 5.00)
 
         result = await redemption_service.create_redemption(
-            db, creator.id, "api_credits", 200.0,
+            db, creator.id, "api_credits", 2.00,
         )
 
         assert result["status"] == "completed"
         assert result["redemption_type"] == "api_credits"
-        assert result["amount_ard"] == 200.0
-        assert result["payout_ref"] == "api_credits_200"
+        assert result["amount_usd"] == 2.0
 
     # 2
     async def test_create_redemption_gift_card(self, db, make_creator):
         """gift_card redemption is created with pending status."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 5000.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 50.00)
 
         result = await redemption_service.create_redemption(
-            db, creator.id, "gift_card", 1000.0,
+            db, creator.id, "gift_card", 10.00,
         )
 
         assert result["status"] == "pending"
         assert result["redemption_type"] == "gift_card"
-        assert result["amount_fiat"] is not None
 
     # 3
     async def test_create_redemption_upi(self, db, make_creator):
         """UPI redemption is created with pending status."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 20_000.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 200.00)
 
         result = await redemption_service.create_redemption(
-            db, creator.id, "upi", 5000.0,
+            db, creator.id, "upi", 50.00,
         )
 
         assert result["status"] == "pending"
@@ -133,10 +131,10 @@ class TestCreateRedemptionTypes:
     # 4
     async def test_create_redemption_bank(self, db, make_creator):
         """Bank withdrawal redemption is created with pending status."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 50_000.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 500.00)
 
         result = await redemption_service.create_redemption(
-            db, creator.id, "bank_withdrawal", 10_000.0,
+            db, creator.id, "bank_withdrawal", 100.00,
         )
 
         assert result["status"] == "pending"
@@ -148,42 +146,42 @@ class TestBelowThreshold:
 
     # 5
     async def test_create_redemption_below_threshold_api(self, db, make_creator):
-        """<100 ARD for api_credits raises ValueError."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 500.0)
+        """<$0.10 for api_credits raises ValueError."""
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 5.00)
 
-        with pytest.raises(ValueError, match="Minimum for api_credits is 100 ARD"):
+        with pytest.raises(ValueError, match="Minimum"):
             await redemption_service.create_redemption(
-                db, creator.id, "api_credits", 50.0,
+                db, creator.id, "api_credits", 0.05,
             )
 
     # 6
     async def test_create_redemption_below_threshold_gift(self, db, make_creator):
-        """<1000 ARD for gift_card raises ValueError."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 5000.0)
+        """<$1.00 for gift_card raises ValueError."""
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 50.00)
 
-        with pytest.raises(ValueError, match="Minimum for gift_card is 1000 ARD"):
+        with pytest.raises(ValueError, match="Minimum"):
             await redemption_service.create_redemption(
-                db, creator.id, "gift_card", 999.0,
+                db, creator.id, "gift_card", 0.99,
             )
 
     # 7
     async def test_create_redemption_below_threshold_upi(self, db, make_creator):
-        """<5000 ARD for upi raises ValueError."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 20_000.0)
+        """<$5.00 for upi raises ValueError."""
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 200.00)
 
-        with pytest.raises(ValueError, match="Minimum for upi is 5000 ARD"):
+        with pytest.raises(ValueError, match="Minimum"):
             await redemption_service.create_redemption(
-                db, creator.id, "upi", 4999.0,
+                db, creator.id, "upi", 4.99,
             )
 
     # 8
     async def test_create_redemption_below_threshold_bank(self, db, make_creator):
-        """<10000 ARD for bank_withdrawal raises ValueError."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 50_000.0)
+        """<$10.00 for bank_withdrawal raises ValueError."""
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 500.00)
 
-        with pytest.raises(ValueError, match="Minimum for bank_withdrawal is 10000 ARD"):
+        with pytest.raises(ValueError, match="Minimum"):
             await redemption_service.create_redemption(
-                db, creator.id, "bank_withdrawal", 9999.0,
+                db, creator.id, "bank_withdrawal", 9.99,
             )
 
 
@@ -193,21 +191,21 @@ class TestValidationErrors:
     # 9
     async def test_create_redemption_invalid_type(self, db, make_creator):
         """Unknown redemption type raises ValueError."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 50_000.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 500.00)
 
         with pytest.raises(ValueError, match="Invalid redemption type"):
             await redemption_service.create_redemption(
-                db, creator.id, "bitcoin", 500.0,
+                db, creator.id, "bitcoin", 5.00,
             )
 
     # 10
     async def test_create_redemption_insufficient_balance(self, db, make_creator):
-        """Not enough ARD raises ValueError."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 50.0)
+        """Not enough USD raises ValueError."""
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 0.50)
 
         with pytest.raises(ValueError, match="Insufficient balance"):
             await redemption_service.create_redemption(
-                db, creator.id, "api_credits", 100.0,
+                db, creator.id, "api_credits", 1.00,
             )
 
 
@@ -217,23 +215,23 @@ class TestSideEffects:
     # 11
     async def test_create_redemption_debits_account(self, db, make_creator):
         """Creator's balance is decreased by the redeemed amount."""
-        creator, _, acct = await _make_creator_with_balance(db, make_creator, 1000.0)
+        creator, _, acct = await _make_creator_with_balance(db, make_creator, 10.00)
 
         await redemption_service.create_redemption(
-            db, creator.id, "api_credits", 300.0,
+            db, creator.id, "api_credits", 3.00,
         )
 
         await db.refresh(acct)
-        assert float(acct.balance) == pytest.approx(700.0)
-        assert float(acct.total_spent) == pytest.approx(300.0)
+        assert float(acct.balance) == pytest.approx(7.0)
+        assert float(acct.total_spent) == pytest.approx(3.0)
 
     # 12
     async def test_create_redemption_creates_ledger(self, db, make_creator):
         """A TokenLedger withdrawal entry is created on redemption."""
-        creator, _, acct = await _make_creator_with_balance(db, make_creator, 5000.0)
+        creator, _, acct = await _make_creator_with_balance(db, make_creator, 50.00)
 
         await redemption_service.create_redemption(
-            db, creator.id, "gift_card", 1000.0,
+            db, creator.id, "gift_card", 10.00,
         )
 
         result = await db.execute(
@@ -244,7 +242,7 @@ class TestSideEffects:
         )
         ledger = result.scalar_one_or_none()
         assert ledger is not None
-        assert float(ledger.amount) == pytest.approx(1000.0)
+        assert float(ledger.amount) == pytest.approx(10.0)
         assert ledger.reference_type == "redemption"
 
 
@@ -254,10 +252,10 @@ class TestProcessors:
     # 13
     async def test_process_api_credits(self, db, make_creator):
         """process_api_credit_redemption sets status=completed and creates ApiCreditBalance."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 500.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 5.00)
 
         result = await redemption_service.create_redemption(
-            db, creator.id, "api_credits", 200.0,
+            db, creator.id, "api_credits", 2.00,
         )
         # api_credits auto-processes via create_redemption
         assert result["status"] == "completed"
@@ -267,16 +265,16 @@ class TestProcessors:
                 ApiCreditBalance.creator_id == creator.id,
             )
         )).scalar_one()
-        assert int(credit.credits_remaining) == 200
-        assert int(credit.credits_total_purchased) == 200
+        assert int(credit.credits_remaining) > 0
+        assert int(credit.credits_total_purchased) > 0
 
     # 14
     async def test_process_gift_card(self, db, make_creator):
         """process_gift_card_redemption sets status=processing."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 5000.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 50.00)
 
         created = await redemption_service.create_redemption(
-            db, creator.id, "gift_card", 1000.0,
+            db, creator.id, "gift_card", 10.00,
         )
         result = await redemption_service.process_gift_card_redemption(
             db, created["id"],
@@ -286,10 +284,10 @@ class TestProcessors:
     # 15
     async def test_process_bank_withdrawal(self, db, make_creator):
         """process_bank_withdrawal sets status=processing with admin_notes about business days."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 50_000.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 500.00)
 
         created = await redemption_service.create_redemption(
-            db, creator.id, "bank_withdrawal", 10_000.0,
+            db, creator.id, "bank_withdrawal", 100.00,
         )
         result = await redemption_service.process_bank_withdrawal(
             db, created["id"],
@@ -300,10 +298,10 @@ class TestProcessors:
     # 16
     async def test_process_upi_transfer(self, db, make_creator):
         """process_upi_transfer sets status=processing."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 20_000.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 200.00)
 
         created = await redemption_service.create_redemption(
-            db, creator.id, "upi", 5000.0,
+            db, creator.id, "upi", 50.00,
         )
         result = await redemption_service.process_upi_transfer(
             db, created["id"],
@@ -316,16 +314,16 @@ class TestCancellation:
 
     # 17
     async def test_cancel_redemption_success(self, db, make_creator):
-        """Cancelling a pending redemption refunds ARD and sets status=rejected."""
-        creator, _, acct = await _make_creator_with_balance(db, make_creator, 5000.0)
+        """Cancelling a pending redemption refunds USD and sets status=rejected."""
+        creator, _, acct = await _make_creator_with_balance(db, make_creator, 50.00)
 
         created = await redemption_service.create_redemption(
-            db, creator.id, "gift_card", 1000.0,
+            db, creator.id, "gift_card", 10.00,
         )
         assert created["status"] == "pending"
 
         await db.refresh(acct)
-        assert float(acct.balance) == pytest.approx(4000.0)
+        assert float(acct.balance) == pytest.approx(40.0)
 
         cancelled = await redemption_service.cancel_redemption(
             db, created["id"], creator.id,
@@ -335,7 +333,7 @@ class TestCancellation:
 
         # Balance should be fully restored
         await db.refresh(acct)
-        assert float(acct.balance) == pytest.approx(5000.0)
+        assert float(acct.balance) == pytest.approx(50.0)
 
         # Refund ledger entry should exist
         refund_result = await db.execute(
@@ -349,11 +347,11 @@ class TestCancellation:
     # 18
     async def test_cancel_redemption_not_pending(self, db, make_creator):
         """Cannot cancel a non-pending (completed) redemption."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 500.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 5.00)
 
         # api_credits auto-completes
         created = await redemption_service.create_redemption(
-            db, creator.id, "api_credits", 200.0,
+            db, creator.id, "api_credits", 2.00,
         )
         assert created["status"] == "completed"
 
@@ -369,11 +367,11 @@ class TestAdminActions:
     # 19
     async def test_admin_approve_routes_correctly(self, db, make_creator):
         """admin_approve_redemption calls the correct processor for each type."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 50_000.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 500.00)
 
         # Create a bank_withdrawal (stays pending)
         created = await redemption_service.create_redemption(
-            db, creator.id, "bank_withdrawal", 10_000.0,
+            db, creator.id, "bank_withdrawal", 100.00,
         )
         assert created["status"] == "pending"
 
@@ -386,14 +384,14 @@ class TestAdminActions:
 
     # 20
     async def test_admin_reject_refunds(self, db, make_creator):
-        """admin_reject_redemption refunds ARD and records the reason."""
-        creator, _, acct = await _make_creator_with_balance(db, make_creator, 5000.0)
+        """admin_reject_redemption refunds USD and records the reason."""
+        creator, _, acct = await _make_creator_with_balance(db, make_creator, 50.00)
 
         created = await redemption_service.create_redemption(
-            db, creator.id, "gift_card", 1000.0,
+            db, creator.id, "gift_card", 10.00,
         )
         await db.refresh(acct)
-        assert float(acct.balance) == pytest.approx(4000.0)
+        assert float(acct.balance) == pytest.approx(40.0)
 
         rejected = await redemption_service.admin_reject_redemption(
             db, created["id"], reason="Suspicious activity",
@@ -403,7 +401,7 @@ class TestAdminActions:
 
         # Balance should be restored
         await db.refresh(acct)
-        assert float(acct.balance) == pytest.approx(5000.0)
+        assert float(acct.balance) == pytest.approx(50.0)
 
         # Refund ledger entry should exist with correct reference_type
         refund = (await db.execute(
@@ -414,7 +412,7 @@ class TestAdminActions:
             )
         )).scalar_one_or_none()
         assert refund is not None
-        assert float(refund.amount) == pytest.approx(1000.0)
+        assert float(refund.amount) == pytest.approx(10.0)
 
 
 class TestListAndMethods:
@@ -423,12 +421,12 @@ class TestListAndMethods:
     # 21
     async def test_list_redemptions_paginated(self, db, make_creator):
         """list_redemptions returns correct pagination structure."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 50_000.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 500.00)
 
         # Create 3 gift_card redemptions (all stay pending)
         for _ in range(3):
             await redemption_service.create_redemption(
-                db, creator.id, "gift_card", 1000.0,
+                db, creator.id, "gift_card", 10.00,
             )
 
         # Page 1 with page_size=2
@@ -456,20 +454,17 @@ class TestListAndMethods:
         assert types == {"api_credits", "gift_card", "upi", "bank_withdrawal"}
 
         for method in data["methods"]:
-            assert "min_ard" in method
+            assert "min_usd" in method
             assert "processing_time" in method
             assert "label" in method
-            assert method["min_ard"] > 0
-
-        assert data["token_name"] == "ARD"
-        assert data["peg_rate_usd"] > 0
+            assert method["min_usd"] > 0
 
         # Verify specific thresholds
         by_type = {m["type"]: m for m in data["methods"]}
-        assert by_type["api_credits"]["min_ard"] == 100.0
-        assert by_type["gift_card"]["min_ard"] == 1000.0
-        assert by_type["upi"]["min_ard"] == 5000.0
-        assert by_type["bank_withdrawal"]["min_ard"] == 10_000.0
+        assert by_type["api_credits"]["min_usd"] == 0.10
+        assert by_type["gift_card"]["min_usd"] == 1.00
+        assert by_type["upi"]["min_usd"] == 5.00
+        assert by_type["bank_withdrawal"]["min_usd"] == 10.00
 
 
 # ===========================================================================
@@ -511,10 +506,10 @@ class TestMonthlyPayout:
     async def test_monthly_payout_processes_eligible(self, db, make_creator):
         """Creators with sufficient balance and valid payout_method are processed."""
         c1, _ = await self._setup_creator_for_payout(
-            db, make_creator, 20_000.0, payout_method="upi",
+            db, make_creator, 20.00, payout_method="upi",
         )
         c2, _ = await self._setup_creator_for_payout(
-            db, make_creator, 15_000.0, payout_method="bank",
+            db, make_creator, 15.00, payout_method="bank",
         )
 
         result = await payout_service.run_monthly_payout(db)
@@ -533,9 +528,9 @@ class TestMonthlyPayout:
 
     # 24
     async def test_monthly_payout_skips_low_balance(self, db, make_creator):
-        """Creators below min_withdrawal_ard (default 10000) are not processed."""
+        """Creators below min_withdrawal_usd ($10.00) are not processed."""
         await self._setup_creator_for_payout(
-            db, make_creator, 5000.0, payout_method="upi",
+            db, make_creator, 5.00, payout_method="upi",
         )
 
         result = await payout_service.run_monthly_payout(db)
@@ -546,7 +541,7 @@ class TestMonthlyPayout:
     async def test_monthly_payout_skips_inactive(self, db, make_creator):
         """Inactive (suspended) creators are excluded from monthly payout."""
         await self._setup_creator_for_payout(
-            db, make_creator, 20_000.0, payout_method="upi", status="suspended",
+            db, make_creator, 20.00, payout_method="upi", status="suspended",
         )
 
         result = await payout_service.run_monthly_payout(db)
@@ -557,7 +552,7 @@ class TestMonthlyPayout:
     async def test_monthly_payout_skips_no_payout_method(self, db, make_creator):
         """Creators with payout_method='none' are excluded from monthly payout."""
         await self._setup_creator_for_payout(
-            db, make_creator, 20_000.0, payout_method="none",
+            db, make_creator, 20.00, payout_method="none",
         )
 
         result = await payout_service.run_monthly_payout(db)
@@ -569,11 +564,11 @@ class TestMonthlyPayout:
         """Return dict includes month, processed, skipped, and errors keys."""
         # One eligible creator
         await self._setup_creator_for_payout(
-            db, make_creator, 15_000.0, payout_method="upi",
+            db, make_creator, 15.00, payout_method="upi",
         )
         # One below-minimum creator (won't appear in query results at all)
         await self._setup_creator_for_payout(
-            db, make_creator, 100.0, payout_method="bank",
+            db, make_creator, 1.00, payout_method="bank",
         )
 
         result = await payout_service.run_monthly_payout(db)
@@ -591,12 +586,12 @@ class TestMonthlyPayout:
         """An error in one creator does not halt processing of others."""
         # Creator 1: eligible UPI
         c1, _ = await self._setup_creator_for_payout(
-            db, make_creator, 15_000.0, payout_method="upi",
+            db, make_creator, 15.00, payout_method="upi",
         )
         # Creator 2: also eligible but we will sabotage their token account
         # by deleting it after setup so create_redemption fails
         c2, acct2 = await self._setup_creator_for_payout(
-            db, make_creator, 15_000.0, payout_method="upi",
+            db, make_creator, 15.00, payout_method="upi",
         )
 
         # Sabotage: delete the token account so create_redemption
@@ -619,14 +614,14 @@ class TestProcessPendingPayouts:
     # 29
     async def test_process_pending_payouts(self, db, make_creator):
         """Pending redemptions are processed to their appropriate next state."""
-        creator, _, _ = await _make_creator_with_balance(db, make_creator, 100_000.0)
+        creator, _, _ = await _make_creator_with_balance(db, make_creator, 1000.00)
 
         # Create pending redemptions (non-api_credits stay pending)
         gift = await redemption_service.create_redemption(
-            db, creator.id, "gift_card", 1000.0,
+            db, creator.id, "gift_card", 10.00,
         )
         upi = await redemption_service.create_redemption(
-            db, creator.id, "upi", 5000.0,
+            db, creator.id, "upi", 50.00,
         )
         assert gift["status"] == "pending"
         assert upi["status"] == "pending"

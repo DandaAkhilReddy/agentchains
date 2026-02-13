@@ -133,6 +133,6 @@ async def get_my_wallet(
     db: AsyncSession = Depends(get_db),
     authorization: str = Header(None),
 ):
-    """Get creator's ARD token balance."""
+    """Get creator's USD balance."""
     creator_id = get_current_creator_id(authorization)
     return await creator_service.get_creator_wallet(db, creator_id)

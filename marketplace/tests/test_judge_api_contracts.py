@@ -32,8 +32,8 @@ REGISTER_PAYLOAD = {
 
 
 async def _seed_platform():
-    """Ensure platform treasury + TokenSupply exist for token tests."""
-    from marketplace.models.token_account import TokenAccount, TokenSupply
+    """Ensure platform treasury exists for token tests."""
+    from marketplace.models.token_account import TokenAccount
     from sqlalchemy import select
 
     async with TestSession() as db:
@@ -43,9 +43,8 @@ async def _seed_platform():
         if result.scalar_one_or_none() is None:
             db.add(TokenAccount(
                 id=_new_id(), agent_id=None,
-                balance=Decimal("0"), tier="platform",
+                balance=Decimal("0"),
             ))
-            db.add(TokenSupply(id=1))
             await db.commit()
 
 
@@ -150,7 +149,7 @@ async def test_400_for_self_purchase(mock_cdn, client, make_agent, make_listing,
 @patch(CDN_PATCH, new_callable=AsyncMock)
 async def test_402_for_insufficient_balance(mock_cdn, client, make_agent, make_listing,
                                             make_token_account, auth_header):
-    """Express buy with zero ARD balance on a priced listing returns 402."""
+    """Express buy with zero USD balance on a priced listing returns 402."""
     mock_cdn.return_value = SAMPLE_CONTENT
     await _seed_platform()
 

@@ -193,10 +193,10 @@ def test_format_event_message_listing_created():
 
 def test_format_event_message_transaction():
     msg = openclaw_service.format_event_message("transaction_completed", {
-        "amount_axn": 500.0,
+        "amount_usd": 5.0,
         "listing_title": "API Results",
     })
-    assert "500" in msg
+    assert "5.0" in msg
     assert "API Results" in msg
 
 

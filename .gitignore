@@ -15,7 +15,10 @@ env/
 
 # Runtime data
 data/marketplace.db
+data/marketplace.db-shm
+data/marketplace.db-wal
 data/content_store/
+marketplace/data/
 
 # IDE
 .vscode/

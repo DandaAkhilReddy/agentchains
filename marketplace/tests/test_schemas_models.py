@@ -346,14 +346,13 @@ class TestTransactionDefaults:
 class TestTokenAccountDefaults:
     """Verify TokenAccount column defaults."""
 
-    async def test_balance_zero_and_tier_bronze(self, db: AsyncSession):
-        """balance should default to 0, tier to 'bronze'."""
+    async def test_balance_defaults_to_zero(self, db: AsyncSession):
+        """balance should default to 0."""
         account = TokenAccount(id=_new_id(), agent_id=_new_id())
         db.add(account)
         await db.commit()
         await db.refresh(account)
         assert float(account.balance) == 0.0
-        assert account.tier == "bronze"
 
 
 class TestCreatorDefaults:
@@ -408,7 +407,7 @@ class TestRedemptionRequestDefaults:
             id=_new_id(),
             creator_id=creator.id,
             redemption_type="api_credits",
-            amount_ard=Decimal("100.0"),
+            amount_usd=Decimal("100.0"),
         )
         db.add(req)
         await db.commit()

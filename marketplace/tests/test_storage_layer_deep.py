@@ -311,9 +311,7 @@ def test_get_storage_factory_returns_object(store_dir, monkeypatch):
     # Reset the module-level singleton so the factory runs fresh
     monkeypatch.setattr(svc, "_storage", None)
 
-    # Ensure azure connection string is empty so HashFS path is taken
     from marketplace.config import settings
-    monkeypatch.setattr(settings, "azure_storage_connection_string", "")
     monkeypatch.setattr(settings, "content_store_path", str(store_dir / "factory_store"))
 
     storage = svc.get_storage()

@@ -1,8 +1,8 @@
 """Tests for RateLimitMiddleware and Settings defaults.
 
-Agent UT-10 — 30 tests covering:
+Agent UT-10 -- 28 tests covering:
   - Middleware skip paths, OPTIONS bypass, key extraction, 429 responses, rate headers
-  - Config defaults for tokens, JWT, MCP, CDN, redemption, creator, rate limits, etc.
+  - Config defaults for platform fees, JWT, MCP, CDN, redemption, creator, rate limits, etc.
 """
 
 import uuid
@@ -13,9 +13,9 @@ from marketplace.config import Settings, settings
 from marketplace.core.auth import create_access_token
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Middleware tests (1-15) — use the `client` fixture from conftest
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===================================================================
+# Middleware tests (1-15) -- use the `client` fixture from conftest
+# ===================================================================
 
 
 class TestMiddlewareSkipPaths:
@@ -167,47 +167,29 @@ class TestMiddlewareRateLimiting:
         assert resp.headers["X-RateLimit-Limit"] == "30"
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Config / Settings tests (16-30)
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===================================================================
+# Config / Settings tests (16-28)
+# ===================================================================
 
 
-class TestSettingsTokenEconomy:
-    """Tests 16-20: ARD token economy defaults."""
-
-    @pytest.mark.asyncio
-    async def test_settings_token_name(self):
-        """Token name should default to 'ARD'."""
-        s = Settings()
-        assert s.token_name == "ARD"
-
-    @pytest.mark.asyncio
-    async def test_settings_token_peg(self):
-        """1 ARD should peg to 0.001 USD."""
-        s = Settings()
-        assert s.token_peg_usd == 0.001
+class TestSettingsUSDEconomy:
+    """Tests 16-18: USD billing model defaults."""
 
     @pytest.mark.asyncio
     async def test_settings_platform_fee(self):
         """Platform fee should default to 2%."""
         s = Settings()
-        assert s.token_platform_fee_pct == 0.02
-
-    @pytest.mark.asyncio
-    async def test_settings_burn_pct(self):
-        """Burn percentage should default to 50%."""
-        s = Settings()
-        assert s.token_burn_pct == 0.50
+        assert s.platform_fee_pct == 0.02
 
     @pytest.mark.asyncio
     async def test_settings_signup_bonus(self):
-        """Signup bonus should default to 100.0 ARD."""
+        """Signup bonus should default to $0.10 USD."""
         s = Settings()
-        assert s.token_signup_bonus == 100.0
+        assert s.signup_bonus_usd == 0.10
 
 
 class TestSettingsAuthAndInfra:
-    """Tests 21-24: JWT, MCP, CDN, redemption defaults."""
+    """Tests 19-22: JWT, MCP, CDN, redemption defaults."""
 
     @pytest.mark.asyncio
     async def test_settings_jwt_defaults(self):
@@ -234,23 +216,23 @@ class TestSettingsAuthAndInfra:
 
     @pytest.mark.asyncio
     async def test_settings_redemption_thresholds(self):
-        """All four redemption minimums should match the spec."""
+        """All four redemption minimums should match the spec (USD)."""
         s = Settings()
-        assert s.redemption_min_api_credits_ard == 100.0
-        assert s.redemption_min_gift_card_ard == 1000.0
-        assert s.redemption_min_bank_ard == 10000.0
-        assert s.redemption_min_upi_ard == 5000.0
+        assert s.redemption_min_api_credits_usd == 0.10
+        assert s.redemption_min_gift_card_usd == 1.00
+        assert s.redemption_min_bank_usd == 10.00
+        assert s.redemption_min_upi_usd == 5.00
 
 
 class TestSettingsCreatorAndMisc:
-    """Tests 25-30: creator economy, rate limits, payment, CORS, quality, OpenClaw."""
+    """Tests 23-28: creator economy, rate limits, payment, CORS, OpenClaw."""
 
     @pytest.mark.asyncio
     async def test_settings_creator_defaults(self):
-        """Creator royalty=1.0, min withdrawal=10000, payout day=1."""
+        """Creator royalty=1.0, min withdrawal=$10.00, payout day=1."""
         s = Settings()
         assert s.creator_royalty_pct == 1.0
-        assert s.creator_min_withdrawal_ard == 10000.0
+        assert s.creator_min_withdrawal_usd == 10.00
         assert s.creator_payout_day == 1
 
     @pytest.mark.asyncio
@@ -268,16 +250,9 @@ class TestSettingsCreatorAndMisc:
 
     @pytest.mark.asyncio
     async def test_settings_cors(self):
-        """CORS origins should default to '*' (allow all)."""
+        """CORS origins should default to localhost dev origins."""
         s = Settings()
-        assert s.cors_origins == "*"
-
-    @pytest.mark.asyncio
-    async def test_settings_quality_threshold(self):
-        """Quality threshold for bonus should be 0.80, bonus pct 0.10."""
-        s = Settings()
-        assert s.token_quality_threshold == 0.80
-        assert s.token_quality_bonus_pct == 0.10
+        assert "localhost" in s.cors_origins
 
     @pytest.mark.asyncio
     async def test_settings_openclaw_defaults(self):

@@ -35,7 +35,7 @@ export default function CreatorLoginPage({ onLogin, onRegister, loading, error }
           <p className="mt-1 text-sm text-text-muted">
             {mode === "login"
               ? "Sign in to manage your agents and earnings"
-              : "Join AgentChains and start earning ARD tokens"}
+              : "Join AgentChains and start earning"}
           </p>
         </div>
 
@@ -144,8 +144,8 @@ export default function CreatorLoginPage({ onLogin, onRegister, loading, error }
 
         <div className="mt-4 rounded-lg bg-primary/5 border border-primary/20 px-4 py-3">
           <p className="text-xs text-text-muted">
-            <span className="font-semibold text-primary">100 ARD signup bonus!</span>{" "}
-            Create your agents via OpenClaw, link them here, and earn ARD tokens every time they sell data.
+            <span className="font-semibold text-primary">$0.10 welcome credit!</span>{" "}
+            Create your agents via OpenClaw, link them here, and earn USD every time they sell data.
             Redeem for API credits, gift cards, or bank withdrawal.
           </p>
         </div>

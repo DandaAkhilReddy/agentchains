@@ -1,8 +1,8 @@
 """Boundary-value tests for the AgentChains marketplace.
 
-Exercises exact edges of Decimal precision, quality-score thresholds,
-listing schema constraints, pagination limits, HashFS content sizes,
-and string edge cases.  20 tests total — mix of sync and async.
+Exercises exact edges of Decimal precision, listing schema constraints,
+pagination limits, HashFS content sizes, and string edge cases.
+16 tests total -- mix of sync and async.
 """
 
 import shutil
@@ -14,21 +14,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
 from marketplace.services import token_service
-from marketplace.services.deposit_service import (
-    _calculate_axn,
-    get_exchange_rate,
-)
 from marketplace.storage.hashfs import HashFS
 
 
 # ===================================================================
-# Decimal precision (4 tests)
+# Decimal precision (3 tests)
 # ===================================================================
 
 async def test_transfer_six_decimal_precision(
     db: AsyncSession, make_agent, make_token_account, seed_platform,
 ):
-    """Transfer 0.000001 ARD and verify balance changes by exactly that minus fee."""
+    """Transfer 0.000001 USD and verify balance changes by exactly that minus fee."""
     alice, _ = await make_agent("alice-micro")
     bob, _ = await make_agent("bob-micro")
     await make_token_account(alice.id, 1.0)
@@ -55,7 +51,7 @@ async def test_transfer_six_decimal_precision(
 async def test_fee_calculation_sub_penny(
     db: AsyncSession, make_agent, make_token_account, seed_platform,
 ):
-    """Fee on 0.01 ARD at 2%: 0.01 * 0.02 = 0.0002, verify exact."""
+    """Fee on 0.01 USD at 2%: 0.01 * 0.02 = 0.0002, verify exact."""
     alice, _ = await make_agent("alice-subpenny")
     bob, _ = await make_agent("bob-subpenny")
     await make_token_account(alice.id, 100.0)
@@ -65,7 +61,7 @@ async def test_fee_calculation_sub_penny(
         db, alice.id, bob.id, Decimal("0.01"), tx_type="purchase",
     )
 
-    expected_fee = Decimal("0.01") * Decimal(str(settings.token_platform_fee_pct))
+    expected_fee = Decimal("0.01") * Decimal(str(settings.platform_fee_pct))
     expected_fee = expected_fee.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
 
     assert Decimal(str(ledger.fee_amount)) == expected_fee
@@ -92,83 +88,12 @@ async def test_large_balance_no_overflow(
     assert Decimal(str(whale_bal["balance"])) == Decimal("999999998.000000")
 
     # Minnow: 1.0 - fee(0.02) = 0.98
-    fee = Decimal("1.0") * Decimal(str(settings.token_platform_fee_pct))
+    fee = Decimal("1.0") * Decimal(str(settings.platform_fee_pct))
     fee = fee.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
     expected_minnow = (Decimal("1.0") - fee).quantize(
         Decimal("0.000001"), rounding=ROUND_HALF_UP,
     )
     assert Decimal(str(minnow_bal["balance"])) == expected_minnow
-
-
-def test_deposit_exchange_rate_decimal_precision():
-    """USD deposit of 1.0 at rate 0.001 -> 1000.000000 ARD exactly (sync test)."""
-    rate = get_exchange_rate("USD")
-    assert rate == Decimal("0.001000")
-
-    ard_amount = _calculate_axn(Decimal("1.0"), rate)
-    assert ard_amount == Decimal("1000.000000")
-
-
-# ===================================================================
-# Quality score boundaries (3 tests)
-# ===================================================================
-
-async def test_quality_exactly_zero_no_bonus(
-    db: AsyncSession, make_agent, make_token_account, seed_platform,
-):
-    """quality_score=0.0 is below threshold (0.80), so no quality bonus is applied."""
-    buyer, _ = await make_agent("buyer-q0")
-    seller, _ = await make_agent("seller-q0")
-    await make_token_account(buyer.id, 10_000.0)
-    await make_token_account(seller.id, 0.0)
-
-    result = await token_service.debit_for_purchase(
-        db, buyer.id, seller.id,
-        amount_usdc=1.0,
-        listing_quality=0.0,
-        tx_id="tx-q0",
-    )
-
-    assert result["quality_bonus_axn"] == 0.0
-
-
-async def test_quality_exactly_one_max_bonus(
-    db: AsyncSession, make_agent, make_token_account, seed_platform,
-):
-    """quality_score=1.0 exceeds threshold, so quality bonus IS applied."""
-    buyer, _ = await make_agent("buyer-q1")
-    seller, _ = await make_agent("seller-q1")
-    await make_token_account(buyer.id, 10_000.0)
-    await make_token_account(seller.id, 0.0)
-
-    result = await token_service.debit_for_purchase(
-        db, buyer.id, seller.id,
-        amount_usdc=1.0,
-        listing_quality=1.0,
-        tx_id="tx-q1",
-    )
-
-    assert result["quality_bonus_axn"] > 0.0
-
-
-async def test_quality_at_threshold_boundary(
-    db: AsyncSession, make_agent, make_token_account, seed_platform,
-):
-    """quality_score=0.80 (exact threshold) triggers bonus (>= check)."""
-    buyer, _ = await make_agent("buyer-qthresh")
-    seller, _ = await make_agent("seller-qthresh")
-    await make_token_account(buyer.id, 10_000.0)
-    await make_token_account(seller.id, 0.0)
-
-    result = await token_service.debit_for_purchase(
-        db, buyer.id, seller.id,
-        amount_usdc=1.0,
-        listing_quality=0.80,
-        tx_id="tx-qthresh",
-    )
-
-    # The service uses >= settings.token_quality_threshold (0.80)
-    assert result["quality_bonus_axn"] > 0.0
 
 
 # ===================================================================
@@ -321,7 +246,7 @@ async def test_discover_page_size_one(client, make_agent, make_listing):
 
 
 # ===================================================================
-# HashFS boundaries (3 tests — sync)
+# HashFS boundaries (3 tests -- sync)
 # ===================================================================
 
 def test_hashfs_single_byte_content():
@@ -376,7 +301,7 @@ def test_hashfs_deterministic_hash():
 
 @pytest.mark.asyncio
 async def test_agent_name_with_spaces(client):
-    """Register agent with spaces in name — should be valid."""
+    """Register agent with spaces in name -- should be valid."""
     response = await client.post(
         "/api/v1/agents/register",
         json={

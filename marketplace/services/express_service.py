@@ -46,20 +46,19 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
     if content_bytes is None:
         raise HTTPException(status_code=404, detail="Content not found in storage")
 
-    # 5. Token payment — pre-generate tx_id for idempotency
+    # 5. Balance payment — pre-generate tx_id for idempotency
     tx_id = str(uuid.uuid4())
     token_result = None
-    amount_axn = None
+    cost_usd = None
     if payment_method == "token":
         try:
             from marketplace.services.token_service import debit_for_purchase
-            listing_quality = float(listing.quality_score or 0)
             token_result = await debit_for_purchase(
-                db, buyer_id, seller_id, price_usdc, listing_quality, tx_id
+                db, buyer_id, seller_id, price_usdc, tx_id
             )
-            amount_axn = token_result["amount_axn"]
+            cost_usd = token_result["amount_usd"]
         except Exception as e:
-            raise HTTPException(status_code=402, detail=f"Insufficient ARD balance: {e}")
+            raise HTTPException(status_code=402, detail=f"Insufficient balance: {e}")
 
     # 6. Create completed transaction record (collapsed state machine)
     now = datetime.now(timezone.utc)
@@ -75,8 +74,6 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
         verification_status="verified",
         payment_tx_hash=f"express_{int(now.timestamp() * 1000)}",
         payment_method=payment_method,
-        amount_axn=amount_axn,
-        token_ledger_id=token_result["ledger_id"] if token_result else None,
         initiated_at=now,
         paid_at=now,
         delivered_at=now,
@@ -111,7 +108,7 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
                     "title": listing_title,
                     "buyer_id": buyer_id,
                     "price_usdc": price_usdc,
-                    "amount_axn": amount_axn,
+                    "cost_usd": cost_usd,
                     "payment_method": payment_method,
                     "buyer_balance": token_result["buyer_balance"] if token_result else None,
                     "delivery_ms": round(elapsed_ms, 1),
@@ -129,7 +126,7 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
             "content": content_bytes.decode("utf-8"),
             "content_hash": content_hash,
             "price_usdc": price_usdc,
-            "amount_axn": amount_axn,
+            "cost_usd": cost_usd,
             "payment_method": payment_method,
             "buyer_balance": token_result["buyer_balance"] if token_result else None,
             "seller_id": seller_id,

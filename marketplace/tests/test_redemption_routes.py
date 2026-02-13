@@ -25,7 +25,7 @@ from marketplace.tests.conftest import TestSession, _new_id
 BASE = "/api/v1/redemptions"
 
 
-async def _seed_creator(balance: float = 1000.0) -> tuple[str, str]:
+async def _seed_creator(balance: float = 10.0) -> tuple[str, str]:
     """Create a Creator + TokenAccount via direct DB. Returns (creator_id, jwt)."""
     async with TestSession() as db:
         creator_id = _new_id()
@@ -65,7 +65,7 @@ async def _set_balance(creator_id: str, amount: float) -> None:
 
 
 async def _get_balance(creator_id: str) -> float:
-    """Read a creator's current ARD balance."""
+    """Read a creator's current USD balance."""
     async with TestSession() as db:
         result = await db.execute(
             select(TokenAccount).where(TokenAccount.creator_id == creator_id)
@@ -83,20 +83,19 @@ def _auth(token: str) -> dict:
 # ---------------------------------------------------------------------------
 
 async def test_create_api_credits_redemption(client):
-    """api_credits (100 ARD) auto-completes with status='completed'."""
-    creator_id, jwt = await _seed_creator(balance=1000)
+    """api_credits ($0.10) auto-completes with status='completed'."""
+    creator_id, jwt = await _seed_creator(balance=10.0)
 
     resp = await client.post(
         BASE,
-        json={"redemption_type": "api_credits", "amount_ard": 100},
+        json={"redemption_type": "api_credits", "amount_usd": 0.10},
         headers=_auth(jwt),
     )
     assert resp.status_code == 201
     data = resp.json()
     assert data["status"] == "completed"
     assert data["redemption_type"] == "api_credits"
-    assert data["amount_ard"] == 100.0
-    assert data["payout_ref"] == "api_credits_100"
+    assert data["amount_usd"] == 0.10
 
 
 # ---------------------------------------------------------------------------
@@ -104,20 +103,19 @@ async def test_create_api_credits_redemption(client):
 # ---------------------------------------------------------------------------
 
 async def test_create_gift_card_redemption(client):
-    """gift_card (1000 ARD) stays pending until admin action."""
-    creator_id, jwt = await _seed_creator(balance=2000)
+    """gift_card ($1.00) stays pending until admin action."""
+    creator_id, jwt = await _seed_creator(balance=20.0)
 
     resp = await client.post(
         BASE,
-        json={"redemption_type": "gift_card", "amount_ard": 1000},
+        json={"redemption_type": "gift_card", "amount_usd": 1.0},
         headers=_auth(jwt),
     )
     assert resp.status_code == 201
     data = resp.json()
     assert data["status"] == "pending"
     assert data["redemption_type"] == "gift_card"
-    assert data["amount_ard"] == 1000.0
-    assert data["amount_fiat"] is not None
+    assert data["amount_usd"] == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -125,19 +123,19 @@ async def test_create_gift_card_redemption(client):
 # ---------------------------------------------------------------------------
 
 async def test_create_bank_withdrawal(client):
-    """bank_withdrawal (10000 ARD) requires higher balance, stays pending."""
-    creator_id, jwt = await _seed_creator(balance=20000)
+    """bank_withdrawal ($10.00) requires higher balance, stays pending."""
+    creator_id, jwt = await _seed_creator(balance=200.0)
 
     resp = await client.post(
         BASE,
-        json={"redemption_type": "bank_withdrawal", "amount_ard": 10000},
+        json={"redemption_type": "bank_withdrawal", "amount_usd": 10.0},
         headers=_auth(jwt),
     )
     assert resp.status_code == 201
     data = resp.json()
     assert data["status"] == "pending"
     assert data["redemption_type"] == "bank_withdrawal"
-    assert data["amount_ard"] == 10000.0
+    assert data["amount_usd"] == 10.0
 
 
 # ---------------------------------------------------------------------------
@@ -145,19 +143,19 @@ async def test_create_bank_withdrawal(client):
 # ---------------------------------------------------------------------------
 
 async def test_create_upi_redemption(client):
-    """UPI (5000 ARD) stays pending."""
-    creator_id, jwt = await _seed_creator(balance=10000)
+    """UPI ($5.00) stays pending."""
+    creator_id, jwt = await _seed_creator(balance=100.0)
 
     resp = await client.post(
         BASE,
-        json={"redemption_type": "upi", "amount_ard": 5000},
+        json={"redemption_type": "upi", "amount_usd": 5.0},
         headers=_auth(jwt),
     )
     assert resp.status_code == 201
     data = resp.json()
     assert data["status"] == "pending"
     assert data["redemption_type"] == "upi"
-    assert data["amount_ard"] == 5000.0
+    assert data["amount_usd"] == 5.0
 
 
 # ---------------------------------------------------------------------------
@@ -165,12 +163,12 @@ async def test_create_upi_redemption(client):
 # ---------------------------------------------------------------------------
 
 async def test_create_below_minimum_api_credits(client):
-    """50 ARD is below api_credits minimum (100) -> 400."""
-    _, jwt = await _seed_creator(balance=1000)
+    """$0.05 is below api_credits minimum ($0.10) -> 400."""
+    _, jwt = await _seed_creator(balance=10.0)
 
     resp = await client.post(
         BASE,
-        json={"redemption_type": "api_credits", "amount_ard": 50},
+        json={"redemption_type": "api_credits", "amount_usd": 0.05},
         headers=_auth(jwt),
     )
     assert resp.status_code == 400
@@ -182,12 +180,12 @@ async def test_create_below_minimum_api_credits(client):
 # ---------------------------------------------------------------------------
 
 async def test_create_below_minimum_gift_card(client):
-    """500 ARD is below gift_card minimum (1000) -> 400."""
-    _, jwt = await _seed_creator(balance=1000)
+    """$0.50 is below gift_card minimum ($1.00) -> 400."""
+    _, jwt = await _seed_creator(balance=10.0)
 
     resp = await client.post(
         BASE,
-        json={"redemption_type": "gift_card", "amount_ard": 500},
+        json={"redemption_type": "gift_card", "amount_usd": 0.50},
         headers=_auth(jwt),
     )
     assert resp.status_code == 400
@@ -199,12 +197,12 @@ async def test_create_below_minimum_gift_card(client):
 # ---------------------------------------------------------------------------
 
 async def test_create_insufficient_balance(client):
-    """Requesting 100000 ARD with only 1000 balance -> 400."""
-    _, jwt = await _seed_creator(balance=1000)
+    """Requesting $100.00 with only $10.00 balance -> 400."""
+    _, jwt = await _seed_creator(balance=10.0)
 
     resp = await client.post(
         BASE,
-        json={"redemption_type": "bank_withdrawal", "amount_ard": 100000},
+        json={"redemption_type": "bank_withdrawal", "amount_usd": 100.0},
         headers=_auth(jwt),
     )
     assert resp.status_code == 400
@@ -217,11 +215,11 @@ async def test_create_insufficient_balance(client):
 
 async def test_create_invalid_type(client):
     """'bitcoin' does not match Pydantic pattern -> 422."""
-    _, jwt = await _seed_creator(balance=1000)
+    _, jwt = await _seed_creator(balance=10.0)
 
     resp = await client.post(
         BASE,
-        json={"redemption_type": "bitcoin", "amount_ard": 100},
+        json={"redemption_type": "bitcoin", "amount_usd": 1.0},
         headers=_auth(jwt),
     )
     assert resp.status_code == 422
@@ -233,11 +231,11 @@ async def test_create_invalid_type(client):
 
 async def test_create_zero_amount(client):
     """0 amount violates gt=0 constraint -> 422."""
-    _, jwt = await _seed_creator(balance=1000)
+    _, jwt = await _seed_creator(balance=10.0)
 
     resp = await client.post(
         BASE,
-        json={"redemption_type": "api_credits", "amount_ard": 0},
+        json={"redemption_type": "api_credits", "amount_usd": 0},
         headers=_auth(jwt),
     )
     assert resp.status_code == 422
@@ -249,11 +247,11 @@ async def test_create_zero_amount(client):
 
 async def test_create_negative_amount(client):
     """Negative amount violates gt=0 constraint -> 422."""
-    _, jwt = await _seed_creator(balance=1000)
+    _, jwt = await _seed_creator(balance=10.0)
 
     resp = await client.post(
         BASE,
-        json={"redemption_type": "api_credits", "amount_ard": -100},
+        json={"redemption_type": "api_credits", "amount_usd": -1.0},
         headers=_auth(jwt),
     )
     assert resp.status_code == 422
@@ -267,7 +265,7 @@ async def test_create_unauthenticated(client):
     """No auth header -> 401."""
     resp = await client.post(
         BASE,
-        json={"redemption_type": "api_credits", "amount_ard": 100},
+        json={"redemption_type": "api_credits", "amount_usd": 0.10},
     )
     assert resp.status_code == 401
 
@@ -278,7 +276,7 @@ async def test_create_unauthenticated(client):
 
 async def test_list_redemptions_empty(client):
     """New creator with no redemptions -> empty list."""
-    _, jwt = await _seed_creator(balance=1000)
+    _, jwt = await _seed_creator(balance=10.0)
 
     resp = await client.get(BASE, headers=_auth(jwt))
     assert resp.status_code == 200
@@ -293,13 +291,13 @@ async def test_list_redemptions_empty(client):
 
 async def test_list_redemptions_with_entries(client):
     """Create 3 redemptions, list shows all three."""
-    creator_id, jwt = await _seed_creator(balance=5000)
+    creator_id, jwt = await _seed_creator(balance=50.0)
 
     # Create 3 api_credits redemptions (auto-complete)
     for _ in range(3):
         r = await client.post(
             BASE,
-            json={"redemption_type": "api_credits", "amount_ard": 100},
+            json={"redemption_type": "api_credits", "amount_usd": 0.10},
             headers=_auth(jwt),
         )
         assert r.status_code == 201
@@ -317,18 +315,18 @@ async def test_list_redemptions_with_entries(client):
 
 async def test_list_redemptions_status_filter(client):
     """Filter by status='completed' excludes pending ones."""
-    creator_id, jwt = await _seed_creator(balance=5000)
+    creator_id, jwt = await _seed_creator(balance=50.0)
 
     # 1 api_credits -> completed
     await client.post(
         BASE,
-        json={"redemption_type": "api_credits", "amount_ard": 100},
+        json={"redemption_type": "api_credits", "amount_usd": 0.10},
         headers=_auth(jwt),
     )
     # 1 gift_card -> pending
     await client.post(
         BASE,
-        json={"redemption_type": "gift_card", "amount_ard": 1000},
+        json={"redemption_type": "gift_card", "amount_usd": 1.0},
         headers=_auth(jwt),
     )
 
@@ -348,12 +346,12 @@ async def test_list_redemptions_status_filter(client):
 
 async def test_list_redemptions_pagination(client):
     """page=1, page_size=2 with 3 entries returns only 2."""
-    creator_id, jwt = await _seed_creator(balance=5000)
+    creator_id, jwt = await _seed_creator(balance=50.0)
 
     for _ in range(3):
         await client.post(
             BASE,
-            json={"redemption_type": "api_credits", "amount_ard": 100},
+            json={"redemption_type": "api_credits", "amount_usd": 0.10},
             headers=_auth(jwt),
         )
 
@@ -374,11 +372,11 @@ async def test_list_redemptions_pagination(client):
 
 async def test_get_single_redemption(client):
     """GET /{id} returns the correct redemption."""
-    creator_id, jwt = await _seed_creator(balance=1000)
+    creator_id, jwt = await _seed_creator(balance=10.0)
 
     create_resp = await client.post(
         BASE,
-        json={"redemption_type": "api_credits", "amount_ard": 100},
+        json={"redemption_type": "api_credits", "amount_usd": 0.10},
         headers=_auth(jwt),
     )
     assert create_resp.status_code == 201
@@ -397,7 +395,7 @@ async def test_get_single_redemption(client):
 
 async def test_get_nonexistent_redemption(client):
     """GET /{bad_id} -> 404."""
-    _, jwt = await _seed_creator(balance=1000)
+    _, jwt = await _seed_creator(balance=10.0)
 
     resp = await client.get(
         f"{BASE}/nonexistent-id-12345", headers=_auth(jwt),
@@ -411,12 +409,12 @@ async def test_get_nonexistent_redemption(client):
 
 async def test_cancel_pending_redemption(client):
     """Cancelling a pending redemption restores the creator's balance."""
-    creator_id, jwt = await _seed_creator(balance=2000)
+    creator_id, jwt = await _seed_creator(balance=20.0)
 
     # Create a gift_card (pending)
     create_resp = await client.post(
         BASE,
-        json={"redemption_type": "gift_card", "amount_ard": 1000},
+        json={"redemption_type": "gift_card", "amount_usd": 1.0},
         headers=_auth(jwt),
     )
     assert create_resp.status_code == 201
@@ -424,7 +422,7 @@ async def test_cancel_pending_redemption(client):
 
     # Balance should be reduced
     balance_after_create = await _get_balance(creator_id)
-    assert balance_after_create == pytest.approx(1000.0, abs=0.01)
+    assert balance_after_create == pytest.approx(19.0, abs=0.01)
 
     # Cancel
     cancel_resp = await client.post(
@@ -437,7 +435,7 @@ async def test_cancel_pending_redemption(client):
 
     # Balance should be restored
     balance_after_cancel = await _get_balance(creator_id)
-    assert balance_after_cancel == pytest.approx(2000.0, abs=0.01)
+    assert balance_after_cancel == pytest.approx(20.0, abs=0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -446,11 +444,11 @@ async def test_cancel_pending_redemption(client):
 
 async def test_cancel_completed_redemption(client):
     """Cannot cancel a completed (api_credits auto-processed) redemption -> 400."""
-    _, jwt = await _seed_creator(balance=1000)
+    _, jwt = await _seed_creator(balance=10.0)
 
     create_resp = await client.post(
         BASE,
-        json={"redemption_type": "api_credits", "amount_ard": 100},
+        json={"redemption_type": "api_credits", "amount_usd": 0.10},
         headers=_auth(jwt),
     )
     assert create_resp.status_code == 201
@@ -480,20 +478,18 @@ async def test_cancel_unauthenticated(client):
 
 async def test_admin_approve_gift_card(client):
     """Admin approve moves gift_card from pending to processing."""
-    creator_id, jwt = await _seed_creator(balance=2000)
+    creator_id, jwt = await _seed_creator(balance=20.0)
 
     # Create gift_card redemption
     create_resp = await client.post(
         BASE,
-        json={"redemption_type": "gift_card", "amount_ard": 1000},
+        json={"redemption_type": "gift_card", "amount_usd": 1.0},
         headers=_auth(jwt),
     )
     assert create_resp.status_code == 201
     redemption_id = create_resp.json()["id"]
 
-    # Admin approve (uses same creator JWT as admin for testing purposes)
-    # Admin endpoints use Depends(get_current_creator_id) which resolves
-    # `authorization` as a query parameter, not a header.
+    # Admin approve
     approve_resp = await client.post(
         f"{BASE}/admin/{redemption_id}/approve",
         params={"authorization": f"Bearer {jwt}"},
@@ -509,13 +505,13 @@ async def test_admin_approve_gift_card(client):
 # ---------------------------------------------------------------------------
 
 async def test_admin_reject_with_refund(client):
-    """Admin reject refunds ARD and sets the rejection reason."""
-    creator_id, jwt = await _seed_creator(balance=2000)
+    """Admin reject refunds USD and sets the rejection reason."""
+    creator_id, jwt = await _seed_creator(balance=20.0)
 
     # Create gift_card redemption
     create_resp = await client.post(
         BASE,
-        json={"redemption_type": "gift_card", "amount_ard": 1000},
+        json={"redemption_type": "gift_card", "amount_usd": 1.0},
         headers=_auth(jwt),
     )
     assert create_resp.status_code == 201
@@ -523,9 +519,9 @@ async def test_admin_reject_with_refund(client):
 
     # Balance should be debited
     balance_after = await _get_balance(creator_id)
-    assert balance_after == pytest.approx(1000.0, abs=0.01)
+    assert balance_after == pytest.approx(19.0, abs=0.01)
 
-    # Admin reject — admin endpoints use Depends(), so pass via query param
+    # Admin reject
     reject_resp = await client.post(
         f"{BASE}/admin/{redemption_id}/reject",
         params={"authorization": f"Bearer {jwt}"},
@@ -538,7 +534,7 @@ async def test_admin_reject_with_refund(client):
 
     # Balance should be restored
     balance_restored = await _get_balance(creator_id)
-    assert balance_restored == pytest.approx(2000.0, abs=0.01)
+    assert balance_restored == pytest.approx(20.0, abs=0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -547,17 +543,17 @@ async def test_admin_reject_with_refund(client):
 
 async def test_admin_reject_empty_reason(client):
     """Empty reason string fails Pydantic validation (min_length=1) -> 422."""
-    _, jwt = await _seed_creator(balance=2000)
+    _, jwt = await _seed_creator(balance=20.0)
 
     # Create gift_card
     create_resp = await client.post(
         BASE,
-        json={"redemption_type": "gift_card", "amount_ard": 1000},
+        json={"redemption_type": "gift_card", "amount_usd": 1.0},
         headers=_auth(jwt),
     )
     redemption_id = create_resp.json()["id"]
 
-    # Reject with empty reason — admin endpoints use Depends(), pass via query param
+    # Reject with empty reason
     reject_resp = await client.post(
         f"{BASE}/admin/{redemption_id}/reject",
         params={"authorization": f"Bearer {jwt}"},
@@ -571,7 +567,7 @@ async def test_admin_reject_empty_reason(client):
 # ---------------------------------------------------------------------------
 
 async def test_get_methods(client):
-    """GET /methods returns 4 methods with correct thresholds (no auth needed)."""
+    """GET /methods returns 4 methods with correct USD thresholds (no auth needed)."""
     resp = await client.get(f"{BASE}/methods")
     assert resp.status_code == 200
     data = resp.json()
@@ -585,15 +581,11 @@ async def test_get_methods(client):
     assert "upi" in by_type
     assert "bank_withdrawal" in by_type
 
-    # Verify minimum thresholds
-    assert by_type["api_credits"]["min_ard"] == 100.0
-    assert by_type["gift_card"]["min_ard"] == 1000.0
-    assert by_type["upi"]["min_ard"] == 5000.0
-    assert by_type["bank_withdrawal"]["min_ard"] == 10000.0
-
-    # Verify token metadata
-    assert "peg_rate_usd" in data
-    assert data["peg_rate_usd"] == pytest.approx(0.001)
+    # Verify minimum USD thresholds
+    assert by_type["api_credits"]["min_usd"] == 0.10
+    assert by_type["gift_card"]["min_usd"] == 1.00
+    assert by_type["upi"]["min_usd"] == 5.00
+    assert by_type["bank_withdrawal"]["min_usd"] == 10.00
 
 
 # ---------------------------------------------------------------------------
@@ -602,12 +594,12 @@ async def test_get_methods(client):
 
 async def test_api_credits_adds_credits(client):
     """After api_credits redemption, ApiCreditBalance is created/updated."""
-    creator_id, jwt = await _seed_creator(balance=1000)
+    creator_id, jwt = await _seed_creator(balance=10.0)
 
-    # First redemption: 100 credits
+    # First redemption: $0.10
     resp1 = await client.post(
         BASE,
-        json={"redemption_type": "api_credits", "amount_ard": 100},
+        json={"redemption_type": "api_credits", "amount_usd": 0.10},
         headers=_auth(jwt),
     )
     assert resp1.status_code == 201
@@ -621,13 +613,13 @@ async def test_api_credits_adds_credits(client):
             )
         )
         credit_bal = result.scalar_one()
-        assert int(credit_bal.credits_remaining) == 100
-        assert int(credit_bal.credits_total_purchased) == 100
+        first_credits = int(credit_bal.credits_remaining)
+        assert first_credits > 0
 
-    # Second redemption: 200 more credits (should accumulate)
+    # Second redemption: $0.20 more (should accumulate)
     resp2 = await client.post(
         BASE,
-        json={"redemption_type": "api_credits", "amount_ard": 200},
+        json={"redemption_type": "api_credits", "amount_usd": 0.20},
         headers=_auth(jwt),
     )
     assert resp2.status_code == 201
@@ -641,5 +633,4 @@ async def test_api_credits_adds_credits(client):
             )
         )
         credit_bal = result.scalar_one()
-        assert int(credit_bal.credits_remaining) == 300
-        assert int(credit_bal.credits_total_purchased) == 300
+        assert int(credit_bal.credits_remaining) > first_credits

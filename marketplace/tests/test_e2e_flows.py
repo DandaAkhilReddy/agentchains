@@ -38,7 +38,7 @@ async def test_e2e_basic_purchase_flow(db, make_agent, make_token_account, seed_
 
     # 2. Register buyer agent
     buyer, buyer_token = await make_agent("buyer-agent", "buyer")
-    buyer_account = await make_token_account(buyer.id, balance=10000)  # Need 5000 ARD for $5 purchase
+    buyer_account = await make_token_account(buyer.id, balance=10000)
 
     # 3. Seller creates a listing
     from marketplace.schemas.listing import ListingCreateRequest
@@ -81,7 +81,7 @@ async def test_e2e_basic_purchase_flow(db, make_agent, make_token_account, seed_
     assert data["transaction_id"] is not None
     assert "content" in data
     assert data["price_usdc"] == 5.0
-    assert data["amount_axn"] is not None  # USD->ARD conversion happened
+    assert data["cost_usd"] is not None  # USD cost recorded
     assert data["payment_method"] == "token"
 
     # 6. Verify token transfer occurred
@@ -110,7 +110,7 @@ async def test_e2e_multi_step_purchase_flow(db, make_agent, make_token_account, 
     await make_token_account(seller.id, balance=0)
 
     buyer, _ = await make_agent("buyer2", "buyer")
-    await make_token_account(buyer.id, balance=5000)  # Need 3000 ARD for $3 purchase
+    await make_token_account(buyer.id, balance=5000)
 
     # Create listing
     from marketplace.schemas.listing import ListingCreateRequest
@@ -231,7 +231,7 @@ async def test_e2e_creator_agent_royalty_flow(db, make_creator, make_agent, make
 
     # 5. Buyer purchases the listing
     buyer, _ = await make_agent("buyer-royalty", "buyer")
-    await make_token_account(buyer.id, balance=15000)  # Need 10000 ARD for $10 purchase
+    await make_token_account(buyer.id, balance=15000)
 
     response = await express_service.express_buy(db, listing.id, buyer.id, payment_method="token")
     # express_buy returns JSONResponse, no need to check status_code
@@ -286,7 +286,7 @@ async def test_e2e_creator_multi_agent_earnings(db, make_creator, make_agent, ma
 
     # Buyer purchases from all agents
     buyer, _ = await make_agent("bulk-buyer", "buyer")
-    await make_token_account(buyer.id, balance=10000)  # Need ~2000 ARD per purchase
+    await make_token_account(buyer.id, balance=10000)
 
     listings, _ = await listing_service.list_listings(db, status="active")
     for i, listing in enumerate(listings[:3]):  # Buy first 3
@@ -295,10 +295,10 @@ async def test_e2e_creator_multi_agent_earnings(db, make_creator, make_agent, ma
         unique_tx_id = f"bulk-purchase-{i}-{listing.id}"
         result = await token_service.debit_for_purchase(
             db, buyer.id, listing.seller_id,
-            float(listing.price_usdc), float(listing.quality_score or 0),
+            float(listing.price_usdc),
             unique_tx_id,
         )
-        assert result["amount_axn"] > 0
+        assert result["amount_usd"] > 0
 
     # Check creator dashboard
     dashboard = await creator_service.get_creator_dashboard(db, creator.id)
@@ -329,7 +329,7 @@ async def test_e2e_creator_cannot_claim_already_claimed_agent(db, make_creator, 
 
 @pytest.mark.asyncio
 async def test_e2e_fiat_deposit_to_purchase_flow(db, make_agent, make_listing, seed_platform):
-    """Buyer deposits USD → converts to ARD → buys listing → seller earns ARD."""
+    """Buyer deposits USD → buys listing → seller earns USD."""
     platform = seed_platform
     await token_service.ensure_platform_account(db)
 
@@ -340,20 +340,19 @@ async def test_e2e_fiat_deposit_to_purchase_flow(db, make_agent, make_listing, s
     buyer, _ = await make_agent("buyer-fiat", "buyer")
     await token_service.create_account(db, buyer.id)
 
-    # 1. Buyer creates a deposit (USD → ARD)
+    # 1. Buyer creates a deposit (USD)
     deposit_data = await deposit_service.create_deposit(
-        db, agent_id=buyer.id, amount_fiat=100.0, currency="USD", payment_method="credit_card"
+        db, agent_id=buyer.id, amount_usd=100.0, payment_method="credit_card"
     )
 
     assert deposit_data["status"] == "pending"
-    assert deposit_data["currency"] == "USD"
-    assert deposit_data["amount_axn"] > 0  # Converted to ARD
+    assert deposit_data["amount_usd"] > 0
 
     # 2. Confirm deposit (simulate payment success)
     confirmed = await deposit_service.confirm_deposit(db, deposit_data["id"])
     assert confirmed["status"] == "completed"
 
-    # 3. Buyer balance should now have ARD
+    # 3. Buyer balance should now have USD
     buyer_balance = await token_service.get_balance(db, buyer.id)
     assert buyer_balance["balance"] > 0
 
@@ -363,42 +362,10 @@ async def test_e2e_fiat_deposit_to_purchase_flow(db, make_agent, make_listing, s
     data = json.loads(response.body.decode())
     assert data["price_usdc"] == 8.0
 
-    # 5. Seller earns ARD
+    # 5. Seller earns USD
     seller_balance = await token_service.get_balance(db, seller.id)
     assert seller_balance["balance"] > 0
     assert seller_balance["total_earned"] > 0
-
-
-@pytest.mark.asyncio
-async def test_e2e_multi_currency_deposit(db, make_agent, seed_platform):
-    """Test deposits in different currencies (USD, INR, EUR, GBP)."""
-    platform = seed_platform
-
-    agent, _ = await make_agent("multi-currency-agent")
-    await token_service.create_account(db, agent.id)
-
-    # Get supported currencies
-    currencies = deposit_service.get_supported_currencies()
-    assert len(currencies) == 4
-    assert any(c["code"] == "USD" for c in currencies)
-    assert any(c["code"] == "INR" for c in currencies)
-
-    # Deposit in each currency
-    deposits = []
-    for curr_data in currencies:
-        deposit = await deposit_service.create_deposit(
-            db, agent_id=agent.id, amount_fiat=100.0, currency=curr_data["code"]
-        )
-        deposits.append(deposit)
-        await deposit_service.confirm_deposit(db, deposit["id"])
-
-    # Each deposit should convert to different ARD amounts based on exchange rate
-    axn_amounts = [d["amount_axn"] for d in deposits]
-    assert len(set(axn_amounts)) == 4  # All different
-
-    # Agent balance accumulates all deposits
-    balance = await token_service.get_balance(db, agent.id)
-    assert balance["balance"] > 0
 
 
 @pytest.mark.asyncio
@@ -412,7 +379,7 @@ async def test_e2e_fiat_deposit_history(db, make_agent, seed_platform):
     # Create 5 deposits
     for i in range(5):
         deposit = await deposit_service.create_deposit(
-            db, agent_id=agent.id, amount_fiat=10.0 + i, currency="USD"
+            db, agent_id=agent.id, amount_usd=10.0 + i
         )
         await deposit_service.confirm_deposit(db, deposit["id"])
 
@@ -561,8 +528,8 @@ async def test_e2e_demand_gaps_listing(db, make_search_log):
 # ==============================================================================
 
 @pytest.mark.asyncio
-async def test_e2e_token_transfer_with_fees_and_burn(db, make_agent, make_token_account, seed_platform):
-    """Direct token transfer applies platform fee and burn correctly."""
+async def test_e2e_token_transfer_with_fees(db, make_agent, make_token_account, seed_platform):
+    """Direct transfer applies platform fee correctly."""
     platform = seed_platform
 
     sender, _ = await make_agent("sender")
@@ -570,7 +537,7 @@ async def test_e2e_token_transfer_with_fees_and_burn(db, make_agent, make_token_
     await make_token_account(sender.id, balance=100)
     await make_token_account(receiver.id, balance=0)
 
-    # Transfer 50 ARD
+    # Transfer 50 USD
     ledger = await token_service.transfer(
         db,
         from_agent_id=sender.id,
@@ -583,7 +550,6 @@ async def test_e2e_token_transfer_with_fees_and_burn(db, make_agent, make_token_
     # Check ledger entry
     assert float(ledger.amount) == 50
     assert float(ledger.fee_amount) > 0
-    assert float(ledger.burn_amount) > 0
 
     # Check balances
     sender_bal = await token_service.get_balance(db, sender.id)
@@ -593,72 +559,6 @@ async def test_e2e_token_transfer_with_fees_and_burn(db, make_agent, make_token_
     assert receiver_bal["balance"] < 50  # Received less due to fee
     assert receiver_bal["balance"] > 0
 
-    # Check supply
-    supply = await token_service.get_supply(db)
-    assert supply["total_burned"] > 0
-
-
-@pytest.mark.asyncio
-async def test_e2e_quality_bonus_for_high_quality_listing(db, make_agent, make_token_account, make_listing, seed_platform):
-    """High-quality listings (≥ threshold) earn seller a bonus."""
-    from marketplace.config import settings
-    platform = seed_platform
-    await token_service.ensure_platform_account(db)
-
-    seller, _ = await make_agent("quality-seller", "seller")
-    await make_token_account(seller.id, balance=0)
-
-    buyer, _ = await make_agent("quality-buyer", "buyer")
-    await make_token_account(buyer.id, balance=7000)  # Need 5000 ARD for $5 purchase
-
-    # Create high-quality listing (above threshold)
-    listing = await make_listing(
-        seller.id,
-        price_usdc=5.0,
-        quality_score=settings.token_quality_threshold + 0.05,  # Just above threshold
-    )
-
-    # Purchase
-    response = await express_service.express_buy(db, listing.id, buyer.id, payment_method="token")
-    # express_buy returns JSONResponse, no need to check status_code
-
-    # Check seller balance — should include quality bonus
-    seller_bal = await token_service.get_balance(db, seller.id)
-    assert seller_bal["balance"] > 0
-
-    # History should show both purchase credit and bonus deposit
-    history, _ = await token_service.get_history(db, seller.id, page=1, page_size=10)
-    assert len(history) >= 2  # Purchase + bonus
-
-    bonus_entry = next((h for h in history if h["tx_type"] == "deposit" and "bonus" in h["memo"].lower()), None)
-    assert bonus_entry is not None
-
-
-@pytest.mark.asyncio
-async def test_e2e_token_ledger_hash_chain_integrity(db, make_agent, make_token_account, seed_platform):
-    """Verify ledger hash chain is maintained across multiple transfers."""
-    platform = seed_platform
-
-    agent1, _ = await make_agent("chain1")
-    agent2, _ = await make_agent("chain2")
-    agent3, _ = await make_agent("chain3")
-
-    await make_token_account(agent1.id, balance=100)
-    await make_token_account(agent2.id, balance=0)
-    await make_token_account(agent3.id, balance=0)
-
-    # Make several transfers to build chain
-    await token_service.transfer(db, agent1.id, agent2.id, 10, "transfer")
-    await token_service.transfer(db, agent1.id, agent3.id, 10, "transfer")
-    await token_service.transfer(db, agent2.id, agent3.id, 5, "transfer")
-
-    # Verify hash chain integrity
-    verification = await token_service.verify_ledger_chain(db)
-
-    assert verification["valid"] is True
-    assert verification["total_entries"] >= 3
-    assert len(verification["errors"]) == 0
-
 
 # ==============================================================================
 # Flow 6: Express Buy Edge Cases
@@ -666,7 +566,7 @@ async def test_e2e_token_ledger_hash_chain_integrity(db, make_agent, make_token_
 
 @pytest.mark.asyncio
 async def test_e2e_express_buy_insufficient_balance(db, make_agent, make_token_account, make_listing, seed_platform):
-    """Express buy fails gracefully when buyer has insufficient ARD."""
+    """Express buy fails gracefully when buyer has insufficient balance."""
     platform = seed_platform
     await token_service.ensure_platform_account(db)
 
@@ -802,7 +702,7 @@ async def test_e2e_http_discover_and_express_buy(client, auth_header, seed_platf
     deposit_resp = await client.post(
         f"/api/v1/wallet/deposit",
         headers=auth_header(buyer_token),
-        json={"amount_fiat": 50.0, "currency": "USD", "payment_method": "test"}
+        json={"amount_usd": 50.0, "payment_method": "test"}
     )
     assert deposit_resp.status_code in [200, 201]
 

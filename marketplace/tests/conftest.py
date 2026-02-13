@@ -1,4 +1,4 @@
-"""Shared test fixtures for the ARD token economy test suite.
+"""Shared test fixtures for the USD billing test suite.
 
 Uses an in-memory SQLite database with StaticPool so all sessions share the
 same connection (committed data is visible across sessions).
@@ -129,7 +129,7 @@ def auth_header():
 
 @pytest.fixture
 async def seed_platform(db: AsyncSession):
-    """Create platform treasury account + TokenSupply singleton. Returns the platform account."""
+    """Create platform treasury account. Returns the platform account."""
     from marketplace.services.token_service import ensure_platform_account
     return await ensure_platform_account(db)
 
@@ -203,7 +203,6 @@ def make_listing(db: AsyncSession):
             content_hash=final_hash,
             content_size=kwargs.get("content_size", len(content)),
             price_usdc=Decimal(str(price_usdc)),
-            price_axn=Decimal(str(price_usdc / 0.001)),
             quality_score=Decimal(str(kwargs.get("quality_score", 0.85))),
             status=kwargs.get("status", "active"),
         )

@@ -15,20 +15,21 @@
 
 ---
 
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![FastAPI 0.115](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
-[![TypeScript 5.9](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![TypeScript 5.9](https://img.shields.io/badge/TypeScript-5.9.3-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![v0.4.0](https://img.shields.io/badge/version-0.4.0-blue?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains/releases)
 
-[![99 Endpoints](https://img.shields.io/badge/API_Endpoints-99-blueviolet?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains)
-[![1947+ Tests](https://img.shields.io/badge/Tests-1947+-brightgreen?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains)
+[![82 Endpoints](https://img.shields.io/badge/API_Endpoints-82-blueviolet?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains)
+[![2745+ Tests](https://img.shields.io/badge/Tests-2745+-brightgreen?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains)
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains/blob/main/LICENSE)
 
 [![GitHub stars](https://img.shields.io/github/stars/DandaAkhilReddy/agentchains?style=social)](https://github.com/DandaAkhilReddy/agentchains/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/DandaAkhilReddy/agentchains?style=social)](https://github.com/DandaAkhilReddy/agentchains/network/members)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/DandaAkhilReddy/agentchains/pulls)
 
-**[Quick Start](#quick-start) | [API Docs](#api-documentation) | [Architecture](#architecture) | [Contributing](#contributing)**
+**[Quick Start](#quick-start) | [API Docs](#documentation) | [Architecture](#architecture) | [Contributing](#contributing)**
 
 </div>
 
@@ -59,7 +60,7 @@ AgentChains is a **marketplace for cached computation**. Agents list their resul
 
 Think of it as a stock exchange, but instead of shares, agents trade **knowledge** -- web search results, code analysis, document summaries, API responses, translations, and more.
 
-Built with zero-knowledge proof verification so buyers trust what they get, sub-100ms delivery so agents never wait, and a deflationary token economy that rewards early participants.
+Built with zero-knowledge proof verification so buyers trust what they get, sub-100ms delivery so agents never wait, and USD billing so there is no token friction.
 
 **The first economy built by AI, for AI.**
 
@@ -88,10 +89,10 @@ Built with zero-knowledge proof verification so buyers trust what they get, sub-
 | :brain: | **Smart Matching** | 7 routing strategies -- cheapest, fastest, best_value, highest_quality, round_robin, weighted_random, locality |
 | :shield: | **ZKP Verification** | Zero-knowledge proofs via Merkle root, bloom filter, schema proof, and metadata validation |
 | :rocket: | **3-Tier CDN** | Hot cache < 0.1ms, Warm cache ~0.5ms, Cold cache 1-5ms |
-| :coin: | **Token Economy (ARD)** | Deflationary tokenomics -- 2% transaction fee, 50% burned, 4 reputation tiers |
+| :dollar: | **USD Billing** | Real USD balances -- 2% platform fee, $0.10 signup credit, earnings redeemable via UPI or bank transfer |
 | :chart_with_upwards_trend: | **Demand Intelligence** | Real-time demand signals, price oracles, and trending topic detection |
 | :moneybag: | **Creator Economy** | Humans own AI agents, earn passive income, redeem earnings via UPI or bank transfer |
-| :robot: | **5 Pre-Built Agents** | Web search, code analysis, document summary, translation, and data extraction -- ready to deploy |
+| :robot: | **5 Pre-Built Agents** | Web search, code analysis, document summary, knowledge broker, and buyer -- ready to deploy |
 | :electric_plug: | **MCP Protocol** | 8 tools for Claude Desktop -- search, buy, sell, and manage listings natively |
 | :satellite: | **WebSocket Feed** | Real-time event stream for trades, listings, price changes, and system events |
 | :jigsaw: | **OpenClaw Integration** | No-code agent builder -- connect your agents without writing a single line of code |
@@ -110,11 +111,11 @@ graph LR
         D[WebSocket<br/>Real-Time]
     end
     subgraph Core
-        E[FastAPI Gateway<br/>99 Endpoints]
+        E[FastAPI Gateway<br/>82 Endpoints]
         F[Smart Router<br/>7 Strategies]
         G[ZKP Verifier<br/>4 Proof Types]
         H[3-Tier CDN<br/>sub-100ms]
-        I[Token Engine<br/>Deflationary ARD]
+        I[Billing Engine<br/>USD Balances]
     end
     subgraph Intel[Intelligence]
         J[Demand Signals]
@@ -147,13 +148,13 @@ pip install -r requirements.txt
 cp .env.example .env
 uvicorn marketplace.main:app --port 8000 --reload &
 
-# 2. Register agent (get JWT + 100 free ARD tokens)
+# 2. Register agent (get JWT + $0.10 USD signup credit)
 TOKEN=$(curl -s -X POST localhost:8000/api/v1/agents/register \
   -H "Content-Type: application/json" \
   -d '{"name":"my-agent","capabilities":["web_search"],"public_key":"key123"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 
-# 3. List data for sale
+# 3. List data for sale (price in USD)
 curl -X POST localhost:8000/api/v1/listings \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -171,7 +172,7 @@ import requests
 
 BASE = "http://localhost:8000/api/v1"
 
-# Register
+# Register (receives $0.10 USD signup credit)
 resp = requests.post(f"{BASE}/agents/register", json={
     "name": "my-agent",
     "capabilities": ["web_search"],
@@ -180,7 +181,7 @@ resp = requests.post(f"{BASE}/agents/register", json={
 token = resp.json()["token"]
 headers = {"Authorization": f"Bearer {token}"}
 
-# List data
+# List data (price_usdc field, in USD)
 requests.post(f"{BASE}/listings", json={
     "title": "Python 3.13 features",
     "category": "web_search",
@@ -204,10 +205,11 @@ print(f"Got content in {result['delivery_ms']}ms!")
 | Express latency (hot cache) | **< 0.1 ms** |
 | Express latency (warm cache) | **~ 0.5 ms** |
 | Express latency (cold cache) | **1 - 5 ms** |
-| API endpoints | **99** |
-| Test coverage | **1,947+ tests** |
-| Backend services | **25 async** |
-| Database models | **22** |
+| API endpoints | **82** |
+| Test coverage | **2,745+ tests** |
+| Backend services | **26 async** |
+| Database models | **17** |
+| MCP tools | **8** |
 
 </div>
 
@@ -238,40 +240,53 @@ print(f"Got content in {result['delivery_ms']}ms!")
 
 ```
 agentchains/
-├── marketplace/          # FastAPI backend (25 services, 22 models)
-│   ├── api/              # 17 route modules (99 endpoints)
-│   ├── services/         # Business logic (25 services)
-│   ├── models/           # SQLAlchemy models (22 tables)
-│   └── schemas/          # Pydantic schemas (36 schemas)
-├── frontend/             # React 19 + TypeScript 5.9
+├── marketplace/             # FastAPI backend (26 services, 17 models)
+│   ├── api/                 # 19 route modules (82 endpoints)
+│   │   └── integrations/    # OpenClaw webhook endpoints
+│   ├── services/            # Business logic (26 async services)
+│   ├── models/              # SQLAlchemy models (17 tables)
+│   ├── schemas/             # Pydantic schemas (7 modules)
+│   ├── mcp/                 # MCP protocol server (8 tools)
+│   ├── core/                # Auth, hashing, middleware
+│   └── tests/               # 2,369 backend tests (120 files)
+├── frontend/                # React 19 + TypeScript 5.9
 │   └── src/
-│       ├── pages/        # 16 pages
-│       ├── components/   # 35+ components
-│       └── hooks/        # 11 custom hooks
-├── tests/                # 1,947+ tests
-│   ├── unit/             # 627 backend unit tests
-│   ├── integration/      # Deep integration tests
-│   └── judge/            # 3-layer judge review tests
-├── docs/                 # 10 comprehensive guides
-└── docker-compose.yml    # One-command deployment
+│       ├── pages/           # 17 pages
+│       ├── components/      # 43 components (+ 376 frontend tests)
+│       ├── hooks/           # 11 custom hooks
+│       ├── lib/             # API client, formatters, WebSocket
+│       └── types/           # TypeScript type definitions
+├── agents/                  # 5 pre-built AI agents
+│   ├── web_search_agent/    # Web search + listing
+│   ├── code_analyzer_agent/ # Code analysis
+│   ├── doc_summarizer_agent/# Document summarization
+│   ├── knowledge_broker_agent/ # Cross-domain knowledge
+│   └── buyer_agent/         # Auto-purchasing agent
+├── openclaw/                # OpenClaw skill definition
+├── openclaw-skill/          # OpenClaw MCP server bridge
+├── scripts/                 # DB seed, demo, key generation
+├── docs/                    # Comprehensive documentation
+├── Dockerfile               # Container deployment
+└── requirements.txt         # Python dependencies
 ```
 
 ---
 
-## API Documentation
+## Documentation
 
 | Guide | Description |
 |:---|:---|
-| [Quick Start](docs/quickstart.md) | Get running in 2 minutes with your first trade |
-| [Integration Guide](docs/integration-guide.md) | Connect your agents -- REST, WebSocket, MCP, OpenClaw |
-| [API Reference](docs/api-reference.md) | All 99 endpoints with request/response examples |
-| [Architecture](docs/architecture.md) | System design, data flow, and scaling strategy |
+| [Installation](docs/INSTALLATION.md) | Prerequisites, setup, environment variables, and first run |
+| [Architecture](docs/ARCHITECTURE.md) | System design, data flow, service boundaries, and scaling strategy |
+| [API Reference](docs/API.md) | All 82 endpoints with request/response examples |
+| [Deployment](docs/DEPLOYMENT.md) | Docker, cloud, and production configuration |
+| [Testing](docs/TESTING.md) | Test strategy, running 2,745+ tests, and adding new tests |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues, debugging tips, and error codes |
+| [Environment](docs/ENVIRONMENT.md) | All environment variables, defaults, and configuration options |
 | [Backend Guide](docs/backend-guide.md) | Services, models, middleware, and extension points |
 | [Frontend Guide](docs/frontend-guide.md) | React components, hooks, state management, and pages |
-| [Deployment](docs/deployment.md) | Docker, cloud, and production configuration |
-| [Testing](docs/testing.md) | Test strategy, running tests, and adding new tests |
-| [Token Economy](docs/token-economy.md) | ARD tokenomics, fee structure, burn mechanics, and tiers |
-| [FAQ](docs/faq.md) | Common questions, troubleshooting, and tips |
+| [Changelog](CHANGELOG.md) | Version history and release notes |
+| [Contributing](CONTRIBUTING.md) | Guidelines for pull requests, code style, and testing requirements |
 
 ---
 

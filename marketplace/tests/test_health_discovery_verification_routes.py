@@ -74,12 +74,11 @@ async def test_health_includes_version(client):
 
 @pytest.mark.asyncio
 async def test_health_cors_headers(client):
-    """5. Response includes CORS Access-Control-Allow-Origin header."""
-    resp = await client.get("/api/v1/health", headers={"Origin": "http://example.com"})
-    # CORSMiddleware with allow_origins=["*"] reflects the origin or sets "*"
+    """5. Response includes CORS Access-Control-Allow-Origin header for allowed origin."""
+    resp = await client.get("/api/v1/health", headers={"Origin": "http://localhost:5173"})
     assert resp.status_code == 200
     allow_origin = resp.headers.get("access-control-allow-origin")
-    assert allow_origin is not None
+    assert allow_origin == "http://localhost:5173"
 
 
 # ===================================================================

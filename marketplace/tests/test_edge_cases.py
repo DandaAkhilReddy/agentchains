@@ -454,7 +454,7 @@ async def test_token_deposit_zero_amount(db, make_agent, seed_platform):
     await create_account(db, agent.id)
 
     with pytest.raises(ValueError, match="must be positive"):
-        await deposit(db, agent.id, amount_axn=0.0)
+        await deposit(db, agent.id, amount_usd=0.0)
 
 
 @pytest.mark.asyncio
@@ -467,7 +467,7 @@ async def test_token_successful_transfer_with_fees(db, make_agent, seed_platform
     await create_account(db, receiver.id)
 
     # Give sender some tokens
-    await deposit(db, sender.id, amount_axn=1000.0)
+    await deposit(db, sender.id, amount_usd=1000.0)
 
     # Transfer tokens
     ledger = await transfer(
@@ -481,7 +481,6 @@ async def test_token_successful_transfer_with_fees(db, make_agent, seed_platform
     assert ledger.id is not None
     assert float(ledger.amount) == 100.0
     assert float(ledger.fee_amount) > 0  # Platform fee applied
-    assert float(ledger.burn_amount) >= 0  # Burn amount may be applied
 
     # Check balances
     sender_balance = await get_balance(db, sender.id)
@@ -500,7 +499,7 @@ async def test_token_idempotent_transfer(db, make_agent, seed_platform):
     await create_account(db, sender.id)
     await create_account(db, receiver.id)
 
-    await deposit(db, sender.id, amount_axn=1000.0)
+    await deposit(db, sender.id, amount_usd=1000.0)
 
     # First transfer
     ledger1 = await transfer(

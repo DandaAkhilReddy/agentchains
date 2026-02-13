@@ -4,6 +4,8 @@ import { fetchCreatorDashboard, claimAgent } from "../lib/api";
 import PageHeader from "../components/PageHeader";
 import Badge from "../components/Badge";
 import AnimatedCounter from "../components/AnimatedCounter";
+import { formatUSD } from "../lib/format";
+import type { CreatorDashboard } from "../types/api";
 
 interface Props {
   token: string;
@@ -12,34 +14,8 @@ interface Props {
   onLogout: () => void;
 }
 
-interface Dashboard {
-  creator_balance: number;
-  creator_total_earned: number;
-  creator_balance_usd: number;
-  agents_count: number;
-  agents: Array<{
-    agent_id: string;
-    agent_name: string;
-    agent_type: string;
-    status: string;
-    total_earned: number;
-    total_spent: number;
-    balance: number;
-  }>;
-  total_agent_earnings: number;
-  total_agent_spent: number;
-  peg_rate_usd: number;
-  token_name: string;
-}
-
-const fmtARD = (n: number) => {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toFixed(0);
-};
-
 export default function CreatorDashboardPage({ token, creatorName, onNavigate, onLogout }: Props) {
-  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [dashboard, setDashboard] = useState<CreatorDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [claimId, setClaimId] = useState("");
   const [claimMsg, setClaimMsg] = useState("");
@@ -79,7 +55,6 @@ export default function CreatorDashboardPage({ token, creatorName, onNavigate, o
   }
 
   const d = dashboard;
-  const tokenName = d?.token_name || "ARD";
 
   return (
     <div className="space-y-6">
@@ -93,7 +68,7 @@ export default function CreatorDashboardPage({ token, creatorName, onNavigate, o
               onClick={() => onNavigate("redeem")}
               className="btn-primary flex items-center gap-1.5 px-4 py-2 text-sm"
             >
-              Redeem <ArrowRight className="h-4 w-4" />
+              Withdraw <ArrowRight className="h-4 w-4" />
             </button>
             <button
               onClick={onLogout}
@@ -113,11 +88,10 @@ export default function CreatorDashboardPage({ token, creatorName, onNavigate, o
               <Wallet className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-text-muted">{tokenName} Balance</p>
+              <p className="text-xs text-text-muted">USD Balance</p>
               <p className="text-xl font-bold text-text-primary" style={{ fontFamily: "var(--font-mono)" }}>
-                <AnimatedCounter value={d?.creator_balance || 0} /> {tokenName}
+                {formatUSD(d?.creator_balance || 0)}
               </p>
-              <p className="text-xs text-text-secondary">${(d?.creator_balance_usd || 0).toFixed(2)} USD</p>
             </div>
           </div>
         </div>
@@ -129,7 +103,7 @@ export default function CreatorDashboardPage({ token, creatorName, onNavigate, o
             <div>
               <p className="text-xs text-text-muted">Total Earned</p>
               <p className="text-xl font-bold text-text-primary" style={{ fontFamily: "var(--font-mono)" }}>
-                <AnimatedCounter value={d?.creator_total_earned || 0} /> {tokenName}
+                {formatUSD(d?.creator_total_earned || 0)}
               </p>
             </div>
           </div>
@@ -155,10 +129,7 @@ export default function CreatorDashboardPage({ token, creatorName, onNavigate, o
             <div>
               <p className="text-xs text-text-muted">Agent Earnings</p>
               <p className="text-xl font-bold text-text-primary" style={{ fontFamily: "var(--font-mono)" }}>
-                <AnimatedCounter value={d?.total_agent_earnings || 0} /> {tokenName}
-              </p>
-              <p className="text-xs text-text-secondary">
-                ${((d?.total_agent_earnings || 0) * (d?.peg_rate_usd || 0.001)).toFixed(2)} USD
+                {formatUSD(d?.total_agent_earnings || 0)}
               </p>
             </div>
           </div>
@@ -192,10 +163,10 @@ export default function CreatorDashboardPage({ token, creatorName, onNavigate, o
                 </div>
                 <div className="text-right">
                   <p className="font-semibold text-primary" style={{ fontFamily: "var(--font-mono)" }}>
-                    {fmtARD(agent.total_earned)} {tokenName}
+                    {formatUSD(agent.total_earned)}
                   </p>
                   <p className="text-xs text-text-muted">
-                    Balance: {fmtARD(agent.balance)} {tokenName}
+                    Balance: {formatUSD(agent.balance)}
                   </p>
                 </div>
               </div>

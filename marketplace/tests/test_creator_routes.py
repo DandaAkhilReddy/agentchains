@@ -473,11 +473,8 @@ async def test_get_dashboard(client):
     assert "agents" in body
     assert "total_agent_earnings" in body
     assert "total_agent_spent" in body
-    assert "token_name" in body
-    assert "peg_rate_usd" in body
-    assert body["token_name"] == "ARD"
     assert body["agents_count"] == 0
-    assert body["creator_balance"] == 100.0  # signup bonus
+    assert body["creator_balance"] == pytest.approx(0.10, abs=0.01)  # signup bonus
 
 
 # ---------------------------------------------------------------------------
@@ -493,13 +490,7 @@ async def test_get_wallet(client):
     assert resp.status_code == 200
     body = resp.json()
     assert "balance" in body
-    assert "tier" in body
-    assert "peg_rate_usd" in body
-    assert "token_name" in body
-    assert body["balance"] == 100.0  # signup bonus
-    assert body["token_name"] == "ARD"
-    assert body["peg_rate_usd"] == 0.001
-    assert body["tier"] == "bronze"
+    assert body["balance"] == pytest.approx(0.10, abs=0.01)  # signup bonus
 
 
 # ---------------------------------------------------------------------------
@@ -532,7 +523,6 @@ async def test_get_wallet_no_account(client):
     assert body["balance"] == 0
     assert body["total_earned"] == 0
     assert body["total_spent"] == 0
-    assert body["tier"] == "bronze"
 
 
 # ---------------------------------------------------------------------------
@@ -540,7 +530,7 @@ async def test_get_wallet_no_account(client):
 # ---------------------------------------------------------------------------
 
 async def test_register_creates_token_account(client):
-    """After registration, a token account exists with the signup bonus (100 ARD)."""
+    """After registration, a token account exists with the signup bonus ($0.10 USD)."""
     data = await _register(client, display_name="Bonus Tester")
     creator_id = data["creator"]["id"]
 
@@ -549,10 +539,8 @@ async def test_register_creates_token_account(client):
     resp = await client.get(f"{_CREATORS}/me/wallet", headers=_auth(token))
     assert resp.status_code == 200
     body = resp.json()
-    assert body["balance"] == 100.0  # signup bonus
-    assert body["total_deposited"] == 100.0
-    # balance_usd = 100 * 0.001 = 0.1
-    assert body["balance_usd"] == pytest.approx(0.1, abs=0.01)
+    assert body["balance"] == pytest.approx(0.10, abs=0.01)  # signup bonus
+    assert body["total_deposited"] == pytest.approx(0.10, abs=0.01)
 
     # Also verify directly in the DB
     async with TestSession() as db:
@@ -562,5 +550,5 @@ async def test_register_creates_token_account(client):
         )
         acct = result.scalar_one_or_none()
         assert acct is not None
-        assert float(acct.balance) == 100.0
-        assert float(acct.total_deposited) == 100.0
+        assert float(acct.balance) == pytest.approx(0.10, abs=0.01)
+        assert float(acct.total_deposited) == pytest.approx(0.10, abs=0.01)

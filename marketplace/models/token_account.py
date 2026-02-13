@@ -1,4 +1,4 @@
-"""ARD Token Economy — Database models for the off-chain double-entry ledger."""
+"""USD Billing — Database models for the off-chain double-entry ledger."""
 
 import uuid
 from datetime import datetime, timezone
@@ -23,7 +23,7 @@ def utcnow():
 
 
 class TokenAccount(Base):
-    """Per-agent ARD balance. One row per registered agent + one platform account."""
+    """Per-agent USD balance. One row per registered agent + one platform account."""
 
     __tablename__ = "token_accounts"
 
@@ -37,7 +37,6 @@ class TokenAccount(Base):
     total_earned = Column(Numeric(18, 6), nullable=False, default=0)
     total_spent = Column(Numeric(18, 6), nullable=False, default=0)
     total_fees_paid = Column(Numeric(18, 6), nullable=False, default=0)
-    tier = Column(String(20), nullable=False, default="bronze")
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
 
@@ -45,28 +44,26 @@ class TokenAccount(Base):
         CheckConstraint("balance >= 0", name="ck_token_balance_nonneg"),
         Index("idx_token_acct_agent", "agent_id"),
         Index("idx_token_acct_creator", "creator_id"),
-        Index("idx_token_acct_tier", "tier"),
     )
 
 
 class TokenLedger(Base):
-    """Immutable, append-only audit trail. Every token movement = one row."""
+    """Immutable, append-only audit trail. Every USD movement = one row."""
 
     __tablename__ = "token_ledger"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     from_account_id = Column(
         String(36), ForeignKey("token_accounts.id"), nullable=True
-    )  # NULL = mint / deposit
+    )  # NULL = deposit
     to_account_id = Column(
         String(36), ForeignKey("token_accounts.id"), nullable=True
-    )  # NULL = burn / withdrawal
+    )  # NULL = withdrawal
     amount = Column(Numeric(18, 6), nullable=False)
     fee_amount = Column(Numeric(18, 6), nullable=False, default=0)
-    burn_amount = Column(Numeric(18, 6), nullable=False, default=0)
     tx_type = Column(
         String(30), nullable=False
-    )  # deposit, purchase, sale, fee, burn, bonus, refund, withdrawal
+    )  # deposit, purchase, sale, fee, bonus, refund, withdrawal
     reference_id = Column(String(36), nullable=True)  # Transaction.id or deposit ID
     reference_type = Column(String(30), nullable=True)  # transaction, deposit, bonus, refund
     idempotency_key = Column(String(64), unique=True, nullable=True)
@@ -86,16 +83,14 @@ class TokenLedger(Base):
 
 
 class TokenDeposit(Base):
-    """Fiat → ARD on-ramp. Tracks each deposit request and its status."""
+    """USD deposit tracking. Records each deposit request and its status."""
 
     __tablename__ = "token_deposits"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     agent_id = Column(String(36), ForeignKey("registered_agents.id"), nullable=False)
-    amount_fiat = Column(Numeric(12, 2), nullable=False)
+    amount_usd = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="USD")
-    exchange_rate = Column(Numeric(12, 6), nullable=False)  # 1 ARD = X fiat
-    amount_axn = Column(Numeric(18, 6), nullable=False)
     status = Column(
         String(20), nullable=False, default="pending"
     )  # pending, completed, failed, refunded
@@ -110,16 +105,3 @@ class TokenDeposit(Base):
         Index("idx_deposit_agent", "agent_id"),
         Index("idx_deposit_status", "status"),
     )
-
-
-class TokenSupply(Base):
-    """Singleton row tracking global ARD supply metrics."""
-
-    __tablename__ = "token_supply"
-
-    id = Column(Integer, primary_key=True, default=1)
-    total_minted = Column(Numeric(18, 6), nullable=False, default=1_000_000_000)
-    total_burned = Column(Numeric(18, 6), nullable=False, default=0)
-    circulating = Column(Numeric(18, 6), nullable=False, default=1_000_000_000)
-    platform_balance = Column(Numeric(18, 6), nullable=False, default=0)
-    last_updated = Column(DateTime(timezone=True), nullable=False, default=utcnow)

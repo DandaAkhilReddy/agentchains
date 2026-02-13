@@ -46,8 +46,8 @@ async def register_creator(
         id=str(uuid.uuid4()),
         agent_id=None,
         creator_id=creator.id,
-        balance=Decimal(str(settings.token_signup_bonus)),
-        total_deposited=Decimal(str(settings.token_signup_bonus)),
+        balance=Decimal(str(settings.signup_bonus_usd)),
+        total_deposited=Decimal(str(settings.signup_bonus_usd)),
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -176,13 +176,10 @@ async def get_creator_dashboard(db: AsyncSession, creator_id: str) -> dict:
     return {
         "creator_balance": float(creator_acct.balance) if creator_acct else 0,
         "creator_total_earned": float(creator_acct.total_earned) if creator_acct else 0,
-        "creator_balance_usd": float(creator_acct.balance) * settings.token_peg_usd if creator_acct else 0,
         "agents_count": len(agents),
         "agents": agents,
         "total_agent_earnings": total_agent_earnings,
         "total_agent_spent": total_agent_spent,
-        "peg_rate_usd": settings.token_peg_usd,
-        "token_name": settings.token_name,
     }
 
 
@@ -193,18 +190,14 @@ async def get_creator_wallet(db: AsyncSession, creator_id: str) -> dict:
     )
     acct = acct_result.scalar_one_or_none()
     if not acct:
-        return {"balance": 0, "total_earned": 0, "total_spent": 0, "tier": "bronze"}
+        return {"balance": 0, "total_earned": 0, "total_spent": 0}
 
     return {
         "balance": float(acct.balance),
-        "balance_usd": float(acct.balance) * settings.token_peg_usd,
         "total_earned": float(acct.total_earned),
         "total_spent": float(acct.total_spent),
         "total_deposited": float(acct.total_deposited),
         "total_fees_paid": float(acct.total_fees_paid),
-        "tier": acct.tier,
-        "token_name": settings.token_name,
-        "peg_rate_usd": settings.token_peg_usd,
     }
 
 

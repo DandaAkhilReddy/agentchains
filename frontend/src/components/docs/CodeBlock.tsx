@@ -31,6 +31,18 @@ const KEYWORDS = new Set([
   "new",
   "try",
   "catch",
+  "true",
+  "false",
+  "True",
+  "False",
+  "None",
+  "null",
+  "undefined",
+  "with",
+  "as",
+  "json",
+  "print",
+  "console",
 ]);
 
 const KEYWORD_PATTERN = new RegExp(
@@ -39,62 +51,73 @@ const KEYWORD_PATTERN = new RegExp(
 );
 
 /**
- * Apply basic syntax highlighting via regex replacements.
- * Order matters: strings first (to avoid highlighting keywords inside strings),
- * then comments, keywords, and numbers.
+ * Apply syntax highlighting via regex with safe placeholders.
+ *
+ * Key fix: placeholder tokens use the format \x00R{idx}\x00 (with an "R" prefix)
+ * so the number regex \b\d+\b cannot match the index digits inside placeholders.
+ * Strings are captured BEFORE HTML-escaping to correctly match quoted content.
  */
 function highlight(code: string): string {
-  // Unique placeholder tokens that won't appear in user code
   const PH = "\x00";
   let counter = 0;
   const replacements: string[] = [];
 
-  function placeholder(html: string): string {
+  function ph(html: string): string {
     const idx = counter++;
     replacements.push(html);
-    return `${PH}${idx}${PH}`;
+    return `${PH}R${idx}${PH}`;
   }
 
-  // Escape HTML entities first
-  let result = code
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  // 1. Strings: single-quoted, double-quoted, backtick (no multiline)
-  result = result.replace(
+  // 1. Capture strings BEFORE HTML-escaping (so " and ' are real quotes)
+  let result = code.replace(
     /(["'`])(?:(?!\1|\\).|\\.)*?\1/g,
-    (m) => placeholder(`<span class="string">${m}</span>`),
+    (m) => {
+      // HTML-escape the string content
+      const safe = m
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      return ph(`<span class="hl-string">${safe}</span>`);
+    },
   );
 
-  // 2. Comments: # or //
+  // 2. Now HTML-escape the rest (non-string parts)
+  result = result.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // 3. Comments: # or //
   result = result.replace(
     /(#.*|\/\/.*)/g,
-    (m) => placeholder(`<span class="comment">${m}</span>`),
+    (m) => ph(`<span class="hl-comment">${m}</span>`),
   );
 
-  // 3. Keywords
+  // 4. Keywords
   result = result.replace(
     KEYWORD_PATTERN,
-    (m) => placeholder(`<span class="keyword">${m}</span>`),
+    (m) => ph(`<span class="hl-keyword">${m}</span>`),
   );
 
-  // 4. Numbers
+  // 5. Method/function calls: .methodName(
+  result = result.replace(
+    /\.([a-zA-Z_]\w*)\s*\(/g,
+    (_full, name) => `.${ph(`<span class="hl-method">${name}</span>`)}(`,
+  );
+
+  // 6. Numbers (safe now — placeholder indices have "R" prefix, won't match \b\d+\b)
   result = result.replace(
     /\b(\d+(?:\.\d+)?)\b/g,
-    (m) => placeholder(`<span class="number">${m}</span>`),
+    (m) => ph(`<span class="hl-number">${m}</span>`),
   );
 
-  // Rehydrate placeholders
+  // Rehydrate placeholders — match \x00R{digits}\x00
   result = result.replace(
-    new RegExp(`${PH}(\\d+)${PH}`, "g"),
+    new RegExp(`${PH}R(\\d+)${PH}`, "g"),
     (_, idx) => replacements[Number(idx)] ?? "",
   );
 
   return result;
 }
 
-/** Code block with language tabs and copy-to-clipboard. */
+/** Code block with language tabs, copy-to-clipboard, and frosted glass design. */
 export default function CodeBlock({
   examples,
   title,
@@ -125,17 +148,24 @@ export default function CodeBlock({
   if (examples.length === 0) return null;
 
   return (
-    <div className={`code-block overflow-hidden ${className}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-0">
+    <div className={`code-block ${className}`}>
+      {/* Header — macOS-style chrome */}
+      <div className="code-block-header">
+        {/* Traffic light dots */}
+        <div className="flex items-center gap-1.5 mr-3">
+          <span className="h-[10px] w-[10px] rounded-full bg-[#ff5f57]/80" />
+          <span className="h-[10px] w-[10px] rounded-full bg-[#febc2e]/80" />
+          <span className="h-[10px] w-[10px] rounded-full bg-[#28c840]/80" />
+        </div>
+
         {/* Title + language tabs */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 flex-1 min-w-0">
           {title && (
-            <span className="text-xs font-semibold text-[#94a3b8] pr-2">
+            <span className="text-[11px] font-medium text-[#64748b] pr-2 truncate">
               {title}
             </span>
           )}
-          <div className="flex">
+          <div className="flex gap-0.5">
             {examples.map((ex) => {
               const isActive = ex.language === activeLanguage;
               return (
@@ -143,11 +173,7 @@ export default function CodeBlock({
                   key={ex.language}
                   type="button"
                   onClick={() => setActiveLanguage(ex.language)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-t transition-colors ${
-                    isActive
-                      ? "bg-[#1e293b] text-white"
-                      : "text-[#64748b] hover:text-[#94a3b8]"
-                  }`}
+                  className={`code-block-tab ${isActive ? "active" : ""}`}
                 >
                   {ex.language}
                 </button>
@@ -160,25 +186,25 @@ export default function CodeBlock({
         <button
           type="button"
           onClick={handleCopy}
-          className="inline-flex items-center gap-1 rounded px-2 py-1 text-[#64748b] hover:text-[#94a3b8] transition-colors"
+          className="code-block-copy"
           title="Copy to clipboard"
         >
           {copied ? (
             <>
-              <Check size={14} className="text-[#16a34a]" />
-              <span className="text-[11px]">Copied</span>
+              <Check size={13} className="text-[#4ade80]" />
+              <span>Copied</span>
             </>
           ) : (
             <>
-              <Copy size={14} />
-              <span className="text-[11px]">Copy</span>
+              <Copy size={13} />
+              <span>Copy</span>
             </>
           )}
         </button>
       </div>
 
       {/* Code area */}
-      <pre className="p-4 overflow-x-auto text-sm leading-relaxed m-0">
+      <pre className="code-block-pre">
         <code dangerouslySetInnerHTML={{ __html: highlighted }} />
       </pre>
     </div>

@@ -434,7 +434,7 @@ async def test_monthly_payout_skips_no_payout_method(db, make_creator):
     creator.status = "active"
 
     # Create token account with balance above threshold
-    min_balance = settings.creator_min_withdrawal_ard
+    min_balance = settings.creator_min_withdrawal_usd
     account = TokenAccount(
         id=_new_id(),
         creator_id=creator.id,

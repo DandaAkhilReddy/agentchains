@@ -43,7 +43,7 @@ The app uses SQLite and local filesystem by default -- no cloud accounts needed.
 - `agents/` -- AI agent definitions and runners
 - `docs/` -- Project documentation
 
-Full details: [Architecture](docs/architecture.md)
+Full details: [Architecture](docs/ARCHITECTURE.md)
 
 ## 3. Development Workflow
 
@@ -108,16 +108,16 @@ Routes validate input and return responses. Business logic lives in services.
 ## 5. Running Tests
 
 ```bash
-# Backend (627 tests)
+# Backend (2,369 tests)
 python -m pytest marketplace/tests/ -v
 
-# Frontend (391 tests)
+# Frontend (376 tests)
 cd frontend && npx vitest run
 ```
 
-All tests MUST pass before submitting a PR.
+All **2,745+ tests** MUST pass before submitting a PR.
 
-See [Testing Guide](docs/testing.md) for details on writing new tests.
+See [Testing Guide](docs/TESTING.md) for details on writing new tests.
 
 ## 6. PR Checklist
 
@@ -143,12 +143,25 @@ See [Testing Guide](docs/testing.md) for details on writing new tests.
 
 See the [docs/](docs/) folder for detailed guides:
 
-- [Architecture](docs/architecture.md) -- System design
-- [API Reference](docs/api-reference.md) -- All endpoints
+- [Installation](docs/INSTALLATION.md) -- Setup instructions
+- [Architecture](docs/ARCHITECTURE.md) -- System design
+- [API Reference](docs/API.md) -- All endpoints
+- [Environment](docs/ENVIRONMENT.md) -- Environment variables + configuration
+- [Testing](docs/TESTING.md) -- Test patterns and counts
+- [Deployment](docs/DEPLOYMENT.md) -- Production deployment
+- [Troubleshooting](docs/TROUBLESHOOTING.md) -- Common issues + fixes
 - [Frontend Guide](docs/frontend-guide.md) -- Components + design system
 - [Backend Guide](docs/backend-guide.md) -- Services + models
-- [Testing](docs/testing.md) -- Test patterns
 
-## 9. Questions?
+## 9. Verify
+
+Before submitting a PR, run the full suite and confirm everything passes:
+
+```bash
+python -m pytest marketplace/tests/ -q --tb=short
+cd frontend && npx vitest run
+```
+
+## 10. Questions?
 
 Open an issue or start a discussion on GitHub.

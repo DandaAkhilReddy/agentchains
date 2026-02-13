@@ -28,7 +28,7 @@ describe("TokenBalance", () => {
     vi.clearAllMocks();
   });
 
-  test("renders ARD amount with formatARD formatting for small balance", async () => {
+  test("renders USD amount with formatUSD formatting for small balance", async () => {
     const mockToken = "test-token";
     const mockData: WalletBalanceResponse = {
       account: {
@@ -39,11 +39,9 @@ describe("TokenBalance", () => {
         total_earned: 50,
         total_spent: 126.55,
         total_fees_paid: 0,
-        tier: "bronze",
         created_at: "2024-01-01T00:00:00Z",
         updated_at: "2024-01-01T00:00:00Z",
       },
-      balance_usd: 0.12,
     };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
@@ -59,18 +57,16 @@ describe("TokenBalance", () => {
 
     // Wait for query to resolve
     await vi.waitFor(() => {
-      expect(screen.getByText("123.45 ARD")).toBeInTheDocument();
+      // formatUSD(123.45) -> "$123.45"
+      expect(screen.getByText("$123.45")).toBeInTheDocument();
     });
-
-    // Check that tier is displayed
-    expect(screen.getByText("bronze")).toBeInTheDocument();
 
     // Check that Wallet icon is present
     const walletIcon = container.querySelector("svg");
     expect(walletIcon).toBeInTheDocument();
   });
 
-  test("renders ARD amount with K suffix for thousands", async () => {
+  test("renders USD amount with K suffix for thousands", async () => {
     const mockToken = "test-token";
     const mockData: WalletBalanceResponse = {
       account: {
@@ -81,11 +77,9 @@ describe("TokenBalance", () => {
         total_earned: 0,
         total_spent: 4567.9,
         total_fees_paid: 0,
-        tier: "silver",
         created_at: "2024-01-01T00:00:00Z",
         updated_at: "2024-01-01T00:00:00Z",
       },
-      balance_usd: 5.43,
     };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
@@ -100,13 +94,12 @@ describe("TokenBalance", () => {
     render(<TokenBalance />, { wrapper: createWrapper() });
 
     await vi.waitFor(() => {
-      expect(screen.getByText("5.4K ARD")).toBeInTheDocument();
+      // formatUSD(5432.1) -> "$5.4K"
+      expect(screen.getByText("$5.4K")).toBeInTheDocument();
     });
-
-    expect(screen.getByText("silver")).toBeInTheDocument();
   });
 
-  test("renders ARD amount with M suffix for millions", async () => {
+  test("renders USD amount with M suffix for millions", async () => {
     const mockToken = "test-token";
     const mockData: WalletBalanceResponse = {
       account: {
@@ -117,11 +110,9 @@ describe("TokenBalance", () => {
         total_earned: 0,
         total_spent: 500000,
         total_fees_paid: 0,
-        tier: "platinum",
         created_at: "2024-01-01T00:00:00Z",
         updated_at: "2024-01-01T00:00:00Z",
       },
-      balance_usd: 2500,
     };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
@@ -136,10 +127,9 @@ describe("TokenBalance", () => {
     render(<TokenBalance />, { wrapper: createWrapper() });
 
     await vi.waitFor(() => {
-      expect(screen.getByText("2.50M ARD")).toBeInTheDocument();
+      // formatUSD(2500000) -> "$2.5M"
+      expect(screen.getByText("$2.5M")).toBeInTheDocument();
     });
-
-    expect(screen.getByText("platinum")).toBeInTheDocument();
   });
 
   test("handles zero balance correctly", async () => {
@@ -153,11 +143,9 @@ describe("TokenBalance", () => {
         total_earned: 0,
         total_spent: 0,
         total_fees_paid: 0,
-        tier: "bronze",
         created_at: "2024-01-01T00:00:00Z",
         updated_at: "2024-01-01T00:00:00Z",
       },
-      balance_usd: 0,
     };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
@@ -172,7 +160,8 @@ describe("TokenBalance", () => {
     render(<TokenBalance />, { wrapper: createWrapper() });
 
     await vi.waitFor(() => {
-      expect(screen.getByText("0.00 ARD")).toBeInTheDocument();
+      // formatUSD(0) -> "$0.00"
+      expect(screen.getByText("$0.00")).toBeInTheDocument();
     });
   });
 
@@ -187,11 +176,9 @@ describe("TokenBalance", () => {
         total_earned: 0,
         total_spent: 4250000,
         total_fees_paid: 0,
-        tier: "gold",
         created_at: "2024-01-01T00:00:00Z",
         updated_at: "2024-01-01T00:00:00Z",
       },
-      balance_usd: 15750,
     };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
@@ -206,53 +193,12 @@ describe("TokenBalance", () => {
     render(<TokenBalance />, { wrapper: createWrapper() });
 
     await vi.waitFor(() => {
-      expect(screen.getByText("15.75M ARD")).toBeInTheDocument();
+      // formatUSD(15750000) -> "$15.8M"
+      expect(screen.getByText("$15.8M")).toBeInTheDocument();
     });
-
-    expect(screen.getByText("gold")).toBeInTheDocument();
   });
 
-  test("shows correct tier colors for all tiers", async () => {
-    const mockToken = "test-token";
-
-    vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
-      token: mockToken,
-      login: vi.fn(),
-      logout: vi.fn(),
-      isAuthenticated: true,
-    });
-
-    // Test gold tier
-    const goldData: WalletBalanceResponse = {
-      account: {
-        id: "acc-1",
-        agent_id: null,
-        balance: 1000,
-        total_deposited: 1000,
-        total_earned: 0,
-        total_spent: 0,
-        total_fees_paid: 0,
-        tier: "gold",
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-01T00:00:00Z",
-      },
-      balance_usd: 1,
-    };
-
-    vi.spyOn(apiModule, "fetchWalletBalance").mockResolvedValue(goldData);
-
-    const { unmount } = render(<TokenBalance />, { wrapper: createWrapper() });
-
-    await vi.waitFor(() => {
-      const tierElement = screen.getByText("gold");
-      expect(tierElement).toBeInTheDocument();
-      expect(tierElement).toHaveClass("text-[#ffd700]");
-    });
-
-    unmount();
-  });
-
-  test("displays 'ARD' token name in formatted balance", async () => {
+  test("displays USD formatted balance", async () => {
     const mockToken = "test-token";
     const mockData: WalletBalanceResponse = {
       account: {
@@ -263,11 +209,9 @@ describe("TokenBalance", () => {
         total_earned: 0,
         total_spent: 0.01,
         total_fees_paid: 0,
-        tier: "bronze",
         created_at: "2024-01-01T00:00:00Z",
         updated_at: "2024-01-01T00:00:00Z",
       },
-      balance_usd: 1,
     };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
@@ -282,9 +226,10 @@ describe("TokenBalance", () => {
     render(<TokenBalance />, { wrapper: createWrapper() });
 
     await vi.waitFor(() => {
-      const balanceText = screen.getByText("999.99 ARD");
+      // formatUSD(999.99) -> "$999.99"
+      const balanceText = screen.getByText("$999.99");
       expect(balanceText).toBeInTheDocument();
-      expect(balanceText.textContent).toContain("ARD");
+      expect(balanceText.textContent).toContain("$");
     });
   });
 
@@ -334,11 +279,9 @@ describe("TokenBalance", () => {
         total_earned: 0,
         total_spent: 0,
         total_fees_paid: 0,
-        tier: "bronze",
         created_at: "2024-01-01T00:00:00Z",
         updated_at: "2024-01-01T00:00:00Z",
       },
-      balance_usd: 0.5,
     };
 
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
@@ -353,7 +296,8 @@ describe("TokenBalance", () => {
     render(<TokenBalance />, { wrapper: createWrapper() });
 
     await vi.waitFor(() => {
-      const balanceElement = screen.getByText("500.00 ARD");
+      // formatUSD(500) -> "$500.00"
+      const balanceElement = screen.getByText("$500.00");
       expect(balanceElement).toHaveStyle({ fontFamily: "var(--font-mono)" });
     });
   });

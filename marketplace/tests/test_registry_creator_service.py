@@ -282,7 +282,7 @@ class TestRegisterCreator:
         )
         acct = acct_result.scalar_one_or_none()
         assert acct is not None
-        assert float(acct.balance) == pytest.approx(settings.token_signup_bonus)
+        assert float(acct.balance) == pytest.approx(settings.signup_bonus_usd)
 
     async def test_register_creator_duplicate_email(self, db: AsyncSession, seed_platform):
         """17. Registering with the same email twice raises ValueError."""
@@ -428,7 +428,7 @@ class TestCreatorDashboard:
     async def test_get_creator_dashboard(
         self, db: AsyncSession, seed_platform, make_agent,
     ):
-        """28. Dashboard includes agents_count, balances, peg_rate_usd, and token_name."""
+        """28. Dashboard includes agents_count and balances."""
         reg = await creator_service.register_creator(
             db, "dashboard@test.com", "pass1234", "Dashboard Creator",
         )
@@ -440,14 +440,11 @@ class TestCreatorDashboard:
         dashboard = await creator_service.get_creator_dashboard(db, creator_id)
 
         assert dashboard["agents_count"] == 1
-        assert dashboard["token_name"] == settings.token_name
-        assert dashboard["peg_rate_usd"] == settings.token_peg_usd
-        assert dashboard["creator_balance"] == pytest.approx(settings.token_signup_bonus)
+        assert dashboard["creator_balance"] == pytest.approx(settings.signup_bonus_usd)
         assert isinstance(dashboard["agents"], list)
         assert dashboard["agents"][0]["agent_name"] == "dash-agent-1"
         assert "total_agent_earnings" in dashboard
         assert "total_agent_spent" in dashboard
-        assert "creator_balance_usd" in dashboard
         assert "creator_total_earned" in dashboard
 
 
@@ -457,7 +454,7 @@ class TestCreatorWallet:
     async def test_get_creator_wallet_with_account(
         self, db: AsyncSession, seed_platform,
     ):
-        """29. Wallet returns balance, balance_usd, tier, and token metadata when account exists."""
+        """29. Wallet returns balance and totals when account exists."""
         reg = await creator_service.register_creator(
             db, "wallet@test.com", "pass1234", "Wallet Creator",
         )
@@ -465,12 +462,7 @@ class TestCreatorWallet:
 
         wallet = await creator_service.get_creator_wallet(db, creator_id)
 
-        assert wallet["balance"] == pytest.approx(settings.token_signup_bonus)
-        expected_usd = settings.token_signup_bonus * settings.token_peg_usd
-        assert wallet["balance_usd"] == pytest.approx(expected_usd)
-        assert wallet["token_name"] == settings.token_name
-        assert wallet["peg_rate_usd"] == settings.token_peg_usd
-        assert "tier" in wallet
+        assert wallet["balance"] == pytest.approx(settings.signup_bonus_usd)
         assert "total_earned" in wallet
         assert "total_spent" in wallet
         assert "total_deposited" in wallet
@@ -484,4 +476,3 @@ class TestCreatorWallet:
         assert wallet["balance"] == 0
         assert wallet["total_earned"] == 0
         assert wallet["total_spent"] == 0
-        assert wallet["tier"] == "bronze"

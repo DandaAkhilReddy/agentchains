@@ -20,7 +20,7 @@ async def run_monthly_payout(db: AsyncSession) -> dict:
     """
     now = datetime.now(timezone.utc)
     month_key = f"{now.year}-{now.month:02d}"
-    min_balance = settings.creator_min_withdrawal_ard
+    min_balance = settings.creator_min_withdrawal_usd
 
     # Find all creators with sufficient balance
     result = await db.execute(

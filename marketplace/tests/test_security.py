@@ -9,7 +9,6 @@ from marketplace.services.token_service import (
     deposit,
     ensure_platform_account,
     transfer,
-    verify_ledger_chain,
 )
 
 
@@ -20,67 +19,29 @@ from marketplace.services.token_service import (
 class TestSHA256Hashing:
     def test_compute_ledger_hash_deterministic(self):
         """Same inputs should produce identical hash."""
-        h1 = compute_ledger_hash(None, "from-1", "to-1", Decimal("100"), Decimal("2"), Decimal("1"), "purchase", "2026-01-01T00:00:00")
-        h2 = compute_ledger_hash(None, "from-1", "to-1", Decimal("100"), Decimal("2"), Decimal("1"), "purchase", "2026-01-01T00:00:00")
+        h1 = compute_ledger_hash(None, "from-1", "to-1", Decimal("100"), Decimal("2"), "purchase", "2026-01-01T00:00:00")
+        h2 = compute_ledger_hash(None, "from-1", "to-1", Decimal("100"), Decimal("2"), "purchase", "2026-01-01T00:00:00")
         assert h1 == h2
         assert len(h1) == 64  # SHA-256 hex digest
 
     def test_different_inputs_different_hash(self):
-        h1 = compute_ledger_hash(None, "from-1", "to-1", Decimal("100"), Decimal("0"), Decimal("0"), "deposit", "2026-01-01")
-        h2 = compute_ledger_hash(None, "from-1", "to-2", Decimal("100"), Decimal("0"), Decimal("0"), "deposit", "2026-01-01")
+        h1 = compute_ledger_hash(None, "from-1", "to-1", Decimal("100"), Decimal("0"), "deposit", "2026-01-01")
+        h2 = compute_ledger_hash(None, "from-1", "to-2", Decimal("100"), Decimal("0"), "deposit", "2026-01-01")
         assert h1 != h2
 
     def test_genesis_hash_no_prev(self):
         """First entry uses 'GENESIS' as prev_hash."""
-        h = compute_ledger_hash(None, None, "to-1", Decimal("100"), Decimal("0"), Decimal("0"), "deposit", "2026-01-01")
+        h = compute_ledger_hash(None, None, "to-1", Decimal("100"), Decimal("0"), "deposit", "2026-01-01")
         assert isinstance(h, str)
         assert len(h) == 64
 
     def test_chain_links(self):
         """Each hash depends on the previous one."""
-        h1 = compute_ledger_hash(None, "a", "b", Decimal("10"), Decimal("0"), Decimal("0"), "transfer", "t1")
-        h2 = compute_ledger_hash(h1, "b", "c", Decimal("5"), Decimal("0"), Decimal("0"), "transfer", "t2")
-        h3 = compute_ledger_hash(h2, "c", "d", Decimal("3"), Decimal("0"), Decimal("0"), "transfer", "t3")
+        h1 = compute_ledger_hash(None, "a", "b", Decimal("10"), Decimal("0"), "transfer", "t1")
+        h2 = compute_ledger_hash(h1, "b", "c", Decimal("5"), Decimal("0"), "transfer", "t2")
+        h3 = compute_ledger_hash(h2, "c", "d", Decimal("3"), Decimal("0"), "transfer", "t3")
         # Changing h1 would change h2 and h3
         assert h1 != h2 != h3
-
-
-# ---------------------------------------------------------------------------
-# Ledger Chain Verification
-# ---------------------------------------------------------------------------
-
-class TestLedgerChainVerification:
-    async def test_verify_empty_ledger(self, db):
-        """Empty ledger should be valid."""
-        await ensure_platform_account(db)
-        result = await verify_ledger_chain(db)
-        assert result["valid"] is True
-
-    async def test_verify_after_deposit(self, db, make_agent, make_token_account):
-        """Chain should be valid after a deposit."""
-        await ensure_platform_account(db)
-        agent, _ = await make_agent("chain-agent")
-        acct = await create_account(db, agent.id)
-        await deposit(db, agent.id, 5000)
-
-        result = await verify_ledger_chain(db)
-        assert result["valid"] is True
-        assert result["total_entries"] >= 1
-
-    async def test_verify_after_transfer(self, db, make_agent, make_token_account):
-        """Chain should be valid after transfers."""
-        await ensure_platform_account(db)
-        a1, _ = await make_agent("sender")
-        a2, _ = await make_agent("receiver")
-        await make_token_account(a1.id, 10000)
-        await create_account(db, a2.id)
-
-        await transfer(db, a1.id, a2.id, 1000, "transfer")
-        await transfer(db, a1.id, a2.id, 500, "transfer")
-
-        result = await verify_ledger_chain(db)
-        assert result["valid"] is True
-        assert result["total_entries"] >= 2
 
 
 # ---------------------------------------------------------------------------

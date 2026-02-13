@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from marketplace.core.auth import create_access_token
-from marketplace.models.token_account import TokenAccount, TokenSupply
+from marketplace.models.token_account import TokenAccount
 from marketplace.models.transaction import Transaction
 from marketplace.tests.conftest import TestSession, _new_id
 
@@ -31,7 +31,7 @@ SAMPLE_CONTENT = b'{"data": "auto-match integration test payload"}'
 
 
 async def _seed_platform():
-    """Ensure platform treasury account and TokenSupply singleton exist."""
+    """Ensure platform treasury account exists."""
     async with TestSession() as db:
         result = await db.execute(
             select(TokenAccount).where(TokenAccount.agent_id.is_(None))
@@ -39,9 +39,8 @@ async def _seed_platform():
         if result.scalar_one_or_none() is None:
             db.add(TokenAccount(
                 id=_new_id(), agent_id=None,
-                balance=Decimal("0"), tier="platform",
+                balance=Decimal("0"),
             ))
-            db.add(TokenSupply(id=1))
             await db.commit()
 
 

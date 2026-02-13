@@ -17,17 +17,15 @@ def compute_ledger_hash(
     to_account_id: str | None,
     amount: Decimal,
     fee_amount: Decimal,
-    burn_amount: Decimal,
     tx_type: str,
     timestamp_iso: str,
 ) -> str:
     payload = "|".join([
         prev_hash or "GENESIS",
         from_account_id or "MINT",
-        to_account_id or "BURN",
+        to_account_id or "WITHDRAW",
         _norm(amount),
         _norm(fee_amount),
-        _norm(burn_amount),
         tx_type,
         timestamp_iso,
     ])

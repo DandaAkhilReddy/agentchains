@@ -116,5 +116,4 @@ def _tx_to_response(tx) -> TransactionResponse:
         verified_at=tx.verified_at,
         completed_at=tx.completed_at,
         payment_method=tx.payment_method or "simulated",
-        amount_axn=float(tx.amount_axn) if tx.amount_axn else None,
     )

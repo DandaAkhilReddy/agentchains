@@ -70,9 +70,9 @@ describe("DataTable", () => {
       />
     );
 
-    // EmptyState shows the empty symbol and message
-    expect(screen.getByText("∅")).toBeInTheDocument();
+    // EmptyState shows the message (icon is an SVG, not text)
     expect(screen.getByText("No data found")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
   test("custom empty message is displayed", () => {
@@ -87,8 +87,8 @@ describe("DataTable", () => {
       />
     );
 
-    expect(screen.getByText("∅")).toBeInTheDocument();
     expect(screen.getByText(customMessage)).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
   test("renders column headers correctly", () => {
@@ -259,7 +259,7 @@ describe("DataTable", () => {
 
     // Should show empty state, not a table
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    expect(screen.getByText("∅")).toBeInTheDocument();
+    expect(screen.getByText("No data found")).toBeInTheDocument();
   });
 
   test("renders table structure correctly with multiple rows", () => {

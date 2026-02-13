@@ -64,7 +64,6 @@ export interface Listing {
   content_size: number;
   content_type: string;
   price_usdc: number;
-  price_axn?: number;
   currency: string;
   metadata: Record<string, unknown>;
   tags: string[];
@@ -112,8 +111,7 @@ export interface Transaction {
   delivered_at: string | null;
   verified_at: string | null;
   completed_at: string | null;
-  payment_method?: "token" | "fiat" | "simulated";
-  amount_axn?: number | null;
+  payment_method?: "balance" | "fiat" | "simulated";
 }
 
 export interface TransactionListResponse {
@@ -433,7 +431,7 @@ export interface MCPHealth {
   resources_count: number;
 }
 
-// ── Token Economy (ARD) ──
+// ── Billing (USD) ──
 
 export interface TokenAccount {
   id: string;
@@ -443,7 +441,6 @@ export interface TokenAccount {
   total_earned: number;
   total_spent: number;
   total_fees_paid: number;
-  tier: "bronze" | "silver" | "gold" | "platinum";
   created_at: string;
   updated_at: string;
 }
@@ -454,7 +451,6 @@ export interface TokenLedgerEntry {
   to_account_id: string | null;
   amount: number;
   fee_amount: number;
-  burn_amount: number;
   tx_type: string;
   reference_id: string | null;
   reference_type: string | null;
@@ -472,10 +468,7 @@ export interface TokenLedgerResponse {
 export interface TokenDeposit {
   id: string;
   agent_id: string;
-  amount_fiat: number;
-  currency: string;
-  exchange_rate: number;
-  amount_axn: number;
+  amount_usd: number;
   status: "pending" | "completed" | "failed" | "refunded";
   payment_method: string;
   payment_ref: string | null;
@@ -483,32 +476,8 @@ export interface TokenDeposit {
   completed_at: string | null;
 }
 
-export interface TokenSupply {
-  total_minted: number;
-  total_burned: number;
-  circulating: number;
-  platform_balance: number;
-  last_updated: string;
-}
-
-export interface TokenTier {
-  name: string;
-  min_volume: number;
-  fee_discount_pct: number;
-  badge_color: string;
-}
-
-export interface SupportedCurrency {
-  code: string;
-  name: string;
-  rate_per_axn: number;
-  min_purchase_fiat: number;
-  min_purchase_axn: number;
-}
-
 export interface WalletBalanceResponse {
   account: TokenAccount;
-  balance_usd: number;
 }
 
 export interface DepositResponse {
@@ -521,7 +490,6 @@ export interface TransferResponse {
   from_balance: number;
   to_balance: number;
   fee: number;
-  burned: number;
 }
 
 // ── Creator Economy ──
@@ -556,35 +524,26 @@ export interface CreatorAgent {
 export interface CreatorDashboard {
   creator_balance: number;
   creator_total_earned: number;
-  creator_balance_usd: number;
   agents_count: number;
   agents: CreatorAgent[];
   total_agent_earnings: number;
   total_agent_spent: number;
-  peg_rate_usd: number;
-  token_name: string;
 }
 
 export interface CreatorWallet {
   balance: number;
-  balance_usd: number;
   total_earned: number;
   total_spent: number;
   total_deposited: number;
   total_fees_paid: number;
-  tier: string;
-  token_name: string;
-  peg_rate_usd: number;
 }
 
 export interface RedemptionRequest {
   id: string;
   creator_id: string;
   redemption_type: "api_credits" | "gift_card" | "bank_withdrawal" | "upi";
-  amount_ard: number;
-  amount_fiat: number | null;
+  amount_usd: number;
   currency: string;
-  exchange_rate: number | null;
   status: "pending" | "processing" | "completed" | "failed" | "rejected";
   payout_ref: string | null;
   admin_notes: string;
@@ -597,7 +556,6 @@ export interface RedemptionRequest {
 export interface RedemptionMethodInfo {
   type: string;
   label: string;
-  min_ard: number;
   min_usd: number;
   processing_time: string;
   available: boolean;
@@ -638,5 +596,4 @@ export interface AgentExecution {
 export interface SystemMetrics {
   health: HealthResponse;
   cdn: CDNStats;
-  tokenSupply: TokenSupply;
 }

@@ -1,13 +1,11 @@
 import { useHealth } from "../hooks/useHealth";
 import { useLeaderboard } from "../hooks/useReputation";
 import { useLiveFeed } from "../hooks/useLiveFeed";
-import { useQuery } from "@tanstack/react-query";
-import { fetchTokenSupply } from "../lib/api";
 import StatCard from "../components/StatCard";
 import PageHeader from "../components/PageHeader";
 import { SkeletonCard } from "../components/Skeleton";
 import QuickActions from "../components/QuickActions";
-import { relativeTime, formatARD } from "../lib/format";
+import { relativeTime } from "../lib/format";
 import { Bot, Package, ArrowLeftRight, Activity, Zap, ShoppingCart, CheckCircle, TrendingUp, Sparkles, Target, Crown, Wallet, ArrowDownCircle, LayoutDashboard } from "lucide-react";
 import {
   BarChart,
@@ -38,8 +36,8 @@ const EVENT_CONFIG: Record<string, { icon: typeof Bot; color: string }> = {
   opportunity_created: { icon: Sparkles, color: "text-yellow-400" },
   gap_filled: { icon: Target, color: "text-primary" },
   leaderboard_change: { icon: Crown, color: "text-purple-400" },
-  token_transfer: { icon: Wallet, color: "text-primary" },
-  token_deposit: { icon: ArrowDownCircle, color: "text-success" },
+  payment: { icon: Wallet, color: "text-primary" },
+  deposit: { icon: ArrowDownCircle, color: "text-success" },
 };
 
 interface Props {
@@ -50,17 +48,11 @@ export default function DashboardPage({ onNavigate }: Props) {
   const { data: health, isLoading } = useHealth();
   const { data: leaderboard } = useLeaderboard(5);
   const events = useLiveFeed();
-  const { data: supply } = useQuery({
-    queryKey: ["token-supply"],
-    queryFn: fetchTokenSupply,
-    staleTime: 60_000,
-  });
-
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
@@ -77,16 +69,10 @@ export default function DashboardPage({ onNavigate }: Props) {
     <div className="space-y-6 animate-fade-in">
       <PageHeader title="Dashboard" subtitle="Platform overview and live activity" icon={LayoutDashboard} />
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Agents" value={health?.agents_count ?? 0} icon={Bot} sparkData={[3, 5, 4, 7, 6, 8, 9]} />
         <StatCard label="Listings" value={health?.listings_count ?? 0} icon={Package} sparkData={[2, 4, 3, 6, 5, 7, 8]} />
         <StatCard label="Transactions" value={health?.transactions_count ?? 0} icon={ArrowLeftRight} sparkData={[1, 3, 5, 4, 6, 8, 7]} />
-        <StatCard
-          label="ARD Circulating"
-          value={supply ? formatARD(supply.circulating) : "\u2014"}
-          subtitle={supply ? `${formatARD(supply.total_burned)} burned` : undefined}
-          icon={Wallet}
-        />
         <StatCard
           label="Status"
           value={health?.status === "healthy" ? "Healthy" : "Down"}

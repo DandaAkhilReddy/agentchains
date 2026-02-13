@@ -58,7 +58,6 @@ class TransactionResponse(BaseModel):
     verified_at: datetime | None = None
     completed_at: datetime | None = None
     payment_method: str = "simulated"
-    amount_axn: float | None = None
 
     model_config = {"from_attributes": True}
 

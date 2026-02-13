@@ -226,10 +226,8 @@ async def test_creator_dashboard(client):
     body = resp.json()
     assert "creator_balance" in body
     assert "agents_count" in body
-    assert "token_name" in body
-    assert body["token_name"] == "ARD"
     assert body["agents_count"] == 0
-    assert body["creator_balance"] == 100.0  # signup bonus
+    assert body["creator_balance"] == pytest.approx(0.10, abs=0.01)  # signup bonus
 
 
 # ---------------------------------------------------------------------------
@@ -244,10 +242,7 @@ async def test_creator_wallet(client):
     assert resp.status_code == 200
     body = resp.json()
     assert "balance" in body
-    assert "tier" in body
-    assert "token_name" in body
-    assert body["token_name"] == "ARD"
-    assert body["balance"] == 100.0  # signup bonus
+    assert body["balance"] == pytest.approx(0.10, abs=0.01)  # signup bonus
 
 
 # ---------------------------------------------------------------------------
@@ -255,16 +250,14 @@ async def test_creator_wallet(client):
 # ---------------------------------------------------------------------------
 
 async def test_creator_wallet_signup_bonus(client):
-    """A new creator receives the signup bonus (100 ARD) in their wallet."""
+    """A new creator receives the signup bonus ($0.10 USD) in their wallet."""
     data = await _register(client)
     token = data["token"]
     resp = await client.get(f"{_CREATORS}/me/wallet", headers=_auth(token))
     assert resp.status_code == 200
     body = resp.json()
-    assert body["balance"] == 100.0
-    assert body["total_deposited"] == 100.0
-    # balance_usd = 100 * 0.001 = 0.1
-    assert body["balance_usd"] == pytest.approx(0.1, abs=0.01)
+    assert body["balance"] == pytest.approx(0.10, abs=0.01)
+    assert body["total_deposited"] == pytest.approx(0.10, abs=0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -277,19 +270,18 @@ async def test_creator_redeem_api_credits(client):
     token = data["token"]
     resp = await client.post(f"{_REDEMPTIONS}", json={
         "redemption_type": "api_credits",
-        "amount_ard": 100.0,
-        "currency": "USD",
+        "amount_usd": 0.10,
     }, headers=_auth(token))
     assert resp.status_code == 201
     body = resp.json()
     assert body["redemption_type"] == "api_credits"
     assert body["status"] == "completed"  # auto-processed instantly
-    assert body["amount_ard"] == 100.0
+    assert body["amount_usd"] == pytest.approx(0.10, abs=0.01)
 
     # After redemption, wallet balance should be 0
     wallet_resp = await client.get(f"{_CREATORS}/me/wallet", headers=_auth(token))
     assert wallet_resp.status_code == 200
-    assert wallet_resp.json()["balance"] == 0.0
+    assert wallet_resp.json()["balance"] == pytest.approx(0.0, abs=0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -300,11 +292,10 @@ async def test_creator_redeem_below_threshold(client):
     """Redeeming below the minimum threshold returns 400."""
     data = await _register(client)
     token = data["token"]
-    # api_credits minimum is 100 ARD, try with 50
+    # api_credits minimum is $0.10, try with $0.05
     resp = await client.post(f"{_REDEMPTIONS}", json={
         "redemption_type": "api_credits",
-        "amount_ard": 50.0,
-        "currency": "USD",
+        "amount_usd": 0.05,
     }, headers=_auth(token))
     assert resp.status_code == 400
     assert "Minimum" in resp.json()["detail"] or "minimum" in resp.json()["detail"].lower()
@@ -315,52 +306,18 @@ async def test_creator_redeem_below_threshold(client):
 # ---------------------------------------------------------------------------
 
 async def test_creator_cancel_redemption(client):
-    """Cancel a pending redemption and verify ARD is refunded."""
+    """Cancel a completed redemption should fail with 400."""
     data = await _register(client)
     token = data["token"]
 
-    # Create a gift_card redemption (1000 ARD minimum, but we only have 100).
-    # We need a type that stays pending. Use bank_withdrawal or gift_card.
-    # Since we only have 100 ARD (signup bonus), and gift_card needs 1000,
-    # let's use api_credits which auto-completes. Instead, we'll need
-    # to test cancel on a NON-instant type.
-    # The problem: signup bonus is only 100 ARD, below gift_card minimum (1000).
-    # Solution: api_credits auto-completes, so can't cancel. But api_credits
-    # threshold is 100 — and it auto-processes. Let's think of a workaround.
-
-    # Actually, api_credits processes instantly (status=completed), so we can't cancel it.
-    # gift_card min = 1000, upi min = 5000, bank_withdrawal min = 10000 — all above 100.
-    # We need to create a redemption that stays pending. The only way with 100 ARD
-    # balance is... not possible with the current thresholds unless we go through
-    # the service layer directly. Let's adjust: register, then test cancellation
-    # via a lower-level approach. OR: note that api_credits auto-completes.
-    # Let's just verify cancellation logic with an amount that works.
-
-    # Actually, re-reading the code: api_credits auto-completes -> completed status.
-    # You can't cancel a completed one. For other types with higher minimums, we don't
-    # have enough balance. Best approach: directly create via service to keep test focused.
-
-    # Alternative: we can test this by first checking that cancelling a completed
-    # redemption fails (status check). But the test spec says "cancel pending redemption refunds".
-    # Let's use the make_creator fixture approach via direct DB work. BUT we only have
-    # the `client` fixture. Let's register with enough context.
-
-    # The simplest solution: redeem 100 ARD as api_credits (it auto-completes),
-    # then try to cancel — should fail with "Cannot cancel" because it's 'completed'.
-    # That tests the cancel endpoint but not the "refund" path.
-
-    # Instead, let's just test that the cancel endpoint exists and works by
-    # using the fact that gift_card creates a pending state. We need >= 1000 ARD.
-    # With only 100 signup bonus, we can't test this through the API alone without
-    # a larger balance. Let's use a workaround: register, then directly manipulate
-    # the account balance through another registration path. Actually, the simplest
-    # test: verify that trying to cancel a completed redemption returns a 400 error.
+    # With only $0.10 signup bonus, the only redemption we can make is
+    # api_credits (min $0.10), which auto-completes instantly.
+    # We verify that trying to cancel a completed redemption returns 400.
 
     # Create api_credits redemption (auto-completes)
     redeem_resp = await client.post(f"{_REDEMPTIONS}", json={
         "redemption_type": "api_credits",
-        "amount_ard": 100.0,
-        "currency": "USD",
+        "amount_usd": 0.10,
     }, headers=_auth(token))
     assert redeem_resp.status_code == 201
     redemption_id = redeem_resp.json()["id"]
@@ -394,8 +351,7 @@ async def test_creator_list_redemptions(client):
     # Create one
     await client.post(f"{_REDEMPTIONS}", json={
         "redemption_type": "api_credits",
-        "amount_ard": 100.0,
-        "currency": "USD",
+        "amount_usd": 0.10,
     }, headers=_auth(token))
 
     # Now should have one
@@ -420,8 +376,9 @@ async def test_creator_redemption_methods(client):
     assert len(body["methods"]) == 4
     types = {m["type"] for m in body["methods"]}
     assert types == {"api_credits", "gift_card", "upi", "bank_withdrawal"}
-    assert body["token_name"] == "ARD"
-    assert body["peg_rate_usd"] == 0.001
+    # Verify methods have min_usd field
+    for m in body["methods"]:
+        assert "min_usd" in m
 
 
 # ---------------------------------------------------------------------------
@@ -452,14 +409,13 @@ async def test_creator_full_lifecycle(client):
     )
     assert dash_resp.status_code == 200
     dash = dash_resp.json()
-    assert dash["creator_balance"] == 100.0
+    assert dash["creator_balance"] == pytest.approx(0.10, abs=0.01)
     assert dash["agents_count"] == 0
 
     # 4. Redeem signup bonus as API credits
     redeem_resp = await client.post(f"{_REDEMPTIONS}", json={
         "redemption_type": "api_credits",
-        "amount_ard": 100.0,
-        "currency": "USD",
+        "amount_usd": 0.10,
     }, headers=_auth(login_token))
     assert redeem_resp.status_code == 201
     assert redeem_resp.json()["status"] == "completed"

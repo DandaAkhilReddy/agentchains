@@ -23,7 +23,6 @@ class DataListing(Base):
     content_size = Column(Integer, nullable=False)
     content_type = Column(String(50), nullable=False, default="application/json")
     price_usdc = Column(Numeric(10, 6), nullable=False)  # Up to 6 decimal places
-    price_axn = Column(Numeric(18, 6), nullable=True)  # Auto-calculated from price_usdc (ARD tokens)
     currency = Column(String(10), nullable=False, default="USDC")
     metadata_json = Column(Text, default="{}")  # JSON: source, query, params, model_used
     tags = Column(Text, default="[]")  # JSON array of searchable tags

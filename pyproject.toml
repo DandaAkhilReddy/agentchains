@@ -1,6 +1,6 @@
 [project]
 name = "agent-marketplace"
-version = "0.1.0"
+version = "0.4.0"
 description = "Agent-to-Agent Data Marketplace - Trade cached computation results between AI agents"
 requires-python = ">=3.11"
 

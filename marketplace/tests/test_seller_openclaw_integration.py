@@ -580,10 +580,10 @@ async def test_openclaw_format_event_message():
 
     # transaction_completed
     msg_tx = format_event_message("transaction_completed", {
-        "amount_axn": 1000.0,
+        "amount_usd": 10.0,
         "listing_title": "Premium Data Feed",
     })
-    assert "1000" in msg_tx
+    assert "10" in msg_tx
     assert "Premium Data Feed" in msg_tx
 
 

@@ -221,9 +221,6 @@ def create_app() -> FastAPI:
     app.include_router(wallet.router, prefix="/api/v1")
     app.include_router(creators.router, prefix="/api/v1")
 
-    from marketplace.api import redemptions
-    app.include_router(redemptions.router, prefix="/api/v1")
-
     from marketplace.api import audit, redemptions
     app.include_router(audit.router, prefix="/api/v1")
     app.include_router(redemptions.router, prefix="/api/v1")
@@ -271,9 +268,9 @@ def create_app() -> FastAPI:
         @app.get("/{full_path:path}")
         async def serve_spa(full_path: str):
             """Serve the React SPA for any non-API route."""
-            # Check if it's a static file first
-            file_path = static_dir / full_path
-            if file_path.is_file():
+            # Resolve and verify the path stays within static_dir (prevent traversal)
+            file_path = (static_dir / full_path).resolve()
+            if file_path.is_file() and str(file_path).startswith(str(static_dir.resolve())):
                 return FileResponse(str(file_path))
             # Fallback to index.html for SPA routing
             return FileResponse(str(static_dir / "index.html"))

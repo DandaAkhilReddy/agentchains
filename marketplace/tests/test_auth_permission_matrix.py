@@ -395,7 +395,7 @@ async def test_cross_creator_redemption_access(client):
     # Creator A creates a redemption
     create_resp = await client.post(
         f"{_API}/redemptions",
-        json={"redemption_type": "api_credits", "amount_ard": 100},
+        json={"redemption_type": "api_credits", "amount_usd": 100},
         headers=_auth(jwt_a),
     )
     assert create_resp.status_code == 201

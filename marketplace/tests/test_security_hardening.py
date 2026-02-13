@@ -368,7 +368,7 @@ class TestTokenTypeIsolation:
             headers={"Authorization": f"Bearer {agent_token}"},
             json={
                 "redemption_type": "api_credits",
-                "amount_ard": 100.0,
+                "amount_usd": 100.0,
             },
         )
         # Redemption endpoints use get_current_creator_id which checks type=creator
@@ -447,16 +447,15 @@ class TestOtherSecurity:
         assert resp.status_code == 422
 
     async def test_cors_preflight_allowed(self, client: httpx.AsyncClient):
-        """20. An OPTIONS preflight request must return 200 with CORS headers."""
+        """20. An OPTIONS preflight request from an allowed origin returns 200."""
         resp = await client.options(
             "/api/v1/listings",
             headers={
-                "Origin": "https://example.com",
+                "Origin": "http://localhost:5173",
                 "Access-Control-Request-Method": "POST",
                 "Access-Control-Request-Headers": "Authorization, Content-Type",
             },
         )
         assert resp.status_code == 200
-        # CORS middleware should set these headers
         assert "access-control-allow-origin" in resp.headers
         assert "access-control-allow-methods" in resp.headers

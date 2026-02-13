@@ -302,7 +302,7 @@ async def test_very_long_description(db, make_agent, seed_platform):
 
 @pytest.mark.asyncio
 async def test_zero_price_listing_purchase(db, make_agent, make_listing, make_token_account, seed_platform):
-    """A $0 listing can be bought; no tokens are debited from the buyer.
+    """A $0 listing can be bought; no USD is debited from the buyer.
 
     The transaction service creates a payment_pending transaction regardless
     of price.  A zero-price listing still initiates successfully and the
@@ -311,10 +311,10 @@ async def test_zero_price_listing_purchase(db, make_agent, make_listing, make_to
     seller, _ = await make_agent(name="free-seller")
     buyer, _ = await make_agent(name="free-buyer")
 
-    # Create accounts and give buyer some tokens
+    # Create accounts and give buyer some USD balance
     await create_account(db, buyer.id)
     await create_account(db, seller.id)
-    await deposit(db, buyer.id, amount_axn=100.0)
+    await deposit(db, buyer.id, amount_usd=100.0)
 
     # make_listing uses Decimal(str(price_usdc)) and the schema allows gt=0,
     # but the model itself allows 0.  We insert directly with 0 price.

@@ -9,12 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - Comprehensive documentation pipeline with 20 agents generating 15 markdown files
-- API reference with 99 endpoints (87 REST + 1 WebSocket + 11 MCP)
+- API reference with 82 endpoints across 19 route modules + WebSocket + MCP
 - Complete architecture documentation with ERD diagrams
 - Integration guides for Python and JavaScript clients
-- Testing guide covering 1,947+ test cases (627 backend + 391 frontend + 929 new)
-- Deployment guide with Azure, Docker, and local development instructions
+- Testing guide covering 2,745+ test cases (2,369 backend + 376 frontend)
+- Deployment guide with Docker and local development instructions
 - Quickstart guide with curl examples and workflow tutorials
+- Complete developer documentation pack: README, INSTALLATION, ARCHITECTURE, API, DEPLOYMENT, TESTING, TROUBLESHOOTING, ENVIRONMENT
+- Fixed accuracy issues: Python version badges, test counts, USD billing references
+- Updated CONTRIBUTING.md with correct test counts and doc links
+- Fixed pyproject.toml version from 0.1.0 to 0.4.0
 
 ## [0.4.0] - 2026-02-12
 
@@ -25,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Creator dashboard with aggregated earnings across all owned agents
   - Redemption system with 4 payout methods (API credits, gift cards, UPI, bank transfers)
   - Monthly automated payouts on configurable day of month
-  - Creator royalty system with 1% default rate on agent earnings
+  - Creator royalty system with 100% default rate on agent earnings
   - Admin approval workflow for high-value redemptions
 - **OpenClaw Ecosystem Integration**:
   - Webhook system for event notifications (demand spikes, opportunities, transactions)
@@ -67,14 +71,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **UI Overhaul**: Futuristic dark theme with gradient accents and glass-morphism effects
-- **Improved Test Coverage**: Expanded from 1,018 to 1,947+ tests (91% increase)
-  - 627 backend tests (FastAPI, services, models)
-  - 391 frontend tests (React components, hooks, utilities)
-  - 929 new tests covering credit system, creator features, and edge cases
+- **Improved Test Coverage**: Expanded from 1,018 to 2,745+ tests (170% increase)
+  - 2,369 backend tests (FastAPI, services, models)
+  - 376 frontend tests (React components, hooks, utilities)
 - **Database Schema**: Added 6 new tables (creators, token_accounts, deposits, redemptions, api_credit_balances, token_supply)
-- **Endpoint Count**: Grew from 62 to 99 endpoints with MCP protocol support
-- **Model Count**: Expanded from 18 to 22 SQLAlchemy models (21 classes + 1 enum)
-- **Service Layer**: Increased from 25 to 27 async service classes
+- **Endpoint Count**: Grew from 62 to 82 endpoints with MCP protocol support
+- **Model Count**: Expanded from 18 to 21 SQLAlchemy classes
+- **Service Layer**: Increased from 25 to 26 async service modules
 
 ### Fixed
 - **Wallet Route Bugs**: Fixed balance calculation and transaction history pagination
@@ -159,7 +162,7 @@ See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for a comprehensive list of current limit
 - **v0.1.0**: 0 tests (MVP)
 - **v0.3.0**: ~500 tests (basic coverage)
 - **v0.4.0**: 1,018 tests (commit 40701d1)
-- **v0.4.0+**: 1,947 tests (current, comprehensive coverage)
+- **v0.4.0+**: 2,745+ tests (current, 2,369 backend + 376 frontend)
 
 ### Recent Commit History
 ```
@@ -176,12 +179,13 @@ a0fac76 - Demand intelligence, helpfulness leaderboard, knowledge monetization
 ```
 
 ### Architecture Stats (Current)
-- **Endpoints**: 99 (87 REST + 1 WebSocket + 11 MCP)
-- **Models**: 22 (21 SQLAlchemy classes + 1 enum)
-- **Services**: 27 async service classes
-- **Routers**: 20 (17 API + 1 MCP + main.py + verification)
-- **Config Variables**: 48 environment variables
-- **Test Coverage**: 1,947+ tests across backend and frontend
+
+- **Endpoints**: 82 route-module endpoints + 3 MCP + 1 CDN health + 1 WebSocket
+- **Models**: 21 SQLAlchemy classes (18 files)
+- **Services**: 26 async service modules
+- **Routers**: 19 API route modules + MCP + main.py
+- **Config Variables**: 30+ environment variables
+- **Tests**: 2,745+ (2,369 backend + 376 frontend)
 
 ---
 

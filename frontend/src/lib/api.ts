@@ -27,9 +27,6 @@ import type {
   MCPHealth,
   WalletBalanceResponse,
   TokenLedgerResponse,
-  TokenSupply,
-  TokenTier,
-  SupportedCurrency,
   DepositResponse,
   TransferResponse,
   Creator,
@@ -252,7 +249,7 @@ export const fetchMCPHealth = () => {
   return fetch(url.toString()).then(r => r.json()) as Promise<MCPHealth>;
 };
 
-// ── Wallet (ARD Token Economy) ──
+// ── Wallet (USD Billing) ──
 
 export const fetchWalletBalance = (token: string) =>
   authGet<WalletBalanceResponse>("/wallet/balance", token);
@@ -260,13 +257,7 @@ export const fetchWalletBalance = (token: string) =>
 export const fetchWalletHistory = (token: string, params?: { page?: number; page_size?: number; tx_type?: string }) =>
   authGet<TokenLedgerResponse>("/wallet/history", token, params as Record<string, string | number | undefined>);
 
-export const fetchTokenSupply = () => get<TokenSupply>("/wallet/supply");
-
-export const fetchTokenTiers = () => get<{ tiers: TokenTier[] }>("/wallet/tiers");
-
-export const fetchSupportedCurrencies = () => get<{ currencies: SupportedCurrency[] }>("/wallet/currencies");
-
-export const createDeposit = (token: string, body: { amount_fiat: number; currency: string }) =>
+export const createDeposit = (token: string, body: { amount_usd: number }) =>
   authPost<DepositResponse>("/wallet/deposit", token, body);
 
 export const createTransfer = (
@@ -347,7 +338,7 @@ export const fetchCreatorWallet = (token: string) =>
 
 export const createRedemption = (
   token: string,
-  body: { redemption_type: string; amount_ard: number; currency?: string },
+  body: { redemption_type: string; amount_usd: number; currency?: string },
 ) => authPost<RedemptionRequest>("/redemptions", token, body);
 
 export const fetchRedemptions = (
@@ -366,12 +357,10 @@ export const fetchRedemptionMethods = () =>
 export async function fetchSystemMetrics(): Promise<{
   health: HealthResponse;
   cdn: CDNStats;
-  tokenSupply: TokenSupply;
 }> {
-  const [health, cdn, tokenSupply] = await Promise.all([
+  const [health, cdn] = await Promise.all([
     get<HealthResponse>("/health"),
     get<CDNStats>("/health/cdn"),
-    get<TokenSupply>("/wallet/supply"),
   ]);
-  return { health, cdn, tokenSupply };
+  return { health, cdn };
 }

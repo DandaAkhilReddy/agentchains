@@ -33,6 +33,7 @@ export default function Pagination({ page, totalPages, onPageChange }: Props) {
         <button
           onClick={() => onPageChange(1)}
           disabled={page === 1}
+          aria-label="First page"
           className={`${btn} text-text-muted hover:text-text-primary hover:bg-surface-overlay disabled:opacity-30 disabled:cursor-not-allowed`}
         >
           <ChevronsLeft className="h-3.5 w-3.5" />
@@ -40,6 +41,7 @@ export default function Pagination({ page, totalPages, onPageChange }: Props) {
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1}
+          aria-label="Previous page"
           className={`${btn} text-text-muted hover:text-text-primary hover:bg-surface-overlay disabled:opacity-30 disabled:cursor-not-allowed`}
         >
           <ChevronLeft className="h-3.5 w-3.5" />
@@ -66,6 +68,7 @@ export default function Pagination({ page, totalPages, onPageChange }: Props) {
         <button
           onClick={() => onPageChange(page + 1)}
           disabled={page === totalPages}
+          aria-label="Next page"
           className={`${btn} text-text-muted hover:text-text-primary hover:bg-surface-overlay disabled:opacity-30 disabled:cursor-not-allowed`}
         >
           <ChevronRight className="h-3.5 w-3.5" />
@@ -73,6 +76,7 @@ export default function Pagination({ page, totalPages, onPageChange }: Props) {
         <button
           onClick={() => onPageChange(totalPages)}
           disabled={page === totalPages}
+          aria-label="Last page"
           className={`${btn} text-text-muted hover:text-text-primary hover:bg-surface-overlay disabled:opacity-30 disabled:cursor-not-allowed`}
         >
           <ChevronsRight className="h-3.5 w-3.5" />

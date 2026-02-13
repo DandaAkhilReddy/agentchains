@@ -26,7 +26,7 @@ async def register_agent(
 ):
     result = await registry_service.register_agent(db, req)
 
-    # Create ARD token account + signup bonus
+    # Create wallet account + signup bonus
     try:
         await ensure_platform_account(db)
         await create_account(db, result.id)

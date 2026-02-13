@@ -1,4 +1,4 @@
-"""Redemption API endpoints — convert ARD tokens to real value."""
+"""Withdrawal API endpoints — convert USD balance to real value."""
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/redemptions", tags=["redemptions"])
 
 class RedemptionCreateRequest(BaseModel):
     redemption_type: str = Field(..., pattern="^(api_credits|gift_card|bank_withdrawal|upi)$")
-    amount_ard: float = Field(..., gt=0)
+    amount_usd: float = Field(..., gt=0)
     currency: str = Field(default="USD", max_length=10)
     payout_details: Optional[dict] = None  # UPI ID, bank details, etc.
 
@@ -41,11 +41,11 @@ async def create_redemption(
     db: AsyncSession = Depends(get_db),
     authorization: str = Header(None),
 ):
-    """Create a new redemption request. ARD is debited immediately."""
+    """Create a new withdrawal request. USD is debited immediately."""
     creator_id = get_current_creator_id(authorization)
     try:
         return await redemption_service.create_redemption(
-            db, creator_id, req.redemption_type, req.amount_ard, req.currency,
+            db, creator_id, req.redemption_type, req.amount_usd, req.currency,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -91,7 +91,7 @@ async def cancel_redemption(
     db: AsyncSession = Depends(get_db),
     authorization: str = Header(None),
 ):
-    """Cancel a pending redemption. ARD is refunded."""
+    """Cancel a pending withdrawal. USD is refunded."""
     creator_id = get_current_creator_id(authorization)
     try:
         return await redemption_service.cancel_redemption(db, redemption_id, creator_id)
@@ -126,7 +126,7 @@ async def admin_reject(
     db: AsyncSession = Depends(get_db),
     _agent_id: str = Depends(get_current_creator_id),
 ):
-    """Admin: reject a redemption. ARD is refunded to creator."""
+    """Admin: reject a redemption. USD is refunded to creator."""
     try:
         return await redemption_service.admin_reject_redemption(
             db, redemption_id, req.reason,

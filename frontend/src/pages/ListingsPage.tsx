@@ -9,7 +9,7 @@ import { SkeletonCard } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import PageHeader from "../components/PageHeader";
 import Pagination from "../components/Pagination";
-import { formatUSDC, formatARD, relativeTime, formatBytes } from "../lib/format";
+import { formatUSDC, formatUSD, relativeTime, formatBytes } from "../lib/format";
 import { expressBuy } from "../lib/api";
 import { Search, Code, FileText, Globe, Cpu, Zap, Store } from "lucide-react";
 import type { Category, Listing } from "../types/api";
@@ -59,10 +59,7 @@ function ListingCard({ listing, onExpressBuy }: { listing: Listing; onExpressBuy
             className="whitespace-nowrap rounded-full bg-primary-glow px-2 py-0.5 text-xs font-semibold text-primary shadow-[0_0_8px_rgba(59,130,246,0.15)]"
             style={{ fontFamily: "var(--font-mono)" }}
           >
-            {listing.price_axn ? formatARD(listing.price_axn) : formatUSDC(listing.price_usdc)}
-          </span>
-          <span className="text-[10px] text-text-muted" style={{ fontFamily: "var(--font-mono)" }}>
-            {formatUSDC(listing.price_usdc)}
+            {formatUSD(listing.price_usdc)}
           </span>
         </div>
       </div>

@@ -1,3 +1,6 @@
+import logging
+import warnings
+
 from pydantic_settings import BaseSettings
 
 
@@ -6,19 +9,15 @@ class Settings(BaseSettings):
     marketplace_host: str = "0.0.0.0"
     marketplace_port: int = 8000
 
-    # Database (sqlite for local dev, postgresql+asyncpg for Azure)
+    # Database (sqlite for local dev, postgresql+asyncpg for production)
     database_url: str = "sqlite+aiosqlite:///./data/marketplace.db"
 
-    # Content storage — local HashFS path (used when azure_storage_connection_string is empty)
+    # Content storage — local HashFS path
     content_store_path: str = "./data/content_store"
-
-    # Azure Blob Storage (when set, overrides local HashFS)
-    azure_storage_connection_string: str = ""
-    azure_storage_container: str = "content-store"
 
     # Auth
     jwt_secret_key: str = "dev-secret-change-in-production"
-    jwt_algorithm: str = "HS256"  # HS256 for dev simplicity, RS256 for production
+    jwt_algorithm: str = "HS256"
     jwt_expire_hours: int = 24 * 7  # 7 days
 
     # Payments
@@ -26,23 +25,16 @@ class Settings(BaseSettings):
     x402_facilitator_url: str = "https://x402.org/facilitator"
     x402_network: str = "base-sepolia"
 
-    # Azure OpenAI (for agents)
-    azure_openai_endpoint: str = ""
-    azure_openai_api_key: str = ""
-    azure_openai_deployment: str = "gpt-4o"
-    azure_openai_api_version: str = "2024-12-01-preview"
+    # OpenAI (for AI agents)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
 
-    # ARD Token Economy
-    token_name: str = "ARD"
-    token_peg_usd: float = 0.001  # 1 ARD = $0.001 USD (1000 ARD = $1)
-    token_platform_fee_pct: float = 0.02  # 2% fee on transfers
-    token_burn_pct: float = 0.50  # 50% of fees burned
-    token_signup_bonus: float = 100.0  # Free ARD for new agents
-    token_quality_bonus_pct: float = 0.10  # +10% bonus for quality > threshold
-    token_quality_threshold: float = 0.80  # Min quality for bonus
+    # Billing
+    platform_fee_pct: float = 0.02  # 2% fee on purchases
+    signup_bonus_usd: float = 0.10  # $0.10 welcome credit for new agents
 
     # CORS
-    cors_origins: str = "*"  # Comma-separated origins, or "*" for all
+    cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
     # MCP Server
     mcp_enabled: bool = True
@@ -60,14 +52,14 @@ class Settings(BaseSettings):
     # Creator Economy
     creator_royalty_pct: float = 1.0  # 100% — creator gets all agent earnings
     creator_royalty_mode: str = "full"  # "full" | "percentage"
-    creator_min_withdrawal_ard: float = 10000.0  # 10,000 ARD = $10 USD
+    creator_min_withdrawal_usd: float = 10.00  # Minimum $10 USD for withdrawal
     creator_payout_day: int = 1  # Day of month for auto-payout
 
     # Redemption
-    redemption_min_api_credits_ard: float = 100.0
-    redemption_min_gift_card_ard: float = 1000.0
-    redemption_min_bank_ard: float = 10000.0
-    redemption_min_upi_ard: float = 5000.0
+    redemption_min_api_credits_usd: float = 0.10
+    redemption_min_gift_card_usd: float = 1.00
+    redemption_min_bank_usd: float = 10.00
+    redemption_min_upi_usd: float = 5.00
     redemption_gift_card_margin_pct: float = 0.05  # 5% margin
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
@@ -80,3 +72,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Warn on insecure defaults (logged at startup, not a hard error for dev convenience)
+_logger = logging.getLogger("marketplace.config")
+if settings.jwt_secret_key in ("dev-secret-change-in-production", "change-me-to-a-random-string"):
+    warnings.warn(
+        "JWT_SECRET_KEY is set to the default insecure value. "
+        "Set a strong random secret via the JWT_SECRET_KEY environment variable for production.",
+        stacklevel=1,
+    )
+if settings.cors_origins == "*":
+    _logger.warning(
+        "CORS_ORIGINS is set to '*' (allow all). "
+        "Configure specific origins for production via the CORS_ORIGINS environment variable."
+    )

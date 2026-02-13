@@ -45,7 +45,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "wallet", label: "Wallet", icon: Wallet },
       { id: "transactions", label: "Transactions", icon: ArrowLeftRight },
-      { id: "redeem", label: "Redeem", icon: Gift },
+      { id: "redeem", label: "Withdraw", icon: Gift },
     ],
   },
   {

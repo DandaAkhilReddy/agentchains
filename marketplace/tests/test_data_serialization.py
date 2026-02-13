@@ -1,7 +1,7 @@
 """Data serialization tests for the AgentChains marketplace.
 
 Covers:
-  - Decimal precision (prices, balances, fees, exchange rates)
+  - Decimal precision (prices, balances, fees)
   - JSON round-trip (metadata, tags, empty/special chars)
   - Unicode & content hashing (deterministic hashing, binary round-trip)
   - DateTime handling (created_at, freshness_at, API ISO strings)
@@ -21,12 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.models.listing import DataListing
 from marketplace.models.token_account import TokenAccount
-from marketplace.services.deposit_service import get_exchange_rate, _EXCHANGE_RATES
 from marketplace.storage.hashfs import HashFS
 
 
 # ============================================================================
-# Decimal precision (4 tests)
+# Decimal precision (3 tests)
 # ============================================================================
 
 
@@ -66,11 +65,11 @@ async def test_token_balance_large_value_preserved(db: AsyncSession, make_agent,
 
 @pytest.mark.asyncio
 async def test_fee_calculation_precise(db: AsyncSession, make_agent, make_token_account, seed_platform):
-    """Transfer 100 ARD with 2% fee = exactly 2.000000 fee (not 1.99999...)."""
+    """Transfer 100 USD with 2% fee = exactly 2.000000 fee (not 1.99999...)."""
     from marketplace.config import settings
 
     amount = Decimal("100")
-    fee_pct = Decimal(str(settings.token_platform_fee_pct))
+    fee_pct = Decimal(str(settings.platform_fee_pct))
 
     # Replicate the _to_decimal logic for fee calculation
     def _to_decimal(value):
@@ -85,19 +84,6 @@ async def test_fee_calculation_precise(db: AsyncSession, make_agent, make_token_
     )
     # Confirm no floating-point drift
     assert str(fee) == "2.000000"
-
-
-def test_exchange_rate_decimal_not_float():
-    """deposit_service exchange rates are Decimal, not float."""
-    for code, meta in _EXCHANGE_RATES.items():
-        rate = meta["rate_per_axn"]
-        assert isinstance(rate, Decimal), (
-            f"Exchange rate for {code} is {type(rate).__name__}, expected Decimal"
-        )
-    # Verify via the public helper too
-    usd_rate = get_exchange_rate("USD")
-    assert isinstance(usd_rate, Decimal)
-    assert usd_rate == Decimal("0.001000")
 
 
 # ============================================================================

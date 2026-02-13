@@ -30,9 +30,6 @@ import {
   fetchMCPHealth,
   fetchWalletBalance,
   fetchWalletHistory,
-  fetchTokenSupply,
-  fetchTokenTiers,
-  fetchSupportedCurrencies,
   createDeposit,
   createTransfer,
   registerOpenClawWebhook,
@@ -446,34 +443,13 @@ describe("api.ts", () => {
       expect(call).toContain("tx_type=deposit");
     });
 
-    test("fetchTokenSupply calls correct endpoint", async () => {
-      await fetchTokenSupply();
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/api/v1/wallet/supply")
-      );
-    });
-
-    test("fetchTokenTiers calls correct endpoint", async () => {
-      await fetchTokenTiers();
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/api/v1/wallet/tiers")
-      );
-    });
-
-    test("fetchSupportedCurrencies calls correct endpoint", async () => {
-      await fetchSupportedCurrencies();
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/api/v1/wallet/currencies")
-      );
-    });
-
     test("createDeposit uses authPost", async () => {
-      await createDeposit("token", { amount_fiat: 100, currency: "USD" });
+      await createDeposit("token", { amount_usd: 100 });
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/v1/wallet/deposit"),
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ amount_fiat: 100, currency: "USD" }),
+          body: JSON.stringify({ amount_usd: 100 }),
         })
       );
     });
@@ -651,7 +627,7 @@ describe("api.ts", () => {
     });
 
     test("createRedemption uses authPost", async () => {
-      const body = { redemption_type: "bank_transfer", amount_ard: 1000 };
+      const body = { redemption_type: "bank_transfer", amount_usd: 10.0 };
       await createRedemption("token", body);
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/v1/redemptions"),

@@ -193,9 +193,9 @@ describe("AgentsPage", () => {
 
     renderWithProviders(<AgentsPage />);
 
-    expect(screen.getByText("Prev")).toBeInTheDocument();
-    expect(screen.getByText("Next")).toBeInTheDocument();
-    expect(screen.getAllByText("45 agents")).toHaveLength(2); // Top and bottom
+    expect(screen.getByRole("button", { name: "Previous page" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next page" })).toBeInTheDocument();
+    expect(screen.getByText("45 agents")).toBeInTheDocument();
   });
 
   it("does not show pagination when total is 20 or less", () => {
@@ -208,8 +208,8 @@ describe("AgentsPage", () => {
 
     renderWithProviders(<AgentsPage />);
 
-    expect(screen.queryByText("Prev")).not.toBeInTheDocument();
-    expect(screen.queryByText("Next")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Previous page" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Next page" })).not.toBeInTheDocument();
   });
 
   it("shows online indicator for recently active agents", () => {
@@ -323,7 +323,7 @@ describe("AgentsPage", () => {
 
     renderWithProviders(<AgentsPage />);
 
-    const nextButton = screen.getByText("Next");
+    const nextButton = screen.getByRole("button", { name: "Next page" });
     fireEvent.click(nextButton);
 
     // Should increment page
@@ -349,7 +349,7 @@ describe("AgentsPage", () => {
     renderWithProviders(<AgentsPage />);
 
     // Click next to go to page 2
-    const nextButton = screen.getByText("Next");
+    const nextButton = screen.getByRole("button", { name: "Next page" });
     fireEvent.click(nextButton);
 
     await waitFor(() => {
@@ -361,7 +361,7 @@ describe("AgentsPage", () => {
     });
 
     // Click prev to go back to page 1
-    const prevButton = screen.getByText("Prev");
+    const prevButton = screen.getByRole("button", { name: "Previous page" });
     fireEvent.click(prevButton);
 
     await waitFor(() => {
@@ -383,7 +383,7 @@ describe("AgentsPage", () => {
 
     renderWithProviders(<AgentsPage />);
 
-    const prevButton = screen.getByText("Prev");
+    const prevButton = screen.getByRole("button", { name: "Previous page" });
     expect(prevButton).toBeDisabled();
   });
 
@@ -399,7 +399,7 @@ describe("AgentsPage", () => {
     renderWithProviders(<AgentsPage />);
 
     // Click next to go to page 2
-    const nextButton = screen.getByText("Next");
+    const nextButton = screen.getByRole("button", { name: "Next page" });
     expect(nextButton).not.toBeDisabled(); // Should be enabled on page 1
 
     fireEvent.click(nextButton);
@@ -408,7 +408,7 @@ describe("AgentsPage", () => {
     // Wait for state update and check if next is now disabled
     // On page 2 with 21 total: 2 * 20 = 40 >= 21, so disabled
     await waitFor(() => {
-      expect(screen.getByText("Next")).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
     });
   });
 

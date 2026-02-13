@@ -1,8 +1,7 @@
-"""J-2 Token Economy Judge — 15 mathematical invariant tests for the ARD token economy.
+"""J-2 Token Economy Judge — 10 mathematical invariant tests for the USD billing model.
 
-Verifies double-entry bookkeeping, decimal precision, fee/burn ratios,
-supply conservation, idempotency, hash-chain integrity, tier boundaries,
-and creator royalty deduction.
+Verifies double-entry bookkeeping, decimal precision, fee ratios,
+idempotency, and creator royalty deduction.
 
 Every test uses Decimal(str(value)) to avoid floating-point drift.
 """
@@ -15,7 +14,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
-from marketplace.models.token_account import TokenAccount, TokenLedger, TokenSupply
+from marketplace.models.token_account import TokenAccount, TokenLedger
 from marketplace.services import token_service
 from marketplace.services.token_service import (
     ensure_platform_account,
@@ -23,10 +22,7 @@ from marketplace.services.token_service import (
     transfer,
     deposit,
     get_balance,
-    get_supply,
-    verify_ledger_chain,
     debit_for_purchase,
-    recalculate_tier,
 )
 
 
@@ -42,11 +38,11 @@ def _id() -> str:
 async def test_double_entry_sum_zero(
     db: AsyncSession, seed_platform, make_agent, make_token_account
 ):
-    """For every transfer, sum of all balance changes = 0 (debits = credits + burn).
+    """For every transfer, sum of all balance changes = 0 (debits = credits).
 
     The sender loses `amount`. The receiver gains `amount - fee`. The platform
-    gains `fee - burn`. The burn is permanently destroyed.  So:
-        -amount + (amount - fee) + (fee - burn) + burn = 0
+    gains `fee`.  So:
+        -amount + (amount - fee) + fee = 0
     We verify this by snapshotting all balances before and after.
     """
     alice, _ = await make_agent("de_alice")
@@ -54,9 +50,7 @@ async def test_double_entry_sum_zero(
     await make_token_account(alice.id, 5000)
     await make_token_account(bob.id, 0)
 
-    # Snapshot balances before
-    platform_before = Decimal(str((await get_balance(db, alice.id))["balance"]))  # placeholder
-    # Actually get platform account balance directly
+    # Get platform account balance directly
     platform_acct_result = await db.execute(
         select(TokenAccount).where(
             TokenAccount.agent_id.is_(None),
@@ -69,9 +63,6 @@ async def test_double_entry_sum_zero(
     alice_bal_before = Decimal(str((await get_balance(db, alice.id))["balance"]))
     bob_bal_before = Decimal(str((await get_balance(db, bob.id))["balance"]))
 
-    supply_before = await get_supply(db)
-    burned_before = Decimal(str(supply_before["total_burned"]))
-
     # Execute transfer
     ledger = await transfer(db, alice.id, bob.id, 1000, tx_type="sale")
 
@@ -82,17 +73,13 @@ async def test_double_entry_sum_zero(
     alice_bal_after = Decimal(str((await get_balance(db, alice.id))["balance"]))
     bob_bal_after = Decimal(str((await get_balance(db, bob.id))["balance"]))
 
-    supply_after = await get_supply(db)
-    burned_after = Decimal(str(supply_after["total_burned"]))
-
     # Delta for each party
     delta_alice = alice_bal_after - alice_bal_before        # negative (sender)
     delta_bob = bob_bal_after - bob_bal_before              # positive (receiver)
-    delta_platform = platform_bal_after - platform_bal_before  # positive (fee - burn)
-    delta_burned = burned_after - burned_before             # positive (destroyed)
+    delta_platform = platform_bal_after - platform_bal_before  # positive (fee)
 
-    # The invariant: all balance deltas + burn = 0
-    net = delta_alice + delta_bob + delta_platform + delta_burned
+    # The invariant: all balance deltas = 0
+    net = delta_alice + delta_bob + delta_platform
     assert net == Decimal("0"), f"Double-entry violated: net = {net}"
 
 
@@ -104,7 +91,7 @@ async def test_double_entry_sum_zero(
 async def test_decimal_precision_no_rounding(
     db: AsyncSession, seed_platform, make_agent, make_token_account
 ):
-    """0.000001 ARD transfers maintain 6 decimal places."""
+    """0.000001 USD transfers maintain 6 decimal places."""
     alice, _ = await make_agent("prec_alice")
     bob, _ = await make_agent("prec_bob")
     await make_token_account(alice.id, 1000)
@@ -121,38 +108,14 @@ async def test_decimal_precision_no_rounding(
 
 
 # ---------------------------------------------------------------------------
-# 3. Burn = fee * 50%
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_burn_matches_fee_pct(
-    db: AsyncSession, seed_platform, make_agent, make_token_account
-):
-    """burn_amount = fee_amount * 0.50 exactly."""
-    alice, _ = await make_agent("burn_alice")
-    bob, _ = await make_agent("burn_bob")
-    await make_token_account(alice.id, 5000)
-    await make_token_account(bob.id, 0)
-
-    ledger = await transfer(db, alice.id, bob.id, 1000, tx_type="sale")
-
-    fee = Decimal(str(ledger.fee_amount))
-    burn = Decimal(str(ledger.burn_amount))
-    burn_pct = Decimal(str(settings.token_burn_pct))
-
-    expected_burn = (fee * burn_pct).quantize(Decimal("0.000001"))
-    assert burn == expected_burn, f"Burn {burn} != fee {fee} * {burn_pct} = {expected_burn}"
-
-
-# ---------------------------------------------------------------------------
-# 4. Fee = transfer_amount * 2%
+# 3. Fee = transfer_amount * platform_fee_pct
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_fee_matches_platform_pct(
     db: AsyncSession, seed_platform, make_agent, make_token_account
 ):
-    """fee_amount = transfer_amount * 0.02 exactly."""
+    """fee_amount = transfer_amount * platform_fee_pct exactly."""
     alice, _ = await make_agent("fee_alice")
     bob, _ = await make_agent("fee_bob")
     await make_token_account(alice.id, 5000)
@@ -162,68 +125,58 @@ async def test_fee_matches_platform_pct(
     ledger = await transfer(db, alice.id, bob.id, amount, tx_type="sale")
 
     fee = Decimal(str(ledger.fee_amount))
-    fee_pct = Decimal(str(settings.token_platform_fee_pct))
+    fee_pct = Decimal(str(settings.platform_fee_pct))
     expected_fee = (amount * fee_pct).quantize(Decimal("0.000001"))
 
     assert fee == expected_fee, f"Fee {fee} != {amount} * {fee_pct} = {expected_fee}"
 
 
 # ---------------------------------------------------------------------------
-# 5. $0 listing -> zero ARD -> no transfer needed
+# 4. $0 listing -> zero USD -> no transfer needed
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_zero_price_fee_calc(
     db: AsyncSession, seed_platform, make_agent, make_token_account
 ):
-    """$0 listing -> 0 ARD -> transfer of 0 should raise ValueError (amount must be positive)."""
+    """$0 listing -> transfer of 0 should raise ValueError (amount must be positive)."""
     buyer, _ = await make_agent("zp_buyer")
     seller, _ = await make_agent("zp_seller")
     await make_token_account(buyer.id, 5000)
     await make_token_account(seller.id, 0)
 
-    # $0 listing means 0 / 0.001 = 0 ARD — transfer of 0 is rejected
-    zero_ard = Decimal("0") / Decimal(str(settings.token_peg_usd))
-    assert zero_ard == Decimal("0")
-
     with pytest.raises(ValueError, match="positive"):
-        await transfer(db, buyer.id, seller.id, zero_ard, tx_type="purchase")
+        await transfer(db, buyer.id, seller.id, 0, tx_type="purchase")
 
 
 # ---------------------------------------------------------------------------
-# 6. $100 listing -> correct ARD amount, fee, and burn
+# 5. $100 listing -> correct fee
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_max_price_fee_calc(
     db: AsyncSession, seed_platform, make_agent, make_token_account
 ):
-    """$100 listing -> correct ARD amount and fee/burn."""
+    """$100 listing -> correct fee calculation."""
     buyer, _ = await make_agent("max_buyer")
     seller, _ = await make_agent("max_seller")
 
-    peg = Decimal(str(settings.token_peg_usd))           # 0.001
-    price_usd = Decimal("100")
-    amount_ard = (price_usd / peg).quantize(Decimal("0.000001"))  # 100,000 ARD
+    amount_usd = Decimal("100")
 
-    await make_token_account(buyer.id, float(amount_ard + Decimal("1000")))
+    await make_token_account(buyer.id, float(amount_usd + Decimal("1000")))
     await make_token_account(seller.id, 0)
 
-    ledger = await transfer(db, buyer.id, seller.id, amount_ard, tx_type="purchase")
+    ledger = await transfer(db, buyer.id, seller.id, amount_usd, tx_type="purchase")
 
-    fee_pct = Decimal(str(settings.token_platform_fee_pct))
-    burn_pct = Decimal(str(settings.token_burn_pct))
+    fee_pct = Decimal(str(settings.platform_fee_pct))
+    expected_fee = (amount_usd * fee_pct).quantize(Decimal("0.000001"))
 
-    expected_fee = (amount_ard * fee_pct).quantize(Decimal("0.000001"))
-    expected_burn = (expected_fee * burn_pct).quantize(Decimal("0.000001"))
-
-    assert Decimal(str(ledger.amount)) == amount_ard
+    assert Decimal(str(ledger.amount)) == amount_usd
     assert Decimal(str(ledger.fee_amount)) == expected_fee
-    assert Decimal(str(ledger.burn_amount)) == expected_burn
 
 
 # ---------------------------------------------------------------------------
-# 7. Idempotency key dedup — same key twice returns same entry
+# 6. Idempotency key dedup — same key twice returns same entry
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -257,59 +210,14 @@ async def test_idempotency_key_dedup(
 
 
 # ---------------------------------------------------------------------------
-# 8. Supply = sum(all balances) + total_burned
+# 7. Platform treasury grows by fee per transfer
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_supply_equals_sum_of_balances(
+async def test_platform_treasury_grows_by_fee(
     db: AsyncSession, seed_platform, make_agent, make_token_account
 ):
-    """total_minted = sum(all balances) + total_burned."""
-    alice, _ = await make_agent("sup_alice")
-    bob, _ = await make_agent("sup_bob")
-    await make_token_account(alice.id, 0)
-    await make_token_account(bob.id, 0)
-
-    # Deposit tokens (minting)
-    await deposit(db, alice.id, 5000, deposit_id="sup-dep-1")
-    await deposit(db, bob.id, 3000, deposit_id="sup-dep-2")
-
-    # Execute a transfer to create some burn
-    await transfer(db, alice.id, bob.id, 1000, tx_type="sale")
-
-    # Sum all balances
-    balance_sum_result = await db.execute(
-        select(func.sum(TokenAccount.balance))
-    )
-    total_balances = Decimal(str(balance_sum_result.scalar() or 0))
-
-    # Get supply
-    supply_result = await db.execute(select(TokenSupply).where(TokenSupply.id == 1))
-    supply = supply_result.scalar_one()
-    total_minted = Decimal(str(supply.total_minted))
-    total_burned = Decimal(str(supply.total_burned))
-
-    # The invariant for user-deposited tokens:
-    # deposits (8000) = sum_of_user_balances + platform_balance + burned
-    # TokenSupply.total_minted includes a 1B genesis that's not in accounts,
-    # so we verify the delta: our deposits = all balances + burned
-    our_deposits = Decimal("8000.000000")  # 5000 + 3000
-    assert our_deposits == total_balances + total_burned, (
-        f"Supply invariant violated: deposits={our_deposits} != "
-        f"balances={total_balances} + burned={total_burned} "
-        f"= {total_balances + total_burned}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# 9. Platform treasury grows by (fee - burn) per transfer
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_platform_treasury_grows_by_net_fee(
-    db: AsyncSession, seed_platform, make_agent, make_token_account
-):
-    """platform.balance grows by (fee - burn) per transfer."""
+    """platform.balance grows by fee per transfer."""
     alice, _ = await make_agent("plat_alice")
     bob, _ = await make_agent("plat_bob")
     await make_token_account(alice.id, 5000)
@@ -329,123 +237,43 @@ async def test_platform_treasury_grows_by_net_fee(
     ledger = await transfer(db, alice.id, bob.id, 1000, tx_type="sale")
 
     fee = Decimal(str(ledger.fee_amount))
-    burn = Decimal(str(ledger.burn_amount))
-    expected_growth = (fee - burn).quantize(Decimal("0.000001"))
 
     # Refresh
     await db.refresh(platform_acct)
     balance_after = Decimal(str(platform_acct.balance))
 
     actual_growth = (balance_after - balance_before).quantize(Decimal("0.000001"))
-    assert actual_growth == expected_growth, (
-        f"Platform grew by {actual_growth}, expected {expected_growth} (fee={fee}, burn={burn})"
+    assert actual_growth == fee, (
+        f"Platform grew by {actual_growth}, expected {fee}"
     )
 
 
 # ---------------------------------------------------------------------------
-# 10. Quality bonus comes from mint (increases total_minted)
+# 8. Signup bonus equals settings
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_quality_bonus_comes_from_mint(
+async def test_signup_bonus_deposit(
     db: AsyncSession, seed_platform, make_agent, make_token_account
 ):
-    """Bonus deposit increases total_minted."""
-    buyer, _ = await make_agent("qm_buyer")
-    seller, _ = await make_agent("qm_seller")
-    await make_token_account(buyer.id, 100000)
-    await make_token_account(seller.id, 0)
-
-    supply_before_result = await db.execute(select(TokenSupply).where(TokenSupply.id == 1))
-    supply_before = supply_before_result.scalar_one()
-    minted_before = Decimal(str(supply_before.total_minted))
-
-    # Purchase with high quality to trigger bonus
-    result = await debit_for_purchase(
-        db, buyer.id, seller.id,
-        amount_usdc=1.0, listing_quality=0.90, tx_id="qm-tx-001",
-    )
-
-    supply_after_result = await db.execute(select(TokenSupply).where(TokenSupply.id == 1))
-    supply_after = supply_after_result.scalar_one()
-    minted_after = Decimal(str(supply_after.total_minted))
-
-    quality_bonus = Decimal(str(result["quality_bonus_axn"]))
-    assert quality_bonus > Decimal("0"), "Expected a quality bonus for quality=0.90"
-
-    # Minted should have increased by the purchase deposit amount + quality bonus
-    # The purchase itself is a transfer (no mint), but the quality bonus IS a deposit (mint)
-    # Also the initial deposits to fund accounts are mints
-    # We just need: minted_after > minted_before, and the delta includes the bonus
-    minted_delta = minted_after - minted_before
-    assert minted_delta >= quality_bonus, (
-        f"Minted delta {minted_delta} should include quality bonus {quality_bonus}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# 11. Signup bonus increases total_minted
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_signup_bonus_increases_minted(
-    db: AsyncSession, seed_platform, make_agent, make_token_account
-):
-    """Deposit for signup bonus tracked in total_minted."""
+    """Deposit for signup bonus credits the correct USD amount."""
     agent, _ = await make_agent("signup_agent")
     await make_token_account(agent.id, 0)
 
-    supply_before_result = await db.execute(select(TokenSupply).where(TokenSupply.id == 1))
-    supply_before = supply_before_result.scalar_one()
-    minted_before = Decimal(str(supply_before.total_minted))
-
-    signup_bonus = Decimal(str(settings.token_signup_bonus))  # 100 ARD
+    signup_bonus = Decimal(str(settings.signup_bonus_usd))
     await deposit(
         db, agent.id, float(signup_bonus),
         deposit_id="signup-bonus-001", memo="Signup bonus",
     )
 
-    supply_after_result = await db.execute(select(TokenSupply).where(TokenSupply.id == 1))
-    supply_after = supply_after_result.scalar_one()
-    minted_after = Decimal(str(supply_after.total_minted))
-
-    delta = minted_after - minted_before
-    assert delta == signup_bonus.quantize(Decimal("0.000001")), (
-        f"Minted delta {delta} != signup bonus {signup_bonus}"
+    bal = await get_balance(db, agent.id)
+    assert Decimal(str(bal["balance"])) == signup_bonus.quantize(Decimal("0.000001")), (
+        f"Balance {bal['balance']} != signup bonus {signup_bonus}"
     )
 
 
 # ---------------------------------------------------------------------------
-# 12. Ledger hash chain unbroken
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_ledger_hash_chain_unbroken(
-    db: AsyncSession, seed_platform, make_agent, make_token_account
-):
-    """Every entry's prev_hash matches previous entry's entry_hash."""
-    alice, _ = await make_agent("hash_alice")
-    bob, _ = await make_agent("hash_bob")
-    await make_token_account(alice.id, 10000)
-    await make_token_account(bob.id, 0)
-
-    # Create multiple ledger entries to build a chain
-    await deposit(db, alice.id, 500, deposit_id="hash-dep-1")
-    await transfer(db, alice.id, bob.id, 200, tx_type="sale")
-    await deposit(db, bob.id, 300, deposit_id="hash-dep-2")
-    await transfer(db, alice.id, bob.id, 100, tx_type="purchase")
-
-    # Verify chain using the service function
-    chain_result = await verify_ledger_chain(db)
-
-    assert chain_result["valid"] is True, (
-        f"Ledger hash chain broken: {chain_result['errors']}"
-    )
-    assert chain_result["total_entries"] >= 4
-
-
-# ---------------------------------------------------------------------------
-# 13. Negative transfer rejected
+# 9. Negative transfer rejected
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -476,47 +304,7 @@ async def test_negative_transfer_rejected(
 
 
 # ---------------------------------------------------------------------------
-# 14. Tier calculation boundaries — exactly 10,000 ARD volume = silver
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_tier_calculation_boundaries(
-    db: AsyncSession, seed_platform, make_agent
-):
-    """Exactly 10000 ARD volume -> silver (not bronze)."""
-    agent, _ = await make_agent("tier_boundary")
-    account = TokenAccount(
-        id=_id(),
-        agent_id=agent.id,
-        balance=Decimal("0"),
-        total_earned=Decimal("5000"),
-        total_spent=Decimal("5000"),  # total volume = 10,000
-    )
-    db.add(account)
-    await db.commit()
-
-    tier = await recalculate_tier(db, agent.id)
-    assert tier == "silver", f"Volume=10000 should be silver, got {tier}"
-
-    # Just below the threshold: 9999.999999 -> bronze
-    account.total_earned = Decimal("4999.999999")
-    account.total_spent = Decimal("5000")
-    await db.commit()
-
-    tier = await recalculate_tier(db, agent.id)
-    assert tier == "bronze", f"Volume=9999.999999 should be bronze, got {tier}"
-
-    # Exactly at gold boundary: 100,000
-    account.total_earned = Decimal("50000")
-    account.total_spent = Decimal("50000")
-    await db.commit()
-
-    tier = await recalculate_tier(db, agent.id)
-    assert tier == "gold", f"Volume=100000 should be gold, got {tier}"
-
-
-# ---------------------------------------------------------------------------
-# 15. Creator royalty deducted from agent after purchase
+# 10. Creator royalty deducted from agent after purchase
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -549,14 +337,14 @@ async def test_creator_royalty_deducted_from_agent(
     await make_token_account(buyer.id, 50000)
 
     # Execute a purchase — this triggers royalty auto-flow
-    amount_ard = Decimal("1000")
+    amount_usd = Decimal("1000")
     ledger = await transfer(
-        db, buyer.id, seller.id, amount_ard,
+        db, buyer.id, seller.id, amount_usd,
         tx_type="purchase", reference_id="royalty-tx-001",
     )
 
     fee = Decimal(str(ledger.fee_amount))
-    net_to_seller = (amount_ard - fee).quantize(Decimal("0.000001"))
+    net_to_seller = (amount_usd - fee).quantize(Decimal("0.000001"))
     royalty_pct = Decimal(str(settings.creator_royalty_pct))
     expected_royalty = (net_to_seller * royalty_pct).quantize(Decimal("0.000001"))
 

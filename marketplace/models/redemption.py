@@ -1,4 +1,4 @@
-"""Redemption requests — ARD tokens to real money (API credits, gift cards, bank, UPI)."""
+"""Redemption requests — USD balance to real money (API credits, gift cards, bank, UPI)."""
 import uuid
 from datetime import datetime, timezone
 
@@ -12,7 +12,7 @@ def utcnow():
 
 
 class RedemptionRequest(Base):
-    """Tracks a creator's request to redeem ARD tokens for real value."""
+    """Tracks a creator's request to withdraw USD funds."""
 
     __tablename__ = "redemption_requests"
 
@@ -25,10 +25,9 @@ class RedemptionRequest(Base):
     )  # api_credits | gift_card | bank_withdrawal | upi
 
     # Amounts
-    amount_ard = Column(Numeric(18, 6), nullable=False)
+    amount_usd = Column(Numeric(18, 6), nullable=False)
     amount_fiat = Column(Numeric(12, 2), nullable=True)  # NULL for api_credits
     currency = Column(String(10), default="USD")
-    exchange_rate = Column(Numeric(12, 6), nullable=True)  # ARD→fiat rate used
 
     # Status
     status = Column(
@@ -52,7 +51,7 @@ class RedemptionRequest(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        CheckConstraint("amount_ard > 0", name="ck_redemption_amount_positive"),
+        CheckConstraint("amount_usd > 0", name="ck_redemption_amount_positive"),
         Index("idx_redemption_creator", "creator_id"),
         Index("idx_redemption_status", "status"),
         Index("idx_redemption_type", "redemption_type"),
@@ -61,7 +60,7 @@ class RedemptionRequest(Base):
 
 
 class ApiCreditBalance(Base):
-    """Tracks API call credits earned by redeeming ARD tokens."""
+    """Tracks API call credits earned from USD balance."""
 
     __tablename__ = "api_credit_balances"
 

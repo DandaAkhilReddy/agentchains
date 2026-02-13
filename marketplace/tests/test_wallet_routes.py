@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marketplace.models.token_account import TokenAccount, TokenSupply
+from marketplace.models.token_account import TokenAccount
 from marketplace.tests.conftest import TestSession, _new_id
 
 
@@ -25,10 +25,8 @@ async def _seed_agent_with_balance(balance: float = 0) -> tuple[str, str, str]:
 
     async with TestSession() as db:
         # Platform
-        platform = TokenAccount(id=_new_id(), agent_id=None, balance=Decimal("0"), tier="platform")
+        platform = TokenAccount(id=_new_id(), agent_id=None, balance=Decimal("0"))
         db.add(platform)
-        supply = TokenSupply(id=1)
-        db.add(supply)
 
         # Agent
         agent_id = _new_id()
@@ -65,7 +63,6 @@ async def test_balance_authenticated(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["balance"] == 500.0
-    assert "tier" in data
 
 
 async def test_balance_unauthenticated(client):
@@ -98,36 +95,12 @@ async def test_deposit_usd(client):
     resp = await client.post(
         "/api/v1/wallet/deposit",
         headers={"Authorization": f"Bearer {jwt}"},
-        json={"amount_fiat": 10.0, "currency": "USD"},
+        json={"amount_usd": 10.0},
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["amount_axn"] == 10000.0
+    assert data["amount_usd"] == 10.0
     assert data["status"] == "pending"
-
-
-async def test_deposit_inr(client):
-    _, jwt, _ = await _seed_agent_with_balance(0)
-    resp = await client.post(
-        "/api/v1/wallet/deposit",
-        headers={"Authorization": f"Bearer {jwt}"},
-        json={"amount_fiat": 1000.0, "currency": "INR"},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    # 1000 INR / 0.084 rate per ARD ≈ 11904.761905 ARD
-    assert data["amount_axn"] > 11000
-
-
-async def test_deposit_invalid_currency(client):
-    _, jwt, _ = await _seed_agent_with_balance(0)
-    resp = await client.post(
-        "/api/v1/wallet/deposit",
-        headers={"Authorization": f"Bearer {jwt}"},
-        json={"amount_fiat": 10.0, "currency": "XYZ"},
-    )
-    # ValueError from deposit_service → 500 (unhandled) unless caught by FastAPI
-    assert resp.status_code in (400, 422, 500)
 
 
 async def test_deposit_negative(client):
@@ -135,7 +108,7 @@ async def test_deposit_negative(client):
     resp = await client.post(
         "/api/v1/wallet/deposit",
         headers={"Authorization": f"Bearer {jwt}"},
-        json={"amount_fiat": -5.0, "currency": "USD"},
+        json={"amount_usd": -5.0},
     )
     assert resp.status_code == 422  # Pydantic validation: gt=0
 
@@ -143,7 +116,7 @@ async def test_deposit_negative(client):
 async def test_deposit_unauthenticated(client):
     resp = await client.post(
         "/api/v1/wallet/deposit",
-        json={"amount_fiat": 10.0, "currency": "USD"},
+        json={"amount_usd": 10.0},
     )
     assert resp.status_code == 401
 
@@ -199,37 +172,3 @@ async def test_transfer_insufficient(client):
         json={"to_agent_id": receiver_id, "amount": 5000.0},
     )
     assert resp.status_code in (400, 500)
-
-
-# ---------------------------------------------------------------------------
-# Public endpoints (no auth required)
-# ---------------------------------------------------------------------------
-
-async def test_supply_public(client):
-    # Seed supply row
-    async with TestSession() as db:
-        db.add(TokenSupply(id=1))
-        await db.commit()
-
-    resp = await client.get("/api/v1/wallet/supply")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "circulating" in data
-
-
-async def test_tiers_public(client):
-    resp = await client.get("/api/v1/wallet/tiers")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "tiers" in data
-    assert len(data["tiers"]) == 4
-
-
-async def test_currencies_public(client):
-    resp = await client.get("/api/v1/wallet/currencies")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data) == 4
-    codes = {c["code"] for c in data}
-    assert "USD" in codes
-    assert "INR" in codes

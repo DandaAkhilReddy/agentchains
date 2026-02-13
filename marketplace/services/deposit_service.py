@@ -1,13 +1,8 @@
-"""Fiat -> ARD on-ramp service for the AgentChains marketplace token economy.
-
-Converts fiat deposits (USD, INR, EUR, GBP) into ARD tokens using
-hardcoded exchange rates (Phase 1 MVP). Phase 2 will integrate a live
-FX API for real-time pricing.
-"""
+"""USD deposit service for AgentChains marketplace. Handles USD deposits directly."""
 
 import logging
 from datetime import datetime, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,81 +12,6 @@ from marketplace.models.token_account import TokenDeposit
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Exchange rates: 1 ARD = X fiat
-# Derived from settings.token_peg_usd (0.001) and approximate FX rates.
-# Phase 2: replace with live API calls.
-# ---------------------------------------------------------------------------
-_EXCHANGE_RATES: dict[str, dict] = {
-    "USD": {
-        "name": "US Dollar",
-        "symbol": "$",
-        "rate_per_axn": Decimal("0.001000"),
-    },
-    "INR": {
-        "name": "Indian Rupee",
-        "symbol": "\u20b9",
-        "rate_per_axn": Decimal("0.084000"),
-    },
-    "EUR": {
-        "name": "Euro",
-        "symbol": "\u20ac",
-        "rate_per_axn": Decimal("0.000920"),
-    },
-    "GBP": {
-        "name": "British Pound",
-        "symbol": "\u00a3",
-        "rate_per_axn": Decimal("0.000790"),
-    },
-}
-
-
-# ---------------------------------------------------------------------------
-# Pure helpers
-# ---------------------------------------------------------------------------
-
-def get_exchange_rate(currency: str) -> Decimal:
-    """Return the exchange rate (fiat per 1 ARD) for *currency*.
-
-    Raises ``ValueError`` for unsupported currency codes.
-    """
-    currency = currency.upper().strip()
-    entry = _EXCHANGE_RATES.get(currency)
-    if entry is None:
-        supported = ", ".join(sorted(_EXCHANGE_RATES))
-        raise ValueError(
-            f"Unsupported currency '{currency}'. Supported: {supported}"
-        )
-    return entry["rate_per_axn"]
-
-
-def get_supported_currencies() -> list[dict]:
-    """Return metadata for every supported fiat currency.
-
-    Each item contains: code, name, symbol, rate_per_axn, ard_per_unit.
-    """
-    result: list[dict] = []
-    for code, meta in _EXCHANGE_RATES.items():
-        rate = meta["rate_per_axn"]
-        axn_per_unit = (Decimal("1") / rate).quantize(
-            Decimal("0.000001"), rounding=ROUND_HALF_UP
-        )
-        result.append({
-            "code": code,
-            "name": meta["name"],
-            "symbol": meta["symbol"],
-            "rate_per_axn": float(rate),
-            "axn_per_unit": float(axn_per_unit),
-        })
-    return result
-
-
-def _calculate_axn(amount_fiat: Decimal, rate_per_axn: Decimal) -> Decimal:
-    """amount_fiat / rate_per_axn, rounded to 6 decimal places."""
-    return (amount_fiat / rate_per_axn).quantize(
-        Decimal("0.000001"), rounding=ROUND_HALF_UP
-    )
-
 
 # ---------------------------------------------------------------------------
 # Async DB operations
@@ -100,27 +20,21 @@ def _calculate_axn(amount_fiat: Decimal, rate_per_axn: Decimal) -> Decimal:
 async def create_deposit(
     db: AsyncSession,
     agent_id: str,
-    amount_fiat: float | Decimal,
-    currency: str,
+    amount_usd: float | Decimal,
     payment_method: str = "admin_credit",
 ) -> dict:
-    """Create a new pending deposit converting *amount_fiat* to ARD.
+    """Create a new pending USD deposit.
 
     Returns a dict with the deposit details (not yet confirmed).
     """
-    rate = get_exchange_rate(currency)  # raises ValueError if unsupported
-    amount_fiat_d = Decimal(str(amount_fiat))
-    if amount_fiat_d <= 0:
+    amount_usd_d = Decimal(str(amount_usd))
+    if amount_usd_d <= 0:
         raise ValueError("Deposit amount must be positive")
-
-    amount_axn = _calculate_axn(amount_fiat_d, rate)
 
     deposit = TokenDeposit(
         agent_id=agent_id,
-        amount_fiat=amount_fiat_d,
-        currency=currency.upper().strip(),
-        exchange_rate=rate,
-        amount_axn=amount_axn,
+        amount_usd=amount_usd_d,
+        currency="USD",
         status="pending",
         payment_method=payment_method,
     )
@@ -129,16 +43,15 @@ async def create_deposit(
     await db.refresh(deposit)
 
     logger.info(
-        "Deposit %s created: %s %s -> %s ARD (agent=%s, method=%s)",
-        deposit.id, amount_fiat_d, currency.upper(), amount_axn,
-        agent_id, payment_method,
+        "Deposit %s created: $%.2f USD (agent=%s, method=%s)",
+        deposit.id, amount_usd_d, agent_id, payment_method,
     )
 
     return _deposit_to_dict(deposit)
 
 
 async def confirm_deposit(db: AsyncSession, deposit_id: str) -> dict:
-    """Confirm a pending deposit: credit ARD to the agent's token account.
+    """Confirm a pending deposit: credit USD to the agent's token account.
 
     Raises ``ValueError`` if the deposit is not in *pending* status.
     """
@@ -148,14 +61,14 @@ async def confirm_deposit(db: AsyncSession, deposit_id: str) -> dict:
             f"Deposit {deposit_id} is '{deposit.status}', expected 'pending'"
         )
 
-    # Credit tokens via the token service
+    # Credit USD via the token service
     from marketplace.services.token_service import deposit as token_deposit
     await token_deposit(
         db,
         agent_id=deposit.agent_id,
-        amount_axn=Decimal(str(deposit.amount_axn)),
+        amount_usd=Decimal(str(deposit.amount_usd)),
         deposit_id=deposit.id,
-        memo=f"Fiat deposit: {deposit.amount_fiat} {deposit.currency}",
+        memo=f"Deposit: ${deposit.amount_usd}",
     )
 
     deposit.status = "completed"
@@ -164,8 +77,8 @@ async def confirm_deposit(db: AsyncSession, deposit_id: str) -> dict:
     await db.refresh(deposit)
 
     logger.info(
-        "Deposit %s confirmed: %s ARD credited to agent %s",
-        deposit.id, deposit.amount_axn, deposit.agent_id,
+        "Deposit confirmed: $%.2f credited to agent %s",
+        float(deposit.amount_usd), deposit.agent_id,
     )
 
     return _deposit_to_dict(deposit)
@@ -216,28 +129,22 @@ async def get_deposits(
 async def credit_signup_bonus(db: AsyncSession, agent_id: str) -> dict:
     """Create and auto-confirm a signup bonus deposit.
 
-    Uses ``settings.token_signup_bonus`` as the ARD amount.  The fiat
-    equivalent is calculated at the USD rate for record-keeping.
+    Uses ``settings.signup_bonus_usd`` as the USD amount.
     """
-    bonus_axn = Decimal(str(settings.token_signup_bonus))
-    usd_rate = _EXCHANGE_RATES["USD"]["rate_per_axn"]
-    fiat_equivalent = (bonus_axn * usd_rate).quantize(
-        Decimal("0.01"), rounding=ROUND_HALF_UP
-    )
+    bonus_usd = Decimal(str(settings.signup_bonus_usd))
 
     deposit_dict = await create_deposit(
         db,
         agent_id=agent_id,
-        amount_fiat=fiat_equivalent,
-        currency="USD",
+        amount_usd=bonus_usd,
         payment_method="signup_bonus",
     )
 
     confirmed = await confirm_deposit(db, deposit_dict["id"])
 
     logger.info(
-        "Signup bonus of %s ARD credited to agent %s",
-        bonus_axn, agent_id,
+        "Signup bonus of $%.2f credited to agent %s",
+        float(bonus_usd), agent_id,
     )
 
     return confirmed
@@ -267,10 +174,8 @@ def _deposit_to_dict(deposit: TokenDeposit) -> dict:
     return {
         "id": deposit.id,
         "agent_id": deposit.agent_id,
-        "amount_fiat": float(deposit.amount_fiat),
+        "amount_usd": float(deposit.amount_usd),
         "currency": deposit.currency,
-        "exchange_rate": float(deposit.exchange_rate),
-        "amount_axn": float(deposit.amount_axn),
         "status": deposit.status,
         "payment_method": deposit.payment_method,
         "payment_ref": deposit.payment_ref,

@@ -63,7 +63,7 @@ class TestCreatorRegistration:
         creator_id = result["creator"]["id"]
         acct = await _get_account_by_creator(db, creator_id)
         assert acct is not None
-        assert float(acct.balance) == 100.0  # signup bonus
+        assert float(acct.balance) == pytest.approx(0.10, abs=0.01)  # signup bonus
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ class TestAgentLinking:
 
 class TestCreatorRoyalty:
     async def test_royalty_flows_on_purchase(self, db, make_agent, make_token_account):
-        """When a seller agent earns ARD from a purchase, earnings should auto-flow to creator."""
+        """When a seller agent earns USD from a purchase, earnings should auto-flow to creator."""
         platform = await ensure_platform_account(db)
 
         # Create creator and link an agent
@@ -139,10 +139,10 @@ class TestCreatorRoyalty:
         # Creator should have received royalty (100% of net earnings)
         creator_acct = await _get_account_by_creator(db, creator_id)
         assert creator_acct is not None
-        # Net earnings to seller: 1000 - 2% fee = 980 ARD
-        # Creator royalty: 100% of 980 = 980 ARD
-        # But creator also had signup bonus of 100
-        assert float(creator_acct.balance) >= 1000  # 100 bonus + 980 royalty
+        # Net earnings to seller: 1000 - 2% fee = 980
+        # Creator royalty: 100% of 980 = 980
+        # But creator also had signup bonus of 0.10
+        assert float(creator_acct.balance) >= 900  # 0.10 bonus + 980 royalty
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +160,7 @@ class TestCreatorDashboard:
 
         dashboard = await creator_service.get_creator_dashboard(db, creator_id)
         assert dashboard["agents_count"] == 1
-        assert dashboard["token_name"] == "ARD"
+        assert "creator_balance" in dashboard
 
     async def test_wallet_shows_balance(self, db):
         await ensure_platform_account(db)
@@ -168,5 +168,4 @@ class TestCreatorDashboard:
         creator_id = reg["creator"]["id"]
 
         wallet = await creator_service.get_creator_wallet(db, creator_id)
-        assert wallet["balance"] == 100.0  # signup bonus
-        assert wallet["token_name"] == "ARD"
+        assert wallet["balance"] == pytest.approx(0.10, abs=0.01)  # signup bonus

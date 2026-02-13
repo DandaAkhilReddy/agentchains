@@ -290,7 +290,6 @@ class TestComputeLedgerHash:
             to_account_id="acct-B",
             amount=Decimal("50"),
             fee_amount=Decimal("1"),
-            burn_amount=Decimal("0.5"),
             tx_type="purchase",
             timestamp_iso="2026-02-11T12:00:00",
         )
@@ -307,14 +306,13 @@ class TestComputeLedgerHash:
             to_account_id="acct-1",
             amount=Decimal("100"),
             fee_amount=Decimal("0"),
-            burn_amount=Decimal("0"),
             tx_type="mint",
             timestamp_iso="2026-01-01T00:00:00",
         )
         # Manually reproduce to verify GENESIS and MINT placeholders
         expected_payload = "|".join([
             "GENESIS", "MINT", "acct-1",
-            "100.000000", "0.000000", "0.000000",
+            "100.000000", "0.000000",
             "mint", "2026-01-01T00:00:00",
         ])
         expected_hash = hashlib.sha256(expected_payload.encode("utf-8")).hexdigest()
@@ -323,15 +321,15 @@ class TestComputeLedgerHash:
     def test_compute_ledger_hash_chain_linking(self):
         """Each hash should depend on the previous, forming a chain."""
         h1 = compute_ledger_hash(
-            None, "a", "b", Decimal("10"), Decimal("0"), Decimal("0"), "transfer", "t1"
+            None, "a", "b", Decimal("10"), Decimal("0"), "transfer", "t1"
         )
         h2 = compute_ledger_hash(
-            h1, "b", "c", Decimal("5"), Decimal("0"), Decimal("0"), "transfer", "t2"
+            h1, "b", "c", Decimal("5"), Decimal("0"), "transfer", "t2"
         )
         # Recompute h2 with a different prev_hash to prove chain dependency
         h2_alt = compute_ledger_hash(
             "0000000000000000000000000000000000000000000000000000000000000000",
-            "b", "c", Decimal("5"), Decimal("0"), Decimal("0"), "transfer", "t2",
+            "b", "c", Decimal("5"), Decimal("0"), "transfer", "t2",
         )
         assert h2 != h2_alt  # different prev_hash -> different result
 

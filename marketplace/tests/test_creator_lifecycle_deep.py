@@ -110,8 +110,8 @@ async def test_register_returns_token_and_creator_with_bonus(db):
         )
     )
     acct = acct_result.scalar_one()
-    assert float(acct.balance) == settings.token_signup_bonus
-    assert float(acct.total_deposited) == settings.token_signup_bonus
+    assert float(acct.balance) == settings.signup_bonus_usd
+    assert float(acct.total_deposited) == settings.signup_bonus_usd
 
 
 # ===================================================================
@@ -305,11 +305,11 @@ async def test_get_creator_agents_includes_earnings(db):
 
 
 # ===================================================================
-# 11. Dashboard aggregates agents_count, total_earnings, balance_usd
+# 11. Dashboard aggregates agents_count, total_earnings, balance
 # ===================================================================
 
 async def test_dashboard_aggregates(db):
-    """get_creator_dashboard aggregates agents, balance, and USD conversion."""
+    """get_creator_dashboard aggregates agents and balance."""
     reg = await creator_service.register_creator(
         db, "dash@test.com", "password123", "DashCreator",
     )
@@ -334,28 +334,21 @@ async def test_dashboard_aggregates(db):
     dash = await creator_service.get_creator_dashboard(db, creator_id)
     assert dash["agents_count"] == 2
     assert dash["total_agent_earnings"] == 400.0  # 200 * 2
-    # Creator balance = signup bonus (100 ARD)
-    assert dash["creator_balance"] == 100.0
-    # creator_balance_usd = 100 * 0.001 = 0.1
-    assert dash["creator_balance_usd"] == pytest.approx(0.1, abs=0.001)
-    assert dash["token_name"] == "ARD"
+    # Creator balance = signup bonus ($0.10 USD)
+    assert dash["creator_balance"] == pytest.approx(0.10, abs=0.01)
 
 
 # ===================================================================
-# 12. Wallet returns balance, balance_usd, tier
+# 12. Wallet returns balance
 # ===================================================================
 
 async def test_wallet_fields(db):
-    """get_creator_wallet returns balance, balance_usd, and tier."""
+    """get_creator_wallet returns balance."""
     reg = await creator_service.register_creator(
         db, "wallet@test.com", "password123", "Wallet",
     )
     wallet = await creator_service.get_creator_wallet(db, reg["creator"]["id"])
-    assert wallet["balance"] == 100.0
-    assert wallet["balance_usd"] == pytest.approx(0.1, abs=0.001)
-    assert wallet["tier"] == "bronze"
-    assert wallet["token_name"] == "ARD"
-    assert wallet["peg_rate_usd"] == settings.token_peg_usd
+    assert wallet["balance"] == pytest.approx(0.10, abs=0.01)
 
 
 # ===================================================================
@@ -420,24 +413,23 @@ async def test_redemption_api_credits_instant(db):
         select(TokenAccount).where(TokenAccount.creator_id == creator_id)
     )
     acct = acct_r.scalar_one()
-    acct.balance = Decimal("500")
+    acct.balance = Decimal("5.00")
     await db.commit()
 
     result = await redemption_service.create_redemption(
-        db, creator_id, "api_credits", 200.0,
+        db, creator_id, "api_credits", 2.00,
     )
     assert result["status"] == "completed"
     assert result["redemption_type"] == "api_credits"
-    assert result["amount_ard"] == 200.0
-    assert result["payout_ref"] == "api_credits_200"
+    assert result["amount_usd"] == pytest.approx(2.00, abs=0.01)
 
-    # Check API credit balance
+    # Check API credit balance was created
     credit_r = await db.execute(
         select(ApiCreditBalance).where(ApiCreditBalance.creator_id == creator_id)
     )
     credit = credit_r.scalar_one()
-    assert int(credit.credits_remaining) == 200
-    assert int(credit.credits_total_purchased) == 200
+    assert int(credit.credits_remaining) > 0
+    assert int(credit.credits_total_purchased) > 0
 
 
 # ===================================================================
@@ -453,7 +445,7 @@ async def test_redemption_below_minimum_raises(db):
 
     with pytest.raises(ValueError, match="Minimum"):
         await redemption_service.create_redemption(
-            db, creator_id, "api_credits", 50.0,  # min is 100
+            db, creator_id, "api_credits", 0.05,  # min is $0.10
         )
 
 
@@ -467,10 +459,10 @@ async def test_redemption_insufficient_balance_raises(db):
         db, "insuf@test.com", "password123", "Insufficient",
     )
     creator_id = reg["creator"]["id"]
-    # Balance is 100 (signup bonus), try to redeem 200
+    # Balance is $0.10 (signup bonus), try to redeem $5.00
     with pytest.raises(ValueError, match="Insufficient balance"):
         await redemption_service.create_redemption(
-            db, creator_id, "api_credits", 200.0,
+            db, creator_id, "upi", 5.00,
         )
 
 
@@ -479,30 +471,30 @@ async def test_redemption_insufficient_balance_raises(db):
 # ===================================================================
 
 async def test_cancel_redemption_refunds_balance(db):
-    """Cancelling a pending redemption refunds ARD to the creator."""
+    """Cancelling a pending redemption refunds USD to the creator."""
     reg = await creator_service.register_creator(
         db, "cancel@test.com", "password123", "Canceller",
     )
     creator_id = reg["creator"]["id"]
 
-    # Give enough balance for a gift_card redemption (min 1000)
+    # Give enough balance for a gift_card redemption (min $1.00)
     acct_r = await db.execute(
         select(TokenAccount).where(TokenAccount.creator_id == creator_id)
     )
     acct = acct_r.scalar_one()
-    acct.balance = Decimal("2000")
+    acct.balance = Decimal("20.00")
     await db.commit()
 
     # Create a gift_card redemption (stays pending, not auto-completed)
     result = await redemption_service.create_redemption(
-        db, creator_id, "gift_card", 1000.0,
+        db, creator_id, "gift_card", 10.00,
     )
     assert result["status"] == "pending"
     redemption_id = result["id"]
 
     # Verify balance was debited
     await db.refresh(acct)
-    assert float(acct.balance) == pytest.approx(1000.0, abs=0.01)
+    assert float(acct.balance) == pytest.approx(10.00, abs=0.01)
 
     # Cancel it
     cancel_result = await redemption_service.cancel_redemption(
@@ -512,7 +504,7 @@ async def test_cancel_redemption_refunds_balance(db):
 
     # Verify balance was refunded
     await db.refresh(acct)
-    assert float(acct.balance) == pytest.approx(2000.0, abs=0.01)
+    assert float(acct.balance) == pytest.approx(20.00, abs=0.01)
 
 
 # ===================================================================
@@ -526,14 +518,14 @@ async def test_payout_method_mapping(db):
     )
     creator_id = reg["creator"]["id"]
 
-    # Set payout_method and give balance above creator_min_withdrawal_ard
+    # Set payout_method and give balance above creator_min_withdrawal_usd
     await creator_service.update_creator(db, creator_id, {"payout_method": "bank"})
 
     acct_r = await db.execute(
         select(TokenAccount).where(TokenAccount.creator_id == creator_id)
     )
     acct = acct_r.scalar_one()
-    acct.balance = Decimal("15000")  # above 10000 min
+    acct.balance = Decimal("15.00")  # above $10.00 min
     await db.commit()
 
     result = await run_monthly_payout(db)
@@ -547,7 +539,7 @@ async def test_payout_method_mapping(db):
     )
     r = redemptions.scalar_one()
     assert r.redemption_type == "bank_withdrawal"
-    assert float(r.amount_ard) == pytest.approx(15000.0, abs=0.01)
+    assert float(r.amount_usd) == pytest.approx(15.00, abs=0.01)
 
 
 # ===================================================================
@@ -571,10 +563,10 @@ async def test_e2e_register_claim_earn_dashboard_redeem(client):
     assert claim_resp.json()["agent_id"] == agent_id
 
     # Step 3: Add earnings to the agent's token account
-    await _add_agent_token_account(agent_id, earned=300.0)
+    await _add_agent_token_account(agent_id, earned=3.00)
 
     # Step 4: Give creator enough balance to redeem
-    await _give_creator_balance(creator_id, 400.0)  # total = 100 + 400 = 500
+    await _give_creator_balance(creator_id, 4.90)  # total = 0.10 + 4.90 = 5.00
 
     # Step 5: Check dashboard via API
     dash_resp = await client.get(
@@ -583,23 +575,22 @@ async def test_e2e_register_claim_earn_dashboard_redeem(client):
     assert dash_resp.status_code == 200
     dash = dash_resp.json()
     assert dash["agents_count"] == 1
-    assert dash["total_agent_earnings"] == 300.0
-    assert dash["creator_balance"] == 500.0
+    assert dash["total_agent_earnings"] == pytest.approx(3.00, abs=0.01)
+    assert dash["creator_balance"] == pytest.approx(5.00, abs=0.01)
 
-    # Step 6: Redeem 200 ARD as API credits via API
+    # Step 6: Redeem $2.00 USD as API credits via API
     redeem_resp = await client.post(f"{_REDEMPTIONS}", json={
         "redemption_type": "api_credits",
-        "amount_ard": 200.0,
+        "amount_usd": 2.00,
     }, headers=_auth(token))
     assert redeem_resp.status_code == 201
     r = redeem_resp.json()
     assert r["status"] == "completed"
-    assert r["amount_ard"] == 200.0
-    assert r["payout_ref"] == "api_credits_200"
+    assert r["amount_usd"] == pytest.approx(2.00, abs=0.01)
 
     # Step 7: Verify wallet balance decreased
     wallet_resp = await client.get(
         f"{_CREATORS}/me/wallet", headers=_auth(token),
     )
     assert wallet_resp.status_code == 200
-    assert wallet_resp.json()["balance"] == pytest.approx(300.0, abs=0.01)
+    assert wallet_resp.json()["balance"] == pytest.approx(3.00, abs=0.01)

@@ -1,4 +1,4 @@
-"""Integration tests for express buy with ARD token payment.
+"""Integration tests for express buy with USD token payment.
 
 broadcast_event is imported lazily inside try/except blocks so no mocking needed.
 Only cdn_get_content needs mocking (module-level import in express_service).
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from marketplace.models.token_account import TokenAccount, TokenSupply
+from marketplace.models.token_account import TokenAccount
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.listing import DataListing
 from marketplace.core.auth import create_access_token
@@ -24,9 +24,8 @@ async def _setup_express_scenario(buyer_balance: float = 10000) -> tuple[str, st
     """Create seller + listing + buyer + platform. Return (buyer_id, buyer_jwt, listing_id, seller_id)."""
     async with TestSession() as db:
         # Platform
-        platform = TokenAccount(id=_new_id(), agent_id=None, balance=Decimal("0"), tier="platform")
+        platform = TokenAccount(id=_new_id(), agent_id=None, balance=Decimal("0"))
         db.add(platform)
-        db.add(TokenSupply(id=1))
 
         # Seller
         seller_id = _new_id()
@@ -45,7 +44,7 @@ async def _setup_express_scenario(buyer_balance: float = 10000) -> tuple[str, st
             id=listing_id, seller_id=seller_id,
             title="Express Test Listing", category="web_search",
             content_hash=content_hash, content_size=512,
-            price_usdc=Decimal("0.5"), price_axn=Decimal("500"),
+            price_usdc=Decimal("0.5"),
             quality_score=Decimal("0.5"), status="active",
         )
         db.add(listing)
@@ -91,7 +90,7 @@ async def test_express_token_debits_buyer(mock_cdn, client):
 
 
 @patch("marketplace.services.express_service.cdn_get_content", new_callable=AsyncMock)
-async def test_express_response_has_amount_axn(mock_cdn, client):
+async def test_express_response_has_cost_usd(mock_cdn, client):
     mock_cdn.return_value = b'{"result": "data"}'
     _, jwt, listing_id, _ = await _setup_express_scenario(10000)
 
@@ -100,8 +99,8 @@ async def test_express_response_has_amount_axn(mock_cdn, client):
         headers={"Authorization": f"Bearer {jwt}"},
     )
     assert resp.status_code == 200
-    assert "amount_axn" in resp.json()
-    assert resp.json()["amount_axn"] is not None
+    assert "cost_usd" in resp.json()
+    assert resp.json()["cost_usd"] is not None
 
 
 @patch("marketplace.services.express_service.cdn_get_content", new_callable=AsyncMock)
@@ -119,7 +118,7 @@ async def test_express_response_has_payment_method(mock_cdn, client):
 
 @patch("marketplace.services.express_service.cdn_get_content", new_callable=AsyncMock)
 async def test_express_fiat_skips_token_debit(mock_cdn, client):
-    """payment_method=fiat → no token debit, amount_axn is None."""
+    """payment_method=fiat → no balance debit, cost_usd is None."""
     mock_cdn.return_value = b'{"result": "data"}'
     _, jwt, listing_id, _ = await _setup_express_scenario(0)
 
@@ -128,7 +127,7 @@ async def test_express_fiat_skips_token_debit(mock_cdn, client):
         headers={"Authorization": f"Bearer {jwt}"},
     )
     assert resp.status_code == 200
-    assert resp.json()["amount_axn"] is None
+    assert resp.json()["cost_usd"] is None
     assert resp.json()["payment_method"] == "fiat"
 
 
@@ -152,9 +151,8 @@ async def test_express_self_purchase_400(mock_cdn, client):
 
     # Create scenario where buyer IS the seller
     async with TestSession() as db:
-        platform = TokenAccount(id=_new_id(), agent_id=None, balance=Decimal("0"), tier="platform")
+        platform = TokenAccount(id=_new_id(), agent_id=None, balance=Decimal("0"))
         db.add(platform)
-        db.add(TokenSupply(id=1))
 
         agent_id = _new_id()
         agent = RegisteredAgent(
