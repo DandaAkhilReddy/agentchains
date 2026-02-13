@@ -13,11 +13,14 @@ export default function EmptyState({
   action,
 }: Props) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border-subtle py-16">
-      <div className="mb-3 rounded-2xl bg-surface-overlay/50 p-4">
-        <Icon className="h-8 w-8 text-text-muted animate-float" />
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#1a2035] py-16">
+      <div
+        className="mb-3 rounded-2xl p-4"
+        style={{ background: "#1a2035" }}
+      >
+        <Icon className="h-8 w-8 text-[#64748b] animate-float" />
       </div>
-      <p className="text-sm text-text-secondary">{message}</p>
+      <p className="text-sm text-[#94a3b8]">{message}</p>
       {action && (
         <button
           onClick={action.onClick}

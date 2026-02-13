@@ -7,9 +7,9 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
-import { X, CheckCircle, AlertCircle, Info } from "lucide-react";
+import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from "lucide-react";
 
-type ToastVariant = "success" | "error" | "info";
+type ToastVariant = "success" | "error" | "info" | "warning";
 
 interface Toast {
   id: number;
@@ -45,11 +45,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const ICONS = { success: CheckCircle, error: AlertCircle, info: Info };
-  const COLORS: Record<ToastVariant, string> = {
-    success: "border-success/30 bg-success-glow text-success",
-    error: "border-danger/30 bg-danger-glow text-danger",
-    info: "border-[rgba(59,130,246,0.15)] bg-primary-glow text-primary",
+  const ICONS = {
+    success: CheckCircle,
+    error: AlertCircle,
+    warning: AlertTriangle,
+    info: Info,
+  };
+
+  const BORDER_COLORS: Record<ToastVariant, string> = {
+    success: "#34d399",
+    error: "#f87171",
+    warning: "#fbbf24",
+    info: "#60a5fa",
   };
 
   return (
@@ -63,7 +70,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               key={t.id}
               toast={t}
               icon={<Icon size={16} />}
-              colorClass={COLORS[t.variant]}
+              borderColor={BORDER_COLORS[t.variant]}
               onDismiss={() => setToasts((p) => p.filter((x) => x.id !== t.id))}
             />
           );
@@ -76,12 +83,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 function ToastItem({
   toast,
   icon,
-  colorClass,
+  borderColor,
   onDismiss,
 }: {
   toast: Toast;
   icon: ReactNode;
-  colorClass: string;
+  borderColor: string;
   onDismiss: () => void;
 }) {
   const [progress, setProgress] = useState(100);
@@ -98,16 +105,30 @@ function ToastItem({
 
   return (
     <div
-      className={`relative overflow-hidden flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg backdrop-blur-xl animate-slide-up ${colorClass}`}
+      className="relative overflow-hidden flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg backdrop-blur-xl animate-slide-in min-w-[300px]"
+      style={{
+        background: "rgba(20, 25, 40, 0.95)",
+        borderLeft: `4px solid ${borderColor}`,
+      }}
     >
-      {icon}
-      <span className="text-sm">{toast.message}</span>
-      <button onClick={onDismiss} className="ml-2">
-        <X size={14} className="opacity-50 transition-opacity hover:opacity-100" />
+      <span style={{ color: borderColor }} className="flex-shrink-0">
+        {icon}
+      </span>
+      <span className="text-sm text-[#e2e8f0] flex-1">{toast.message}</span>
+      <button onClick={onDismiss} className="ml-2 flex-shrink-0">
+        <X
+          size={14}
+          className="text-[#64748b] transition-colors hover:text-[#e2e8f0]"
+        />
       </button>
+      {/* Progress bar at bottom */}
       <div
-        className="absolute bottom-0 left-0 h-0.5 bg-current opacity-30 transition-all"
-        style={{ width: `${progress}%` }}
+        className="absolute bottom-0 left-0 h-[2px] transition-all duration-100 ease-linear"
+        style={{
+          width: `${progress}%`,
+          backgroundColor: borderColor,
+          opacity: 0.6,
+        }}
       />
     </div>
   );
