@@ -5,6 +5,7 @@ interface Props {
   duration?: number;
   className?: string;
   glow?: boolean;
+  decimals?: number;
 }
 
 export default function AnimatedCounter({
@@ -12,6 +13,7 @@ export default function AnimatedCounter({
   duration = 600,
   className = "",
   glow = false,
+  decimals,
 }: Props) {
   const [display, setDisplay] = useState(0);
   const prev = useRef(0);
@@ -27,7 +29,8 @@ export default function AnimatedCounter({
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(Math.round(start + delta * eased));
+      const current = start + delta * eased;
+      setDisplay(decimals !== undefined ? current : Math.round(current));
       if (progress < 1) {
         frameRef.current = requestAnimationFrame(tick);
       } else {
@@ -39,7 +42,11 @@ export default function AnimatedCounter({
     return () => {
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
     };
-  }, [value, duration]);
+  }, [value, duration, decimals]);
+
+  const formatted = decimals !== undefined
+    ? display.toFixed(decimals)
+    : display.toLocaleString();
 
   return (
     <span
@@ -50,7 +57,7 @@ export default function AnimatedCounter({
           : undefined
       }
     >
-      {display.toLocaleString()}
+      {formatted}
     </span>
   );
 }

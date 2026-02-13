@@ -3,10 +3,10 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 const COLORS = ["#3b82f6", "#8b5cf6", "#16a34a", "#d97706", "#e11d48"];
 
 const CHART_TOOLTIP_STYLE = {
-  backgroundColor: "rgba(255, 255, 255, 0.95)",
-  border: "1px solid rgba(59, 130, 246, 0.15)",
+  backgroundColor: "rgba(20, 25, 40, 0.95)",
+  border: "1px solid rgba(96, 165, 250, 0.2)",
   borderRadius: 12,
-  color: "#0f172a",
+  color: "#e2e8f0",
   fontSize: 12,
 };
 

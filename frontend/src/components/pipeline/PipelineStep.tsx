@@ -69,7 +69,7 @@ export default function PipelineStepCard({ step, index }: Props) {
               {JSON.stringify(step.toolCall.input, null, 2)}
             </pre>
           </div>
-          {step.toolCall.output && (
+          {step.toolCall.output != null && (
             <div className="mt-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-[#64748b] mb-1">Output</p>
               <pre className="text-[#34d399] overflow-x-auto whitespace-pre-wrap rounded-lg bg-[rgba(255,255,255,0.02)] p-2">

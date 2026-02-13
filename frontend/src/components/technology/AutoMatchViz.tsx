@@ -401,7 +401,7 @@ export default function AutoMatchViz() {
 
         {/* ---- Right: Matched Listings ---- */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {scored.map((listing, idx) => {
+          {scored.map((listing) => {
             const isBest = listing.title === bestTitle;
             return (
               <div

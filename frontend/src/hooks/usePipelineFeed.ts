@@ -16,12 +16,13 @@ export function usePipelineFeed() {
     setLiveEvents((prev) => [event, ...prev].slice(0, 100));
 
     // Map events to pipeline steps
-    const agentId = (event as Record<string, unknown>).agent_id as string | undefined
-      ?? (event as Record<string, unknown>).seller_id as string | undefined
-      ?? (event as Record<string, unknown>).buyer_id as string | undefined
+    const ev = event as unknown as Record<string, unknown>;
+    const agentId = (ev.agent_id as string | undefined)
+      ?? (ev.seller_id as string | undefined)
+      ?? (ev.buyer_id as string | undefined)
       ?? "unknown";
 
-    const agentName = (event as Record<string, unknown>).agent_name as string | undefined ?? agentId;
+    const agentName = (ev.agent_name as string | undefined) ?? agentId;
 
     const step: PipelineStep = {
       id: `step-${++stepCounter.current}`,
@@ -31,7 +32,7 @@ export function usePipelineFeed() {
       status: "completed",
       startedAt: new Date().toISOString(),
       completedAt: new Date().toISOString(),
-      latencyMs: (event as Record<string, unknown>).delivery_ms as number | undefined,
+      latencyMs: ev.delivery_ms as number | undefined,
       toolCall: {
         name: event.type,
         input: event as unknown as Record<string, unknown>,

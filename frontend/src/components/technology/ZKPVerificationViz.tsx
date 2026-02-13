@@ -229,7 +229,7 @@ function ProofCard({ proof, isHovered, onHover, onLeave }: {
   onLeave: () => void;
 }) {
   const Icon = proof.icon;
-  const svgMap: Record<string, JSX.Element> = {
+  const svgMap: Record<string, React.ReactNode> = {
     merkle: <MerkleTreeSVG accent={proof.accent} />,
     schema: <SchemaSVG accent={proof.accent} />,
     bloom: <BloomMiniSVG accent={proof.accent} />,

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { creatorLogin, creatorRegister } from "../lib/api";
 
 const STORAGE_KEY = "agentchains_creator_jwt";

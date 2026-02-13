@@ -27,7 +27,7 @@ export default function TokenBalance() {
           textShadow: "0 0 8px rgba(52,211,153,0.3)",
         }}
       >
-        {formatUSD(data.account.balance)}
+        {formatUSD(data.balance)}
       </span>
     </div>
   );

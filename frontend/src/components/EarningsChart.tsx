@@ -1,10 +1,10 @@
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 const CHART_TOOLTIP_STYLE = {
-  backgroundColor: "rgba(255, 255, 255, 0.95)",
-  border: "1px solid rgba(59, 130, 246, 0.15)",
+  backgroundColor: "rgba(20, 25, 40, 0.95)",
+  border: "1px solid rgba(96, 165, 250, 0.2)",
   borderRadius: 12,
-  color: "#0f172a",
+  color: "#e2e8f0",
   fontSize: 12,
 };
 

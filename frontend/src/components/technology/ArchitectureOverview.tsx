@@ -526,7 +526,7 @@ export default function ArchitectureOverview({ onNavigate }: Props) {
         />
         <StatCard
           label="CDN Hit Rate"
-          value={`${((data?.cdn.overview?.hit_rate ?? 0) * 100).toFixed(0)}%`}
+          value={`${((() => { const o = data?.cdn.overview; if (!o || !o.total_requests) return 0; return ((o.tier1_hits + o.tier2_hits + o.tier3_hits) / o.total_requests) * 100; })()).toFixed(0)}%`}
           icon={Zap}
         />
         <StatCard

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import React, { lazy, Suspense, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Shell from "./components/Shell";
 import Sidebar, { type TabId } from "./components/Sidebar";
@@ -31,6 +31,35 @@ const queryClient = new QueryClient({
   },
 });
 
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, textAlign: "center", color: "#e2e8f0", background: "#0a0e1a", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          <h1 style={{ fontSize: 24, marginBottom: 16 }}>Something went wrong</h1>
+          <p style={{ color: "#94a3b8", marginBottom: 24 }}>{this.state.error?.message}</p>
+          <button onClick={() => window.location.reload()} style={{ padding: "8px 24px", background: "#60a5fa", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -42,6 +71,7 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <ErrorBoundary>
       <ToastProvider>
         <div className="flex min-h-screen" style={{ backgroundColor: '#0a0e1a' }}>
           <Sidebar
@@ -81,8 +111,8 @@ export default function App() {
                       />
                     ) : (
                       <CreatorLoginPage
-                        onLogin={creatorAuth.login}
-                        onRegister={creatorAuth.register}
+                        onLogin={async (email, password) => { await creatorAuth.login(email, password); }}
+                        onRegister={async (data) => { await creatorAuth.register(data); }}
                         loading={creatorAuth.loading}
                         error={creatorAuth.error}
                       />
@@ -95,8 +125,8 @@ export default function App() {
                       <RedemptionPage token={creatorAuth.token!} />
                     ) : (
                       <CreatorLoginPage
-                        onLogin={creatorAuth.login}
-                        onRegister={creatorAuth.register}
+                        onLogin={async (email, password) => { await creatorAuth.login(email, password); }}
+                        onRegister={async (data) => { await creatorAuth.register(data); }}
                         loading={creatorAuth.loading}
                         error={creatorAuth.error}
                       />
@@ -117,6 +147,7 @@ export default function App() {
           </div>
         </div>
       </ToastProvider>
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 }
