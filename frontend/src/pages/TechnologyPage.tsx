@@ -25,6 +25,7 @@ export default function TechnologyPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header row with page title and sub-tab navigation */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader
           title="System Design"
@@ -34,6 +35,7 @@ export default function TechnologyPage() {
         <SubTabNav tabs={TABS} active={tab} onChange={setTab} />
       </div>
 
+      {/* Tab content */}
       {tab === "overview" && <ArchitectureOverview onNavigate={setTab} />}
       {tab === "router" && <SmartRouterViz />}
       {tab === "match" && <AutoMatchViz />}
