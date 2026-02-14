@@ -8,12 +8,10 @@ from marketplace.core.exceptions import (
     InvalidTransactionStateError,
     TransactionNotFoundError,
 )
-from marketplace.models.listing import DataListing
 from marketplace.models.transaction import Transaction
 from marketplace.services.listing_service import get_listing
 from marketplace.services.payment_service import payment_service
 from marketplace.services.storage_service import get_storage
-from marketplace.services.verification_service import verify_content
 
 
 def _broadcast(event_type: str, data: dict):
@@ -128,7 +126,7 @@ async def deliver_content(
     """Seller delivers content for a transaction."""
     tx = await _get_transaction(db, tx_id)
     if tx.seller_id != seller_id:
-        from fastapi import HTTPException, status
+        from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Not the seller for this transaction")
     if tx.status != "payment_confirmed":
         raise InvalidTransactionStateError(tx.status, "payment_confirmed")
@@ -156,13 +154,11 @@ async def verify_delivery(db: AsyncSession, tx_id: str, buyer_id: str) -> Transa
     """Buyer verifies the delivered content matches expected hash."""
     tx = await _get_transaction(db, tx_id)
     if tx.buyer_id != buyer_id:
-        from fastapi import HTTPException, status
+        from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Not the buyer for this transaction")
     if tx.status != "delivered":
         raise InvalidTransactionStateError(tx.status, "delivered")
 
-    # Get the delivered content from storage
-    storage = get_storage()
     if tx.delivered_hash and tx.content_hash:
         matches = tx.delivered_hash == tx.content_hash
     else:

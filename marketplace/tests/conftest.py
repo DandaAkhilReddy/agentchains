@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 from marketplace.database import Base, get_db
 from marketplace.main import app
-from marketplace.models import *  # noqa: ensure all models are loaded for create_all
+from marketplace.models import *  # noqa: F403
 
 
 # ---------------------------------------------------------------------------

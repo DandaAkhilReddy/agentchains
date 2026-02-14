@@ -258,8 +258,11 @@ async def auto_populate_catalog(db: AsyncSession, agent_id: str) -> list[DataCat
             continue
 
         # Compute stats
-        prices = [float(l.price_usdc) for l in group_listings]
-        qualities = [float(l.quality_score) if l.quality_score else 0.5 for l in group_listings]
+        prices = [float(listing.price_usdc) for listing in group_listings]
+        qualities = [
+            float(listing.quality_score) if listing.quality_score else 0.5
+            for listing in group_listings
+        ]
 
         entry = DataCatalogEntry(
             agent_id=agent_id,

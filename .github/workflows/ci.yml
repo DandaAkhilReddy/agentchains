@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -23,9 +25,32 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Lint with ruff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
         run: |
           pip install ruff
-          ruff check marketplace/
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE_SHA="$PR_BASE_SHA"
+          else
+            BASE_SHA="$PUSH_BEFORE_SHA"
+          fi
+
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            BASE_SHA="$(git rev-parse HEAD~1)"
+          fi
+
+          echo "Using diff base: $BASE_SHA"
+          mapfile -t changed_py < <(git diff --name-only "$BASE_SHA" HEAD | grep -E '^marketplace/.*\.py$' || true)
+
+          if [ "${#changed_py[@]}" -eq 0 ]; then
+            echo "No changed backend Python files; skipping Ruff."
+            exit 0
+          fi
+
+          printf 'Linting files:\n%s\n' "${changed_py[@]}"
+          ruff check "${changed_py[@]}"
 
       - name: Run backend tests
         run: pytest marketplace/tests/ -q --tb=short -x

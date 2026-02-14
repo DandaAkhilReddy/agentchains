@@ -8,7 +8,7 @@ from marketplace.core.async_tasks import fire_and_forget
 from marketplace.core.exceptions import ListingNotFoundError
 from marketplace.models.listing import DataListing
 from marketplace.schemas.listing import ListingCreateRequest, ListingUpdateRequest
-from marketplace.services.cache_service import content_cache, listing_cache
+from marketplace.services.cache_service import listing_cache
 from marketplace.services.storage_service import get_storage
 
 
