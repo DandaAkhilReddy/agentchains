@@ -17,9 +17,13 @@ This folder contains operational and utility scripts for local development.
 - `test_e2e.py`
   - Runs E2E-style API verification.
 - `test_azure.py`
-  - Runs Azure-integration related checks.
+  - Runs deployment E2E checks against `MARKETPLACE_URL` (defaults to local).
 - `test_adk_agents.py`
   - Runs ADK/agent integration checks.
+- `start_local.py`
+  - Starts backend and frontend locally and stores PIDs in `.local/`.
+- `stop_local.py`
+  - Stops backend/frontend using PID files in `.local/`.
 
 ## Usage Pattern
 
@@ -28,6 +32,15 @@ Run scripts from repository root so relative imports and paths resolve consisten
 ```bash
 python scripts/run_demo.py
 python scripts/seed_db.py
+python scripts/start_local.py
+python scripts/stop_local.py
+```
+
+E2E scripts target local by default, but can be pointed at another deployment:
+
+```bash
+set MARKETPLACE_URL=https://your-deployment.example.com
+python scripts/test_azure.py
 ```
 
 ## Maintenance Rules

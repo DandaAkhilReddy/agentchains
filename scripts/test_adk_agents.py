@@ -1,25 +1,26 @@
 """
-Test script — exercises the full Seller → Buyer flow through the marketplace.
+End-to-end script that exercises the Seller -> Buyer flow through the marketplace.
 
 Usage:
   1. Start marketplace:  python -m uvicorn marketplace.main:app --port 8000
   2. Run this script:    python scripts/test_adk_agents.py
 
-This tests the same flow that ADK agents would use, but programmatically
-(no Gemini calls needed — pure HTTP). Good for verifying the marketplace
-works end-to-end before deploying to Vertex AI.
+Override target:
+  MARKETPLACE_URL=http://127.0.0.1:8000/api/v1 python scripts/test_adk_agents.py
 """
+
+from __future__ import annotations
+
 import asyncio
 import json
 import os
 import sys
 import time
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from typing import Any
 
 import httpx
 
-BASE_URL = os.getenv("MARKETPLACE_URL", "http://localhost:8000/api/v1")
+BASE_URL = os.getenv("MARKETPLACE_URL", "http://127.0.0.1:8000/api/v1").rstrip("/")
 
 GREEN = "\033[92m"
 BLUE = "\033[94m"
@@ -29,259 +30,326 @@ CYAN = "\033[96m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 
+COUNTS = {"passed": 0, "failed": 0, "skipped": 0}
+FAILURES: list[str] = []
 
-def step(text: str):
+
+def _ok(text: str) -> None:
+    COUNTS["passed"] += 1
     print(f"  {GREEN}[OK]{RESET} {text}")
 
 
-def info(text: str):
+def _info(text: str) -> None:
     print(f"       {BLUE}{text}{RESET}")
 
 
-def fail(text: str):
+def _fail(text: str) -> None:
+    COUNTS["failed"] += 1
+    FAILURES.append(text)
     print(f"  {RED}[FAIL]{RESET} {text}")
 
 
-def banner(text: str):
+def _skip(text: str) -> None:
+    COUNTS["skipped"] += 1
+    print(f"  {YELLOW}[SKIP]{RESET} {text}")
+
+
+def banner(text: str) -> None:
     print(f"\n{BOLD}{CYAN}{'=' * 60}")
     print(f"  {text}")
     print(f"{'=' * 60}{RESET}\n")
 
 
-async def main():
+async def _request_with_retry(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    retries: int = 3,
+    **kwargs: Any,
+) -> httpx.Response:
+    for attempt in range(retries + 1):
+        response = await client.request(method, url, **kwargs)
+        if response.status_code != 429 or attempt == retries:
+            return response
+        retry_after = int(response.json().get("retry_after", 1))
+        await asyncio.sleep(max(1, retry_after))
+    return response
+
+
+async def main() -> int:
     async with httpx.AsyncClient(timeout=30) as c:
-        # ── Health Check ──
+        # Health check
         try:
             r = await c.get(f"{BASE_URL}/health")
             if r.status_code != 200:
-                raise Exception(f"Health check returned {r.status_code}")
-            step(f"Marketplace healthy at {BASE_URL}")
-        except Exception as e:
-            fail(f"Cannot reach marketplace at {BASE_URL}: {e}")
-            print(f"\n  Start it first:")
-            print(f"  python -m uvicorn marketplace.main:app --port 8000\n")
-            return
+                _fail(f"Health check returned {r.status_code}: {r.text[:200]}")
+                return 1
+            _ok(f"Marketplace healthy at {BASE_URL}")
+        except Exception as exc:
+            _fail(f"Cannot reach marketplace at {BASE_URL}: {exc}")
+            print("\n  Start it first:")
+            print("  python -m uvicorn marketplace.main:app --port 8000\n")
+            return 1
 
         banner("Phase 1: Agent Registration")
 
-        # ── Register Seller ──
-        r = await c.post(f"{BASE_URL}/agents/register", json={
-            "name": f"test_seller_{int(time.time())}",
-            "description": "Web search data seller for testing",
-            "agent_type": "seller",
-            "capabilities": ["web_search", "caching"],
-            "public_key": "pk-test-seller-key",
-        })
-        assert r.status_code == 201, f"Seller register failed: {r.text}"
-        seller = r.json()
-        seller_token = seller["jwt_token"]
-        seller_headers = {"Authorization": f"Bearer {seller_token}"}
-        step(f"Seller registered: {seller['name']} ({seller['id'][:8]}...)")
+        seller_headers: dict[str, str] = {}
+        buyer_headers: dict[str, str] = {}
+        seller: dict[str, Any] | None = None
 
-        # ── Register Buyer ──
-        r = await c.post(f"{BASE_URL}/agents/register", json={
-            "name": f"test_buyer_{int(time.time())}",
-            "description": "Smart data buyer for testing",
-            "agent_type": "buyer",
-            "capabilities": ["discovery", "purchasing"],
-            "public_key": "pk-test-buyer-key",
-        })
-        assert r.status_code == 201, f"Buyer register failed: {r.text}"
-        buyer = r.json()
-        buyer_token = buyer["jwt_token"]
-        buyer_headers = {"Authorization": f"Bearer {buyer_token}"}
-        step(f"Buyer registered: {buyer['name']} ({buyer['id'][:8]}...)")
+        seller_resp = await _request_with_retry(
+            c,
+            "POST",
+            f"{BASE_URL}/agents/register",
+            json={
+                "name": f"test_seller_{int(time.time())}",
+                "description": "Web search data seller for testing",
+                "agent_type": "seller",
+                "capabilities": ["web_search", "caching"],
+                "public_key": "pk-test-seller-key",
+            },
+        )
+        if seller_resp.status_code == 201:
+            seller = seller_resp.json()
+            seller_token = seller["jwt_token"]
+            seller_headers = {"Authorization": f"Bearer {seller_token}"}
+            _ok(f"Seller registered: {seller['name']} ({seller['id'][:8]}...)")
+        else:
+            _fail(f"Seller register failed: {seller_resp.status_code} - {seller_resp.text[:200]}")
 
-        banner("Phase 2: Seller — Catalog + Listings")
+        buyer_resp = await _request_with_retry(
+            c,
+            "POST",
+            f"{BASE_URL}/agents/register",
+            json={
+                "name": f"test_buyer_{int(time.time())}",
+                "description": "Smart data buyer for testing",
+                "agent_type": "buyer",
+                "capabilities": ["discovery", "purchasing"],
+                "public_key": "pk-test-buyer-key",
+            },
+        )
+        if buyer_resp.status_code == 201:
+            buyer = buyer_resp.json()
+            buyer_token = buyer["jwt_token"]
+            buyer_headers = {"Authorization": f"Bearer {buyer_token}"}
+            _ok(f"Buyer registered: {buyer['name']} ({buyer['id'][:8]}...)")
+        else:
+            _fail(f"Buyer register failed: {buyer_resp.status_code} - {buyer_resp.text[:200]}")
 
-        # ── Register Catalog Entry ──
-        r = await c.post(f"{BASE_URL}/catalog", json={
-            "namespace": "web_search",
-            "topic": "python",
-            "description": "Python-related web search results",
-            "price_range_min": 0.001,
-            "price_range_max": 0.01,
-        }, headers=seller_headers)
+        if not seller_headers or not buyer_headers:
+            _fail("Cannot continue without both seller and buyer tokens")
+            return 1
+
+        banner("Phase 2: Seller - Catalog + Listings")
+
+        r = await c.post(
+            f"{BASE_URL}/catalog",
+            json={
+                "namespace": "web_search",
+                "topic": "python",
+                "description": "Python-related web search results",
+                "price_range_min": 0.001,
+                "price_range_max": 0.01,
+            },
+            headers=seller_headers,
+        )
         if r.status_code in (200, 201):
             catalog_entry = r.json()
-            step(f"Catalog entry registered: web_search/python")
-            info(f"ID: {catalog_entry.get('id', 'N/A')[:8]}...")
+            _ok("Catalog entry registered: web_search/python")
+            _info(f"ID: {catalog_entry.get('id', 'N/A')[:8]}...")
         else:
-            fail(f"Catalog register: {r.status_code} — {r.text[:200]}")
+            _fail(f"Catalog register failed: {r.status_code} - {r.text[:200]}")
 
-        # ── Suggest Price ──
-        r = await c.post(f"{BASE_URL}/seller/price-suggest", json={
-            "category": "web_search",
-            "quality_score": 0.85,
-        }, headers=seller_headers)
+        r = await c.post(
+            f"{BASE_URL}/seller/price-suggest",
+            json={"category": "web_search", "quality_score": 0.85},
+            headers=seller_headers,
+        )
         if r.status_code == 200:
-            price_info = r.json()
-            suggested = price_info.get("suggested_price", 0.003)
-            step(f"Price suggestion: ${suggested:.4f}")
+            suggested = r.json().get("suggested_price", 0.003)
+            _ok(f"Price suggestion: ${suggested:.4f}")
         else:
             suggested = 0.003
-            info(f"Price suggest returned {r.status_code}, using default ${suggested}")
+            _skip(f"Price suggest returned {r.status_code}, using default ${suggested}")
 
-        # ── Create 3 Listings ──
-        listing_ids = []
+        listing_ids: list[str] = []
         queries = [
             ("Python async patterns", 0.85),
             ("FastAPI best practices", 0.90),
             ("React server components", 0.80),
         ]
         for query, quality in queries:
-            content = json.dumps({
-                "query": query,
-                "results": [
-                    {"title": f"Guide to {query}", "url": f"https://example.com/{query.replace(' ', '-')}", "snippet": f"Learn about {query}"},
-                    {"title": f"{query} — Deep Dive", "url": f"https://docs.example.com/{query.replace(' ', '-')}", "snippet": f"Advanced {query} techniques"},
-                    {"title": f"Top 10 {query} Tips", "url": f"https://blog.example.com/{query.replace(' ', '-')}", "snippet": f"Essential {query} tips"},
-                ],
-                "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            })
-            r = await c.post(f"{BASE_URL}/listings", json={
-                "title": f"Web search: '{query}'",
-                "description": f"Cached search results for: {query}",
-                "category": "web_search",
-                "content": content,
-                "price_usdc": suggested,
-                "tags": query.lower().split() + ["search", "web", "python"],
-                "quality_score": quality,
-            }, headers=seller_headers)
+            content = json.dumps(
+                {
+                    "query": query,
+                    "results": [
+                        {
+                            "title": f"Guide to {query}",
+                            "url": f"https://example.com/{query.replace(' ', '-')}",
+                            "snippet": f"Learn about {query}",
+                        },
+                        {
+                            "title": f"{query} - Deep Dive",
+                            "url": f"https://docs.example.com/{query.replace(' ', '-')}",
+                            "snippet": f"Advanced {query} techniques",
+                        },
+                    ],
+                    "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                }
+            )
+            r = await c.post(
+                f"{BASE_URL}/listings",
+                json={
+                    "title": f"Web search: '{query}'",
+                    "description": f"Cached search results for: {query}",
+                    "category": "web_search",
+                    "content": content,
+                    "price_usdc": suggested,
+                    "tags": query.lower().split() + ["search", "web", "python"],
+                    "quality_score": quality,
+                },
+                headers=seller_headers,
+            )
             if r.status_code == 201:
                 listing = r.json()
                 listing_ids.append(listing["id"])
-                step(f"Listed: '{query}' at ${suggested:.4f}")
-                info(f"Hash: {listing['content_hash'][:30]}...")
+                _ok(f"Listed: '{query}' at ${suggested:.4f}")
+                _info(f"Hash: {listing['content_hash'][:30]}...")
             else:
-                fail(f"Listing creation failed: {r.text[:200]}")
+                _fail(f"Listing creation failed: {r.status_code} - {r.text[:200]}")
 
-        assert len(listing_ids) >= 1, "No listings created!"
+        if not listing_ids:
+            _fail("No listings were created; aborting remaining phases")
+            return 1
 
-        banner("Phase 3: Buyer — Discover + Verify + Buy")
+        banner("Phase 3: Buyer - Discover + Verify + Buy")
 
-        # ── Search Catalog ──
         r = await c.get(f"{BASE_URL}/catalog/search", params={"namespace": "web_search"})
         if r.status_code == 200:
-            catalog = r.json()
-            step(f"Catalog search: found {catalog.get('total', 0)} entries in web_search")
+            _ok(f"Catalog search: found {r.json().get('total', 0)} entries in web_search")
         else:
-            info(f"Catalog search returned {r.status_code}")
+            _skip(f"Catalog search returned {r.status_code}")
 
-        # ── Discover Listings ──
-        r = await c.get(f"{BASE_URL}/discover", params={
-            "q": "Python async",
-            "category": "web_search",
-            "sort_by": "quality",
-        })
-        assert r.status_code == 200, f"Discovery failed: {r.text}"
-        results = r.json()
-        step(f"Discovery: found {results['total']} listings for 'Python async'")
+        r = await c.get(
+            f"{BASE_URL}/discover",
+            params={"q": "Python async", "category": "web_search", "sort_by": "quality"},
+        )
+        if r.status_code == 200:
+            results = r.json()
+            _ok(f"Discovery: found {results['total']} listings for 'Python async'")
+        else:
+            _fail(f"Discovery failed: {r.status_code} - {r.text[:200]}")
+            results = {"total": 0}
 
-        target_listing = listing_ids[0]  # Python async patterns listing
+        target_listing = listing_ids[0]
 
-        # ── ZKP Bloom Check ──
-        try:
-            r = await c.get(f"{BASE_URL}/zkp/{target_listing}/bloom-check", params={"word": "python"})
-            if r.status_code == 200:
-                bloom = r.json()
-                step(f"Bloom check 'python': {'PRESENT' if bloom.get('probably_present') else 'NOT FOUND'}")
-            else:
-                info(f"Bloom check returned {r.status_code} (ZKP proofs may not exist yet)")
-        except Exception as e:
-            info(f"Bloom check failed (server may have restarted): {e}")
+        r = await c.get(f"{BASE_URL}/zkp/{target_listing}/bloom-check", params={"word": "python"})
+        if r.status_code == 200:
+            bloom = r.json()
+            present = bloom.get("probably_present") or bloom.get("probably_contains")
+            _ok(f"Bloom check 'python': {'PRESENT' if present else 'NOT FOUND'}")
+        else:
+            _skip(f"Bloom check returned {r.status_code}")
 
-        # ── ZKP Full Verification ──
-        try:
-            r = await c.post(f"{BASE_URL}/zkp/{target_listing}/verify", json={
-                "keywords": ["python", "async"],
-                "min_size": 50,
-            }, headers=buyer_headers)
-            if r.status_code == 200:
-                zkp = r.json()
-                step(f"ZKP verification: {'PASSED' if zkp.get('verified') else 'FAILED'}")
-                for check_name, result in zkp.get("checks", {}).items():
-                    info(f"  {check_name}: {'pass' if result.get('passed') else 'fail'}")
-            else:
-                info(f"ZKP verify returned {r.status_code}")
-        except Exception as e:
-            info(f"ZKP verify failed: {e}")
+        r = await c.post(
+            f"{BASE_URL}/zkp/{target_listing}/verify",
+            json={"keywords": ["python", "async"], "min_size": 50},
+            headers=buyer_headers,
+        )
+        if r.status_code == 200:
+            zkp = r.json()
+            _ok(f"ZKP verification: {'PASSED' if zkp.get('verified') else 'FAILED'}")
+        else:
+            _skip(f"ZKP verify returned {r.status_code}")
 
-        # ── Express Purchase ──
         t0 = time.time()
-        r = await c.get(f"{BASE_URL}/express/{target_listing}", headers=buyer_headers)
+        r = await c.post(
+            f"{BASE_URL}/express/{target_listing}",
+            headers=buyer_headers,
+            json={"payment_method": "token"},
+        )
         delivery_ms = (time.time() - t0) * 1000
-
         if r.status_code == 200:
             purchase = r.json()
-            step(f"Express purchase completed in {delivery_ms:.0f}ms")
-            info(f"Transaction: {purchase.get('transaction_id', 'N/A')[:8]}...")
-            info(f"Price: ${purchase.get('price_usdc', 0):.4f} USDC")
-            info(f"Cache hit: {purchase.get('cache_hit', False)}")
-            content_preview = str(purchase.get("content", ""))[:100]
-            info(f"Content: {content_preview}...")
+            _ok(f"Express purchase completed in {delivery_ms:.0f}ms")
+            _info(f"Transaction: {purchase.get('transaction_id', 'N/A')[:8]}...")
+            _info(f"Cache hit: {purchase.get('cache_hit', False)}")
         else:
-            fail(f"Express purchase failed: {r.status_code} — {r.text[:200]}")
+            _fail(f"Express purchase failed: {r.status_code} - {r.text[:200]}")
 
-        # ── Second purchase (should be cache hit) ──
-        r2 = await c.get(f"{BASE_URL}/express/{target_listing}", headers=buyer_headers)
+        r2 = await c.post(
+            f"{BASE_URL}/express/{target_listing}",
+            headers=buyer_headers,
+            json={"payment_method": "token"},
+        )
         if r2.status_code == 200:
             p2 = r2.json()
-            step(f"Second purchase — cache hit: {p2.get('cache_hit', False)}")
+            _ok(f"Second purchase - cache hit: {p2.get('cache_hit', False)}")
+        else:
+            _fail(f"Second express purchase failed: {r2.status_code} - {r2.text[:200]}")
 
         banner("Phase 4: Analytics & Reputation")
 
-        # ── CDN Stats ──
         r = await c.get(f"{BASE_URL}/health/cdn")
         if r.status_code == 200:
-            cdn = r.json()
-            overview = cdn.get("overview", {})
-            step(f"CDN stats: {overview.get('total_requests', 0)} requests, "
-                 f"T1 hits: {overview.get('tier1_hits', 0)}, "
-                 f"T3 (disk): {overview.get('tier3_hits', 0)}")
+            overview = r.json().get("overview", {})
+            _ok(
+                f"CDN stats: {overview.get('total_requests', 0)} requests, "
+                f"T1 hits: {overview.get('tier1_hits', 0)}, "
+                f"T3 (disk): {overview.get('tier3_hits', 0)}"
+            )
         else:
-            info(f"CDN stats returned {r.status_code}")
+            _skip(f"CDN stats returned {r.status_code}")
 
-        # ── MCP Health ──
         mcp_url = BASE_URL.replace("/api/v1", "/mcp/health")
         r = await c.get(mcp_url)
         if r.status_code == 200:
             mcp = r.json()
-            step(f"MCP server: {mcp.get('status')} — {mcp.get('tools_count')} tools, "
-                 f"{mcp.get('resources_count')} resources")
+            _ok(f"MCP server: {mcp.get('status')} - {mcp.get('tools_count')} tools")
         else:
-            info(f"MCP health returned {r.status_code}")
+            _skip(f"MCP health returned {r.status_code}")
 
-        # ── Routing Strategies ──
         r = await c.get(f"{BASE_URL}/route/strategies")
         if r.status_code == 200:
-            routing = r.json()
-            strategies = routing.get("strategies", [])
-            step(f"Routing: {len(strategies)} strategies — {', '.join(strategies[:4])}...")
+            strategies = r.json().get("strategies", [])
+            _ok(f"Routing: {len(strategies)} strategies")
         else:
-            info(f"Routing strategies returned {r.status_code}")
+            _skip(f"Routing strategies returned {r.status_code}")
 
-        # ── Seller Reputation ──
-        r = await c.get(f"{BASE_URL}/reputation/{seller['id']}", params={"recalculate": "true"})
-        if r.status_code == 200:
-            rep = r.json()
-            step(f"Seller reputation: score={rep.get('composite_score', 0):.3f}, "
-                 f"txns={rep.get('total_transactions', 0)}")
+        if seller is not None:
+            r = await c.get(f"{BASE_URL}/reputation/{seller['id']}", params={"recalculate": "true"})
+            if r.status_code == 200:
+                rep = r.json()
+                _ok(f"Seller reputation: score={rep.get('composite_score', 0):.3f}")
+            else:
+                _skip(f"Seller reputation returned {r.status_code}")
 
-        # ── Health Summary ──
         r = await c.get(f"{BASE_URL}/health")
-        h = r.json()
-        step(f"Final: {h['agents_count']} agents, {h['listings_count']} listings, "
-             f"{h['transactions_count']} transactions")
+        if r.status_code == 200:
+            h = r.json()
+            _ok(
+                f"Final: {h['agents_count']} agents, {h['listings_count']} listings, "
+                f"{h['transactions_count']} transactions"
+            )
+        else:
+            _fail(f"Final health check failed: {r.status_code} - {r.text[:200]}")
 
-        banner("All Tests Passed!")
-        print(f"  The marketplace is working end-to-end.")
-        print(f"  Next steps:")
-        print(f"  1. Run ADK agents:  adk web --port 8501  (in agents/web_search_agent/)")
-        print(f"  2. Deploy to Cloud Run:  gcloud run deploy agentchains-marketplace --source .")
-        print(f"  3. Deploy to Vertex AI:  adk deploy agent --project <ID> --region us-central1")
-        print()
+    banner("Run Summary")
+    print(
+        f"  Passed: {COUNTS['passed']} | Failed: {COUNTS['failed']} | "
+        f"Skipped: {COUNTS['skipped']}"
+    )
+    if FAILURES:
+        print("  Failures:")
+        for item in FAILURES:
+            print(f"    - {item}")
+        return 1
+
+    print("  All checks passed.")
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(asyncio.run(main()))
