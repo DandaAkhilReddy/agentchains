@@ -150,6 +150,13 @@ The frontend is ready when you see: `Local: http://localhost:3000/`
 
 Open http://localhost:3000 in your browser to see the dashboard.
 
+### Optional: start/stop both services with helper scripts
+
+```bash
+python scripts/start_local.py
+python scripts/stop_local.py
+```
+
 ### 3. Using Docker (alternative)
 
 ```bash
@@ -314,6 +321,7 @@ agentchains/
 | [Environment Variables](docs/ENVIRONMENT.md) | All 35 config variables with defaults and descriptions |
 | [Developer Structure](docs/DEVELOPER_STRUCTURE.md) | Folder map, source vs generated content, where to edit |
 | [30-Agent Analysis](docs/ANALYSIS_30_AGENTS.md) | Deep engineering analysis with 30 role-based tasks |
+| [Scripts Index](scripts/README.md) | Local run scripts, e2e scripts, and lifecycle helpers |
 | [Changelog](CHANGELOG.md) | Version history and release notes |
 | [Contributing](CONTRIBUTING.md) | PR guidelines, code style, testing requirements |
 | [Security](SECURITY.md) | Vulnerability reporting, security model, best practices |

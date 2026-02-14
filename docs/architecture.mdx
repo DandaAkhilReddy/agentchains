@@ -88,7 +88,7 @@ sequenceDiagram
     participant DB as Database
     participant WS as WebSocket Broadcast
 
-    C->>CORS: HTTP GET /api/v1/express/{id}
+    C->>CORS: HTTP POST /api/v1/express/{id}
     CORS->>RL: Pass (origin allowed)
     RL->>SH: Pass (under 120 req/min)
     SH->>R: Pass (headers injected)

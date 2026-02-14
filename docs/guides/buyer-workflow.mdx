@@ -149,17 +149,19 @@ Express purchase is the fastest way to buy data. A single `GET` request handles 
 
     <CodeGroup>
       ```bash cURL
-      curl -s "http://localhost:8000/api/v1/express/lst_a1b2c3d4e5f6?payment_method=token" \
-        -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      curl -s -X POST "http://localhost:8000/api/v1/express/lst_a1b2c3d4e5f6" \
+        -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+        -H "Content-Type: application/json" \
+        -d '{"payment_method":"token"}'
       ```
 
       ```python Python
       headers = {"Authorization": f"Bearer {jwt}"}
 
-      buy = httpx.get(
+      buy = httpx.post(
           f"{BASE}/express/{listing_id}",
           headers=headers,
-          params={"payment_method": "token"},
+          json={"payment_method": "token"},
           timeout=30.0,
       )
       buy.raise_for_status()
@@ -173,10 +175,16 @@ Express purchase is the fastest way to buy data. A single `GET` request handles 
       ```
 
       ```javascript JavaScript
-      const buyParams = new URLSearchParams({ payment_method: "token" });
       const buyResp = await fetch(
-        `${BASE}/express/${listingId}?${buyParams}`,
-        { headers: { Authorization: `Bearer ${jwt}` } }
+        `${BASE}/express/${listingId}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${jwt}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ payment_method: "token" }),
+        }
       );
       const purchase = await buyResp.json();
 
@@ -188,7 +196,7 @@ Express purchase is the fastest way to buy data. A single `GET` request handles 
       ```
     </CodeGroup>
 
-    The `payment_method` parameter accepts three values:
+    The `payment_method` request field accepts three values:
     - `token` -- pay with ARD credits (recommended)
     - `fiat` -- pay with fiat currency
     - `simulated` -- test mode, no actual payment
@@ -1070,8 +1078,8 @@ Here is a full end-to-end script combining discovery, verification, express purc
       print("Quality verified.")
 
       # 4. Express buy
-      buy = httpx.get(f"{BASE}/express/{listing_id}",
-          headers=headers, params={"payment_method": "token"}, timeout=30.0)
+      buy = httpx.post(f"{BASE}/express/{listing_id}",
+          headers=headers, json={"payment_method": "token"}, timeout=30.0)
       buy.raise_for_status()
       purchase = buy.json()
       print(f"Purchased: tx={purchase['transaction_id']}, "
@@ -1132,8 +1140,15 @@ Here is a full end-to-end script combining discovery, verification, express purc
 
     // 4. Express buy
     const buyResp = await fetch(
-      `${BASE}/express/${listingId}?payment_method=token`,
-      { headers: authHeaders }
+      `${BASE}/express/${listingId}`,
+      {
+        method: "POST",
+        headers: {
+          ...authHeaders,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ payment_method: "token" }),
+      }
     );
     const purchase = await buyResp.json();
     console.log(`Purchased: tx=${purchase.transaction_id}, $${purchase.price_usdc}`);

@@ -62,3 +62,63 @@ Scope: Entire `agentchains` workspace (backend, frontend, tests, docs, scripts)
 3. Standardize local data folder behavior so runtime state always lands in one path.
 4. Break large frontend pages into feature-focused child modules.
 5. Add a domain-indexed testing guide that maps tests to services/routes.
+
+## Baseline Appendix (Agent 1)
+
+### Working tree snapshot (pre-stabilization implementation)
+
+- Branch at start: `master`
+- Pre-existing local modifications:
+  - `README.md`
+  - `frontend/README.md`
+  - `marketplace/api/__init__.py`
+  - `marketplace/main.py`
+  - `docs/ANALYSIS_30_AGENTS.md`
+  - `docs/DEVELOPER_STRUCTURE.md`
+  - `scripts/README.md`
+- Runtime PID artifacts observed:
+  - `.local/backend.pid`
+  - `.local/frontend.pid`
+
+### Known failing command matrix (pre-fix)
+
+| Command | Status | Failure Signature |
+|---|---|---|
+| `python scripts/test_adk_agents.py` | Exit `0` but logically failed | `405 Method Not Allowed` on express purchase due `GET /express/{listing_id}` |
+| `python scripts/test_azure.py` (as shipped) | Exit `1` | Hardcoded remote target + registration failures (`500`) |
+| `python -c "import scripts.test_azure...; main()"` local override | Exit `1` | `405 Method Not Allowed` on express purchase due `GET /express/{listing_id}` |
+
+## Release Gate Appendix (Agent 30)
+
+Date: February 14, 2026
+
+### Commands run and outcomes
+
+| Command | Outcome |
+|---|---|
+| `python -m pytest marketplace/tests/test_express_deep_routes.py -q` | `24 passed` |
+| `python -m pytest marketplace/tests/test_analytics_routes.py -q` | `22 passed` |
+| `python -m pytest marketplace/tests/test_judge_api_contracts.py -q` | `15 passed` |
+| `python -m pytest marketplace/tests/test_api_router_registry.py -q` | `2 passed` |
+| `python -m pytest marketplace/tests -q` | `2371 passed, 2 xfailed` |
+| `npm --prefix frontend run test` | `19 files passed, 376 tests passed` |
+| `npm --prefix frontend run lint` | exit `0`, no errors (`17 warnings`) |
+| `python scripts/test_e2e.py` | pass |
+| `python scripts/test_e2e.py --spawn-server --port 8011` | pass |
+| `python scripts/test_adk_agents.py` | pass (`Passed: 19, Failed: 0, Skipped: 0`) |
+| `python scripts/test_azure.py` | pass (`25/25`) |
+| Smoke checks (`/api/v1/health`, `/docs`, `/api/v1/health/cdn`, `http://127.0.0.1:3000/`, `http://127.0.0.1:3000/api/v1/health`) | all `200` |
+
+### Contract and warning status
+
+- Express purchase contract normalized to `POST /express/{listing_id}` in scripts and docs examples.
+- Script summaries and exit codes are now counter-driven (no false pass totals).
+- First-party `schema_json` field-shadow warning removed via internal rename + alias preservation.
+- Pytest async loop scope set explicitly to function scope.
+- Async background task teardown races mitigated via `drain_background_tasks()` in test teardown.
+- Pytest warning policy updated for known intentional warnings.
+
+### Remaining non-blockers
+
+- Frontend lint still reports warnings (no errors), mostly unused vars in tests and `exhaustive-deps` in two pages.
+- Frontend test output prints non-fatal React testing warnings (`act(...)` and chart container sizing), but suite is green.

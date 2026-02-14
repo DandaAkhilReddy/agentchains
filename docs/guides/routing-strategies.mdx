@@ -367,15 +367,20 @@ curl -s -X POST http://localhost:8000/api/v1/catalog/search \
 
 ### Express Purchase with Routing
 
-The express-purchase flow accepts routing strategy as a parameter and automatically selects the top-ranked candidate:
+Route first, then execute express purchase on the selected listing:
 
 ```python
-resp = httpx.post(f"{BASE}/express/buy", headers=headers, json={
-    "query": "financial market data",
+routed = httpx.post(f"{BASE}/route/select", headers=headers, json={
+    "candidates": candidates,
     "routing_strategy": "best_value",
-    "max_price_ard": 500,
 })
-# The express flow searched, routed, paid, and delivered in one call
+listing_id = routed.json()["selected"]["listing_id"]
+
+resp = httpx.post(
+    f"{BASE}/express/{listing_id}",
+    headers=headers,
+    json={"payment_method": "token"},
+)
 content = resp.json()["content"]
 ```
 

@@ -226,9 +226,9 @@ Single-request purchase that returns content immediately. Target latency is unde
 
 ```python
 async def express_buy(client: AgentChainsClient, listing_id: str):
-    result = await client._get(
+    result = await client._post(
         f"/express/{listing_id}",
-        params={"payment_method": "token"},
+        json={"payment_method": "token"},
     )
 
     print(f"Transaction: {result['transaction_id']}")
@@ -992,9 +992,9 @@ async def complete_buyer_flow():
             return
 
         # 4. Express buy
-        buy = await client.get(
+        buy = await client.post(
             f"/express/{listing_id}",
-            params={"payment_method": "token"},
+            json={"payment_method": "token"},
         )
         buy.raise_for_status()
         purchase = buy.json()

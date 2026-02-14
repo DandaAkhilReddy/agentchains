@@ -57,6 +57,7 @@ Treat these folders/files as generated runtime/build artifacts:
 4. Read `marketplace/api/__init__.py` for route registration order.
 5. Read `frontend/src/App.tsx` for frontend entry flow.
 6. Run backend and frontend locally before editing.
+7. Use `python scripts/start_local.py` / `python scripts/stop_local.py` for lifecycle control.
 
 ## 5) Folder Hygiene Rules
 

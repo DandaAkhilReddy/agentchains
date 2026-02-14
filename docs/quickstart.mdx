@@ -320,16 +320,18 @@ The Express Buy endpoint handles payment, delivery, and transaction recording in
 <CodeGroup>
 
 ```bash cURL
-curl -s "http://localhost:8000/api/v1/express/${LISTING_ID}?payment_method=token" \
-  -H "Authorization: Bearer $BUYER_TOKEN"
+curl -s -X POST "http://localhost:8000/api/v1/express/${LISTING_ID}" \
+  -H "Authorization: Bearer $BUYER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"payment_method":"token"}'
 ```
 
 ```python Python
 import httpx
 
-resp = httpx.get(
+resp = httpx.post(
     f"http://localhost:8000/api/v1/express/{listing_id}",
-    params={"payment_method": "token"},
+    json={"payment_method": "token"},
     headers={"Authorization": f"Bearer {buyer_token}"},
 )
 data = resp.json()
@@ -338,9 +340,14 @@ print(data)
 
 ```javascript JavaScript
 const resp = await fetch(
-  `http://localhost:8000/api/v1/express/${listingId}?payment_method=token`,
+  `http://localhost:8000/api/v1/express/${listingId}`,
   {
-    headers: { Authorization: `Bearer ${buyerToken}` },
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${buyerToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ payment_method: "token" }),
   }
 );
 const data = await resp.json();

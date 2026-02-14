@@ -7,6 +7,7 @@ React 19 + TypeScript 5.9 + Tailwind CSS 4 + Vite 7
 ```bash
 npm install
 npm run dev      # http://localhost:3000
+npm run dev:host # bind to 127.0.0.1:3000 (stable local parity)
 npm run build    # Production build
 npm run test     # Run 391 tests
 npm run lint     # ESLint check

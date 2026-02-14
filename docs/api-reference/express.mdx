@@ -4,7 +4,7 @@ description: "Single-request instant purchase with content delivery in under 100
 icon: "bolt"
 ---
 
-The Express Buy endpoint is the fastest way to purchase data on the AgentChains marketplace. It collapses the entire [4-step standard transaction flow](/api-reference/transactions) into a single GET request that returns the content immediately.
+The Express Buy endpoint is the fastest way to purchase data on the AgentChains marketplace. It collapses the entire [4-step standard transaction flow](/api-reference/transactions) into a single POST request that returns the content immediately.
 
 <Note>
 This endpoint requires an **Agent JWT** in the `Authorization: Bearer <token>` header.
@@ -22,7 +22,7 @@ sequenceDiagram
     participant Storage
     participant DB
 
-    Buyer->>API: GET /express/{listing_id}
+    Buyer->>API: POST /express/{listing_id}
     API->>Cache: Check content cache
     alt Cache hit
         Cache-->>API: Content bytes
@@ -52,7 +52,7 @@ The transaction is created directly in `completed` state with `verification_stat
 ## Express Buy
 
 <div className="api-method-header">
-  `GET /express/{listing_id}`
+  `POST /express/{listing_id}`
 </div>
 
 Buy a listing and receive the content in one request. Optimized for speed -- target latency is under 100ms for cached content.
@@ -63,17 +63,12 @@ Buy a listing and receive the content in one request. Optimized for speed -- tar
   The ID of the listing to purchase.
 </ParamField>
 
-### Query Parameters
+### Request Body
 
-<ParamField query="payment_method" type="string" default="token">
-  Payment method to use. Must be one of:
-
-  | Value | Description |
-  |-------|-------------|
-  | `token` | Pay with platform credits (default). Debits buyer, credits seller with 2% fee. |
-  | `fiat` | Pay with fiat currency. |
-  | `simulated` | Simulated payment for testing. No actual charges. |
-</ParamField>
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `payment_method` | string | `token` | Payment method. `token` debits buyer credits and credits seller with a 2% platform fee. |
+| `payment_method` values | enum | - | `token`, `fiat`, `simulated` |
 
 ### Response Fields
 
@@ -129,17 +124,19 @@ Buy a listing and receive the content in one request. Optimized for speed -- tar
 
 <CodeGroup>
 ```bash cURL
-curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
-  "http://localhost:8000/api/v1/express/lst_f7g8h9i0j1k2?payment_method=token"
+curl -X POST "http://localhost:8000/api/v1/express/lst_f7g8h9i0j1k2" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -H "Content-Type: application/json" \
+  -d '{"payment_method":"token"}'
 ```
 
 ```python Python (httpx)
 import httpx
 
-response = httpx.get(
+response = httpx.post(
     "http://localhost:8000/api/v1/express/lst_f7g8h9i0j1k2",
     headers={"Authorization": "Bearer eyJhbGciOiJIUzI1NiIs..."},
-    params={"payment_method": "token"},
+    json={"payment_method": "token"},
 )
 data = response.json()
 
@@ -154,11 +151,14 @@ content = data["content"]
 
 ```javascript JavaScript (fetch)
 const response = await fetch(
-  "http://localhost:8000/api/v1/express/lst_f7g8h9i0j1k2?payment_method=token",
+  "http://localhost:8000/api/v1/express/lst_f7g8h9i0j1k2",
   {
+    method: "POST",
     headers: {
       Authorization: "Bearer eyJhbGciOiJIUzI1NiIs...",
+      "Content-Type": "application/json",
     },
+    body: JSON.stringify({ payment_method: "token" }),
   }
 );
 const data = await response.json();
@@ -211,7 +211,7 @@ Express Buy is **irreversible**. The purchase is completed atomically -- there i
 
 ## Platform Fee
 
-When using `payment_method=token`, the platform applies a **2% fee** on each transaction:
+When using `payment_method: "token"` in the request body, the platform applies a **2% fee** on each transaction:
 
 | Component | Recipient | Amount |
 |-----------|-----------|--------|
@@ -248,7 +248,7 @@ The first purchase of a listing is typically slower (cold storage fetch). Subseq
 
 | Feature | Express Buy | Standard Transaction |
 |---------|-------------|---------------------|
-| **Requests** | 1 GET request | 4 POST requests |
+| **Requests** | 1 POST request | 4 POST requests |
 | **Latency** | < 100ms (cached) | Seconds to minutes |
 | **State machine** | Skipped (direct to `completed`) | Full lifecycle with intermediate states |
 | **Content delivery** | Inline in response | Separate deliver step |
@@ -316,10 +316,10 @@ if not quality["all_passed"]:
     exit()
 
 # Step 3: Express buy
-purchase = httpx.get(
+purchase = httpx.post(
     f"{BASE}/express/{listing_id}",
     headers=headers,
-    params={"payment_method": "token"},
+    json={"payment_method": "token"},
 ).json()
 
 print(f"Purchased in {purchase['delivery_ms']}ms")
