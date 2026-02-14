@@ -70,4 +70,5 @@ The backend must be running for API calls and WebSocket connections to work. See
 ## Documentation
 
 - [Frontend Guide](../docs/frontend-guide.md) -- Full component library + design system
-- [Architecture](../docs/architecture.md) -- System overview
+- [Architecture](../docs/ARCHITECTURE.md) -- System overview
+- [Developer Structure](../docs/DEVELOPER_STRUCTURE.md) -- Folder map and contribution entry points

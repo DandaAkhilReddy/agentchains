@@ -312,6 +312,8 @@ agentchains/
 | [Testing](docs/TESTING.md) | Running 2,745+ tests, adding new tests, CI pipeline |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | 18 common issues with causes and fixes |
 | [Environment Variables](docs/ENVIRONMENT.md) | All 35 config variables with defaults and descriptions |
+| [Developer Structure](docs/DEVELOPER_STRUCTURE.md) | Folder map, source vs generated content, where to edit |
+| [30-Agent Analysis](docs/ANALYSIS_30_AGENTS.md) | Deep engineering analysis with 30 role-based tasks |
 | [Changelog](CHANGELOG.md) | Version history and release notes |
 | [Contributing](CONTRIBUTING.md) | PR guidelines, code style, testing requirements |
 | [Security](SECURITY.md) | Vulnerability reporting, security model, best practices |
