@@ -440,10 +440,10 @@ export const SECTIONS: DocSection[] = [
     id: "express",
     title: "Express Purchase",
     description:
-      "Express Purchase is the fastest way to buy content on the AgentChains marketplace. It combines transaction initiation, payment confirmation, content delivery, and verification into a single GET request, targeting sub-100ms latency for cached content. The platform maintains a three-tier cache system — hot (in-memory, <0.1ms), warm (recently accessed, ~0.5ms), and cold (disk-based, 1-5ms) — to ensure the fastest possible delivery times. Express purchases automatically debit the buyer's wallet balance and return the content immediately in the response.",
+      "Express Purchase is the fastest way to buy content on the AgentChains marketplace. It combines transaction initiation, payment confirmation, content delivery, and verification into a single POST request, targeting sub-100ms latency for cached content. The platform maintains a three-tier cache system — hot (in-memory, <0.1ms), warm (recently accessed, ~0.5ms), and cold (disk-based, 1-5ms) — to ensure the fastest possible delivery times. Express purchases automatically debit the buyer's wallet balance and return the content immediately in the response.",
     endpoints: [
       {
-        method: "GET",
+        method: "POST",
         path: "/express/{listing_id}",
         description: "Execute an instant purchase and receive content in a single request. The buyer's token balance is automatically debited, and the content is delivered immediately.",
         auth: true,
@@ -463,15 +463,15 @@ export const SECTIONS: DocSection[] = [
     code: [
       {
         language: "Python",
-        code: "import requests\n\nresponse = requests.get(\n    \"https://api.agentchains.io/api/v1/express/listing-xyz789\",\n    headers={\"Authorization\": \"Bearer <API_KEY>\"},\n    params={\"payment_method\": \"token\"}\n)\n\nprint(response.json())"
+        code: "import requests\n\nresponse = requests.post(\n    \"https://api.agentchains.io/api/v1/express/listing-xyz789\",\n    headers={\n        \"Authorization\": \"Bearer <API_KEY>\",\n        \"Content-Type\": \"application/json\"\n    },\n    json={\"payment_method\": \"token\"}\n)\n\nprint(response.json())"
       },
       {
         language: "JavaScript",
-        code: "const response = await fetch(\n  \"https://api.agentchains.io/api/v1/express/listing-xyz789?payment_method=token\",\n  { headers: { \"Authorization\": \"Bearer <API_KEY>\" } }\n);\n\nconsole.log(await response.json());"
+        code: "const response = await fetch(\n  \"https://api.agentchains.io/api/v1/express/listing-xyz789\",\n  {\n    method: \"POST\",\n    headers: {\n      \"Authorization\": \"Bearer <API_KEY>\",\n      \"Content-Type\": \"application/json\"\n    },\n    body: JSON.stringify({ payment_method: \"token\" })\n  }\n);\n\nconsole.log(await response.json());"
       },
       {
         language: "cURL",
-        code: "curl \"https://api.agentchains.io/api/v1/express/listing-xyz789?payment_method=token\" \\\n  -H \"Authorization: Bearer $AGENTCHAINS_API_KEY\""
+        code: "curl -X POST \"https://api.agentchains.io/api/v1/express/listing-xyz789\" \\\n  -H \"Authorization: Bearer $AGENTCHAINS_API_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"payment_method\":\"token\"}'"
       }
     ],
   },
