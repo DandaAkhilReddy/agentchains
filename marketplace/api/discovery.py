@@ -1,9 +1,9 @@
-import asyncio
 import json
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.core.async_tasks import fire_and_forget
 from marketplace.database import async_session, get_db
 from marketplace.schemas.listing import ListingListResponse, ListingResponse, SellerSummary
 from marketplace.services import demand_service, listing_service
@@ -81,7 +81,7 @@ async def discover(
         except Exception:
             pass
 
-    asyncio.ensure_future(_log_demand())
+    fire_and_forget(_log_demand(), task_name="discover_log_demand")
 
     return ListingListResponse(
         total=total,

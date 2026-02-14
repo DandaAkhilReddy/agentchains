@@ -29,6 +29,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
+from marketplace.core.async_tasks import fire_and_forget
 from marketplace.core.hashing import compute_ledger_hash
 from marketplace.models.token_account import (
     TokenAccount,
@@ -395,16 +396,15 @@ async def transfer(
 
     # Broadcast payment event
     try:
-        import asyncio
         from marketplace.main import broadcast_event
-        asyncio.ensure_future(broadcast_event("payment", {
+        fire_and_forget(broadcast_event("payment", {
             "from_agent_id": from_agent_id,
             "to_agent_id": to_agent_id,
             "amount": float(amount_d),
             "fee": float(fee_d),
             "tx_type": tx_type,
             "creator_royalty": float(royalty_ledger.amount) if royalty_ledger else 0,
-        }))
+        }), task_name="broadcast_payment")
     except Exception:
         pass
 
@@ -495,12 +495,11 @@ async def deposit(
 
     # Broadcast deposit event
     try:
-        import asyncio
         from marketplace.main import broadcast_event
-        asyncio.ensure_future(broadcast_event("deposit", {
+        fire_and_forget(broadcast_event("deposit", {
             "agent_id": agent_id,
             "amount_usd": float(amount_d),
-        }))
+        }), task_name="broadcast_deposit")
     except Exception:
         pass
 

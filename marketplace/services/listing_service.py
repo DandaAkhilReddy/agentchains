@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.core.async_tasks import fire_and_forget
 from marketplace.core.exceptions import ListingNotFoundError
 from marketplace.models.listing import DataListing
 from marketplace.schemas.listing import ListingCreateRequest, ListingUpdateRequest
@@ -54,9 +55,8 @@ async def create_listing(
     # Broadcast event
     try:
         from marketplace.main import broadcast_event
-        import asyncio
 
-        asyncio.ensure_future(
+        fire_and_forget(
             broadcast_event(
                 "listing_created",
                 {
@@ -66,7 +66,8 @@ async def create_listing(
                     "price_usdc": float(listing.price_usdc),
                     "seller_id": seller_id,
                 },
-            )
+            ),
+            task_name="broadcast_listing_created",
         )
     except Exception:
         pass

@@ -13,6 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 
+from marketplace.core.async_tasks import fire_and_forget
 from marketplace.database import init_db
 from marketplace.models import *  # noqa: ensure all models are imported for create_all
 
@@ -61,7 +62,7 @@ async def broadcast_event(event_type: str, data: dict) -> None:
         "data": data,
     })
     # Dispatch to OpenClaw webhooks in background (fire-and-forget)
-    asyncio.ensure_future(_dispatch_openclaw(event_type, data))
+    fire_and_forget(_dispatch_openclaw(event_type, data), task_name="dispatch_openclaw")
 
 
 async def _dispatch_openclaw(event_type: str, data: dict) -> None:

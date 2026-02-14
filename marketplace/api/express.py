@@ -1,7 +1,5 @@
 """Express delivery endpoint — single-request purchase returning content immediately."""
 
-import asyncio
-
 from typing import Optional
 
 from fastapi import APIRouter, Depends
@@ -9,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
+from marketplace.core.async_tasks import fire_and_forget
 from marketplace.database import async_session, get_db
 from marketplace.services import demand_service, express_service
 
@@ -50,6 +49,6 @@ async def express_buy(
         except Exception:
             pass
 
-    asyncio.ensure_future(_log_demand())
+    fire_and_forget(_log_demand(), task_name="express_log_demand")
 
     return response

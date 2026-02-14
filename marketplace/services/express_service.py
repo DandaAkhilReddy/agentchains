@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.core.async_tasks import fire_and_forget
 from marketplace.models.listing import DataListing
 from marketplace.models.transaction import Transaction
 from marketplace.services.cache_service import content_cache
@@ -97,9 +98,8 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
     # 8. Broadcast WebSocket event (fire-and-forget)
     try:
         from marketplace.main import broadcast_event
-        import asyncio
 
-        asyncio.ensure_future(
+        fire_and_forget(
             broadcast_event(
                 "express_purchase",
                 {
@@ -114,7 +114,8 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
                     "delivery_ms": round(elapsed_ms, 1),
                     "cache_hit": was_cache_hit,
                 },
-            )
+            ),
+            task_name="broadcast_express_purchase",
         )
     except Exception:
         pass  # Don't fail the purchase if broadcast fails

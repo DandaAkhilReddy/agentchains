@@ -1,12 +1,11 @@
 """Auto-match endpoint: agents describe what they need, marketplace finds the best seller."""
 
-import asyncio
-
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
+from marketplace.core.async_tasks import fire_and_forget
 from marketplace.database import async_session, get_db
 from marketplace.services import demand_service, match_service
 
@@ -52,7 +51,7 @@ async def auto_match(
         except Exception:
             pass
 
-    asyncio.ensure_future(_log_demand())
+    fire_and_forget(_log_demand(), task_name="automatch_log_demand")
 
     if req.auto_buy and result["matches"]:
         top = result["matches"][0]
