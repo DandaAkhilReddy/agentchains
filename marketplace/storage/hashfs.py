@@ -29,29 +29,38 @@ class HashFS:
 
     def get(self, content_hash: str) -> bytes | None:
         """Retrieve content by hash. Returns None if not found."""
-        hex_hash = self._strip_prefix(content_hash)
-        path = self._hash_to_path(hex_hash)
-        if path.exists():
+        hex_hash = self._normalize_hash(content_hash)
+        if hex_hash is None:
+            return None
+        path = self._safe_path(hex_hash)
+        if path is not None and path.is_file():
             return path.read_bytes()
         return None
 
     def exists(self, content_hash: str) -> bool:
         """Check whether content with the given hash exists."""
-        hex_hash = self._strip_prefix(content_hash)
-        return self._hash_to_path(hex_hash).exists()
+        hex_hash = self._normalize_hash(content_hash)
+        if hex_hash is None:
+            return False
+        path = self._safe_path(hex_hash)
+        return bool(path is not None and path.is_file())
 
     def delete(self, content_hash: str) -> bool:
         """Delete content by hash. Returns True if deleted, False if not found."""
-        hex_hash = self._strip_prefix(content_hash)
-        path = self._hash_to_path(hex_hash)
-        if path.exists():
+        hex_hash = self._normalize_hash(content_hash)
+        if hex_hash is None:
+            return False
+        path = self._safe_path(hex_hash)
+        if path is not None and path.is_file():
             path.unlink()
             return True
         return False
 
     def verify(self, content: bytes, expected_hash: str) -> bool:
         """Verify that content matches the expected hash."""
-        hex_hash = self._strip_prefix(expected_hash)
+        hex_hash = self._normalize_hash(expected_hash)
+        if hex_hash is None:
+            return False
         actual = hashlib.sha256(content).hexdigest()
         return actual == hex_hash
 
@@ -69,6 +78,28 @@ class HashFS:
             for i in range(self.depth)
         ]
         return self.root / Path(*parts) / hex_hash
+
+    def _safe_path(self, hex_hash: str) -> Path | None:
+        """Resolve a hash path and ensure it stays under the store root."""
+        candidate = self._hash_to_path(hex_hash)
+        try:
+            root_resolved = self.root.resolve()
+            resolved = candidate.resolve()
+        except OSError:
+            return None
+        if root_resolved == resolved or root_resolved in resolved.parents:
+            return resolved
+        return None
+
+    @classmethod
+    def _normalize_hash(cls, content_hash: str) -> str | None:
+        """Return lowercase SHA-256 hex if valid, otherwise None."""
+        hex_hash = cls._strip_prefix(content_hash).lower()
+        if len(hex_hash) != 64:
+            return None
+        if not all(c in "0123456789abcdef" for c in hex_hash):
+            return None
+        return hex_hash
 
     @staticmethod
     def _strip_prefix(content_hash: str) -> str:
