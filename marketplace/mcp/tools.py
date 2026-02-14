@@ -3,6 +3,9 @@
 Each tool maps to existing service functions — no business logic duplication.
 """
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 TOOL_DEFINITIONS = [
     {
         "name": "marketplace_discover",
@@ -117,36 +120,55 @@ TOOL_DEFINITIONS = [
 ]
 
 
-async def execute_tool(tool_name: str, arguments: dict, agent_id: str) -> dict:
+async def execute_tool(
+    tool_name: str,
+    arguments: dict,
+    agent_id: str,
+    db: AsyncSession | None = None,
+) -> dict:
     """Execute an MCP tool by calling the corresponding service function."""
-    from marketplace.database import async_session
 
-    async with async_session() as db:
+    async def _execute(active_db: AsyncSession) -> dict:
         if tool_name == "marketplace_discover":
             from marketplace.services.listing_service import discover
+
             listings, total = await discover(
-                db, q=arguments.get("q"), category=arguments.get("category"),
-                min_quality=arguments.get("min_quality"), max_price=arguments.get("max_price"),
-                page=arguments.get("page", 1), page_size=arguments.get("page_size", 20),
+                active_db,
+                q=arguments.get("q"),
+                category=arguments.get("category"),
+                min_quality=arguments.get("min_quality"),
+                max_price=arguments.get("max_price"),
+                page=arguments.get("page", 1),
+                page_size=arguments.get("page_size", 20),
             )
             return {
                 "listings": [
-                    {"id": l.id, "title": l.title, "category": l.category,
-                     "price_usdc": float(l.price_usdc), "quality_score": float(l.quality_score) if l.quality_score else 0.5}
-                    for l in listings
+                    {
+                        "id": listing.id,
+                        "title": listing.title,
+                        "category": listing.category,
+                        "price_usdc": float(listing.price_usdc),
+                        "quality_score": float(listing.quality_score)
+                        if listing.quality_score
+                        else 0.5,
+                    }
+                    for listing in listings
                 ],
                 "total": total,
             }
 
-        elif tool_name == "marketplace_express_buy":
-            from marketplace.services.express_service import express_buy
-            response = await express_buy(db, arguments["listing_id"], agent_id)
+        if tool_name == "marketplace_express_buy":
             import json
+
+            from marketplace.services.express_service import express_buy
+
+            response = await express_buy(active_db, arguments["listing_id"], agent_id)
             return json.loads(response.body.decode("utf-8"))
 
-        elif tool_name == "marketplace_sell":
-            from marketplace.services.listing_service import create_listing
+        if tool_name == "marketplace_sell":
             from marketplace.schemas.listing import ListingCreateRequest
+            from marketplace.services.listing_service import create_listing
+
             req = ListingCreateRequest(
                 title=arguments["title"],
                 description=arguments.get("description", ""),
@@ -156,38 +178,55 @@ async def execute_tool(tool_name: str, arguments: dict, agent_id: str) -> dict:
                 tags=arguments.get("tags", []),
                 quality_score=arguments.get("quality_score", 0.5),
             )
-            listing = await create_listing(db, agent_id, req)
-            return {"listing_id": listing.id, "title": listing.title, "content_hash": listing.content_hash}
+            listing = await create_listing(active_db, agent_id, req)
+            return {
+                "listing_id": listing.id,
+                "title": listing.title,
+                "content_hash": listing.content_hash,
+            }
 
-        elif tool_name == "marketplace_auto_match":
+        if tool_name == "marketplace_auto_match":
             from marketplace.services.match_service import auto_match
+
             return await auto_match(
-                db, arguments["description"],
+                active_db,
+                arguments["description"],
                 category=arguments.get("category"),
                 max_price=arguments.get("max_price"),
                 buyer_id=agent_id,
                 routing_strategy=arguments.get("routing_strategy"),
             )
 
-        elif tool_name == "marketplace_register_catalog":
+        if tool_name == "marketplace_register_catalog":
             from marketplace.services.catalog_service import register_catalog_entry
+
             entry = await register_catalog_entry(
-                db, agent_id, arguments["namespace"], arguments["topic"],
+                active_db,
+                agent_id,
+                arguments["namespace"],
+                arguments["topic"],
                 arguments.get("description", ""),
                 price_range_min=arguments.get("price_range_min", 0.001),
                 price_range_max=arguments.get("price_range_max", 0.01),
             )
             return {"entry_id": entry.id, "namespace": entry.namespace, "topic": entry.topic}
 
-        elif tool_name == "marketplace_trending":
+        if tool_name == "marketplace_trending":
             from marketplace.services.demand_service import get_trending
-            signals = await get_trending(db, category=arguments.get("category"), limit=arguments.get("limit", 10))
+
+            signals = await get_trending(
+                active_db,
+                category=arguments.get("category"),
+                limit=arguments.get("limit", 10),
+            )
             return {"signals": signals}
 
-        elif tool_name == "marketplace_reputation":
+        if tool_name == "marketplace_reputation":
             from sqlalchemy import select
+
             from marketplace.models.agent_stats import AgentStats
-            result = await db.execute(
+
+            result = await active_db.execute(
                 select(AgentStats).where(AgentStats.agent_id == arguments["agent_id"])
             )
             stats = result.scalar_one_or_none()
@@ -201,10 +240,12 @@ async def execute_tool(tool_name: str, arguments: dict, agent_id: str) -> dict:
                 "primary_specialization": stats.primary_specialization,
             }
 
-        elif tool_name == "marketplace_verify_zkp":
+        if tool_name == "marketplace_verify_zkp":
             from marketplace.services.zkp_service import verify_listing
+
             return await verify_listing(
-                db, arguments["listing_id"],
+                active_db,
+                arguments["listing_id"],
                 keywords=arguments.get("keywords"),
                 schema_has_fields=arguments.get("schema_has_fields"),
                 min_size=arguments.get("min_size"),
@@ -212,3 +253,11 @@ async def execute_tool(tool_name: str, arguments: dict, agent_id: str) -> dict:
             )
 
         return {"error": f"Unknown tool: {tool_name}"}
+
+    if db is not None:
+        return await _execute(db)
+
+    from marketplace.database import async_session
+
+    async with async_session() as session:
+        return await _execute(session)

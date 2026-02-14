@@ -4,14 +4,13 @@ Implements the Model Context Protocol for agent-to-agent communication.
 Supports: initialize, tools/list, tools/call, resources/list, resources/read.
 """
 
-import asyncio
 import json
-import uuid
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.database import get_db
 from marketplace.mcp.auth import validate_mcp_auth
 from marketplace.mcp.session_manager import session_manager
 from marketplace.mcp.tools import TOOL_DEFINITIONS, execute_tool
@@ -33,7 +32,11 @@ def _jsonrpc_error(id, code, message):
     return {"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}
 
 
-async def handle_message(body: dict, session_id: str | None = None) -> dict:
+async def handle_message(
+    body: dict,
+    session_id: str | None = None,
+    db: AsyncSession | None = None,
+) -> dict:
     """Process a JSON-RPC message and return the response."""
     method = body.get("method", "")
     params = body.get("params", {})
@@ -86,7 +89,7 @@ async def handle_message(body: dict, session_id: str | None = None) -> dict:
         tool_name = params.get("name", "")
         arguments = params.get("arguments", {})
         try:
-            result = await execute_tool(tool_name, arguments, session.agent_id)
+            result = await execute_tool(tool_name, arguments, session.agent_id, db=db)
             return _jsonrpc_response(msg_id, {
                 "content": [{"type": "text", "text": json.dumps(result)}],
             })
@@ -101,7 +104,7 @@ async def handle_message(body: dict, session_id: str | None = None) -> dict:
     elif method == "resources/read":
         uri = params.get("uri", "")
         try:
-            result = await read_resource(uri, session.agent_id)
+            result = await read_resource(uri, session.agent_id, db=db)
             return _jsonrpc_response(msg_id, {
                 "contents": [{"uri": uri, "mimeType": "application/json", "text": json.dumps(result)}],
             })
@@ -120,16 +123,22 @@ async def handle_message(body: dict, session_id: str | None = None) -> dict:
 
 
 @router.post("/message")
-async def mcp_message(request: Request):
+async def mcp_message(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
     """Handle a single MCP JSON-RPC message."""
     body = await request.json()
     session_id = request.headers.get("X-MCP-Session-ID")
-    response = await handle_message(body, session_id)
+    response = await handle_message(body, session_id, db=db)
     return JSONResponse(content=response)
 
 
 @router.post("/sse")
-async def mcp_sse(request: Request):
+async def mcp_sse(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
     """SSE endpoint for MCP communication.
 
     Client sends JSON-RPC messages, server responds via SSE events.
@@ -139,7 +148,7 @@ async def mcp_sse(request: Request):
     session_id = request.headers.get("X-MCP-Session-ID")
 
     async def event_stream():
-        response = await handle_message(body, session_id)
+        response = await handle_message(body, session_id, db=db)
         data = json.dumps(response)
         yield f"event: message\ndata: {data}\n\n"
 
