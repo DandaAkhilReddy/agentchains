@@ -5,11 +5,10 @@ broadcast filtering, backpressure handling, and error resilience.
 /ws/feed endpoint logic, and broadcast_event under adversarial conditions.
 """
 
-import asyncio
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from jose import jwt
@@ -17,7 +16,7 @@ from jose import jwt
 from marketplace.config import settings
 from marketplace.core.auth import create_access_token, decode_token
 from marketplace.core.exceptions import UnauthorizedError
-from marketplace.main import ConnectionManager, broadcast_event, ws_manager
+from marketplace.main import ConnectionManager, broadcast_event
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +326,7 @@ class TestBroadcastFiltering:
             return None
 
         with patch("marketplace.main.ws_manager", mgr), \
-             patch("marketplace.main._dispatch_openclaw", new_callable=AsyncMock) as mock_dispatch, \
+             patch("marketplace.main._dispatch_openclaw", new_callable=AsyncMock), \
              patch("marketplace.main.fire_and_forget", side_effect=_capture_and_close) as mock_schedule:
             await broadcast_event("opportunity_created", {"id": "opp-1"})
 

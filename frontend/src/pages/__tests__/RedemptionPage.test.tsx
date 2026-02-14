@@ -90,6 +90,15 @@ describe("RedemptionPage", () => {
     vi.mocked(api.cancelRedemption).mockResolvedValue({ message: "Redemption cancelled" });
   });
 
+  async function selectEnabledMethod(name: RegExp) {
+    const button = await screen.findByRole("button", { name });
+    await waitFor(() => {
+      expect(button).toBeEnabled();
+    });
+    fireEvent.click(button);
+    return button;
+  }
+
   it("renders page title and description", async () => {
     renderWithProviders(<RedemptionPage token={mockToken} />);
 
@@ -152,8 +161,7 @@ describe("RedemptionPage", () => {
       expect(screen.getByText("API Credits")).toBeInTheDocument();
     });
 
-    const apiCreditsButton = screen.getByRole("button", { name: /API Credits/ });
-    fireEvent.click(apiCreditsButton);
+    await selectEnabledMethod(/API Credits/);
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText("Amount in USD")).toBeInTheDocument();
@@ -168,8 +176,7 @@ describe("RedemptionPage", () => {
       expect(screen.getByText("API Credits")).toBeInTheDocument();
     });
 
-    const apiCreditsButton = screen.getByRole("button", { name: /API Credits/ });
-    fireEvent.click(apiCreditsButton);
+    await selectEnabledMethod(/API Credits/);
 
     const amountInput = await screen.findByPlaceholderText("Amount in USD");
     fireEvent.change(amountInput, { target: { value: "5.00" } });
@@ -186,8 +193,7 @@ describe("RedemptionPage", () => {
       expect(screen.getByText("API Credits")).toBeInTheDocument();
     });
 
-    const apiCreditsButton = screen.getByRole("button", { name: /API Credits/ });
-    fireEvent.click(apiCreditsButton);
+    await selectEnabledMethod(/API Credits/);
 
     const maxButton = await screen.findByRole("button", { name: /Max/ });
     fireEvent.click(maxButton);
@@ -205,8 +211,7 @@ describe("RedemptionPage", () => {
       expect(screen.getByText("API Credits")).toBeInTheDocument();
     });
 
-    const apiCreditsButton = screen.getByRole("button", { name: /API Credits/ });
-    fireEvent.click(apiCreditsButton);
+    await selectEnabledMethod(/API Credits/);
 
     const amountInput = await screen.findByPlaceholderText("Amount in USD");
     fireEvent.change(amountInput, { target: { value: "5.00" } });
@@ -251,8 +256,7 @@ describe("RedemptionPage", () => {
       expect(screen.getByText("API Credits")).toBeInTheDocument();
     });
 
-    const apiCreditsButton = screen.getByRole("button", { name: /API Credits/ });
-    fireEvent.click(apiCreditsButton);
+    await selectEnabledMethod(/API Credits/);
 
     const amountInput = await screen.findByPlaceholderText("Amount in USD");
     fireEvent.change(amountInput, { target: { value: "5.00" } });
@@ -275,8 +279,7 @@ describe("RedemptionPage", () => {
       expect(screen.getByText("API Credits")).toBeInTheDocument();
     });
 
-    const apiCreditsButton = screen.getByRole("button", { name: /API Credits/ });
-    fireEvent.click(apiCreditsButton);
+    await selectEnabledMethod(/API Credits/);
 
     const amountInput = await screen.findByPlaceholderText("Amount in USD");
     fireEvent.change(amountInput, { target: { value: "5.00" } });
@@ -352,16 +355,14 @@ describe("RedemptionPage", () => {
     });
 
     // Click on API Credits
-    const apiCreditsButton = screen.getByRole("button", { name: /API Credits/ });
-    fireEvent.click(apiCreditsButton);
+    await selectEnabledMethod(/API Credits/);
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText("Amount in USD")).toBeInTheDocument();
     });
 
     // Click on Gift Card
-    const giftCardButton = screen.getByRole("button", { name: /Gift Card/ });
-    fireEvent.click(giftCardButton);
+    await selectEnabledMethod(/Gift Card/);
 
     // Amount input should still be visible
     await waitFor(() => {
@@ -369,8 +370,7 @@ describe("RedemptionPage", () => {
     });
 
     // Click on UPI Transfer
-    const upiButton = screen.getByRole("button", { name: /UPI Transfer/ });
-    fireEvent.click(upiButton);
+    await selectEnabledMethod(/UPI Transfer/);
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText("Amount in USD")).toBeInTheDocument();
@@ -416,8 +416,7 @@ describe("RedemptionPage", () => {
       expect(screen.getByText("API Credits")).toBeInTheDocument();
     });
 
-    const apiCreditsButton = screen.getByRole("button", { name: /API Credits/ });
-    fireEvent.click(apiCreditsButton);
+    await selectEnabledMethod(/API Credits/);
 
     const amountInput = await screen.findByPlaceholderText("Amount in USD") as HTMLInputElement;
     fireEvent.change(amountInput, { target: { value: "5.00" } });
@@ -443,8 +442,7 @@ describe("RedemptionPage", () => {
       expect(screen.getByText("API Credits")).toBeInTheDocument();
     });
 
-    const apiCreditsButton = screen.getByRole("button", { name: /API Credits/ });
-    fireEvent.click(apiCreditsButton);
+    await selectEnabledMethod(/API Credits/);
 
     const withdrawButton = await screen.findByRole("button", { name: /Withdraw/ });
 
@@ -478,8 +476,7 @@ describe("RedemptionPage", () => {
       expect(api.fetchRedemptions).toHaveBeenCalledTimes(1);
     });
 
-    const apiCreditsButton = screen.getByRole("button", { name: /API Credits/ });
-    fireEvent.click(apiCreditsButton);
+    await selectEnabledMethod(/API Credits/);
 
     const amountInput = await screen.findByPlaceholderText("Amount in USD");
     fireEvent.change(amountInput, { target: { value: "5.00" } });

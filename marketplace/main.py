@@ -15,7 +15,7 @@ from starlette.responses import FileResponse, Response
 
 from marketplace.core.async_tasks import fire_and_forget
 from marketplace.database import init_db
-from marketplace.models import *  # noqa: ensure all models are imported for create_all
+from marketplace.models import *  # noqa: F403
 
 APP_VERSION = "0.4.0"
 logger = logging.getLogger(__name__)
