@@ -1,5 +1,8 @@
 """MCP resource definitions: 5 read-only data resources agents can access."""
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 RESOURCE_DEFINITIONS = [
     {
         "uri": "marketplace://catalog",
@@ -34,47 +37,66 @@ RESOURCE_DEFINITIONS = [
 ]
 
 
-async def read_resource(uri: str, agent_id: str) -> dict:
+async def read_resource(
+    uri: str,
+    agent_id: str,
+    db: AsyncSession | None = None,
+) -> dict:
     """Read an MCP resource by URI."""
-    import json
-    from marketplace.database import async_session
 
-    async with async_session() as db:
+    async def _read(active_db: AsyncSession) -> dict:
         if uri == "marketplace://catalog":
             from marketplace.services.catalog_service import search_catalog
-            entries, total = await search_catalog(db, page_size=100)
+
+            entries, total = await search_catalog(active_db, page_size=100)
             return {
                 "entries": [
-                    {"id": e.id, "namespace": e.namespace, "topic": e.topic,
-                     "agent_id": e.agent_id, "quality_avg": float(e.quality_avg) if e.quality_avg else 0.5,
-                     "active_listings": e.active_listings_count}
-                    for e in entries
+                    {
+                        "id": entry.id,
+                        "namespace": entry.namespace,
+                        "topic": entry.topic,
+                        "agent_id": entry.agent_id,
+                        "quality_avg": float(entry.quality_avg) if entry.quality_avg else 0.5,
+                        "active_listings": entry.active_listings_count,
+                    }
+                    for entry in entries
                 ],
                 "total": total,
             }
 
-        elif uri == "marketplace://listings/active":
+        if uri == "marketplace://listings/active":
             from marketplace.services.listing_service import list_listings
-            listings, total = await list_listings(db, page_size=50)
+
+            listings, total = await list_listings(active_db, page_size=50)
             return {
                 "listings": [
-                    {"id": l.id, "title": l.title, "category": l.category,
-                     "price_usdc": float(l.price_usdc), "quality_score": float(l.quality_score) if l.quality_score else 0.5,
-                     "seller_id": l.seller_id}
-                    for l in listings
+                    {
+                        "id": listing.id,
+                        "title": listing.title,
+                        "category": listing.category,
+                        "price_usdc": float(listing.price_usdc),
+                        "quality_score": float(listing.quality_score)
+                        if listing.quality_score
+                        else 0.5,
+                        "seller_id": listing.seller_id,
+                    }
+                    for listing in listings
                 ],
                 "total": total,
             }
 
-        elif uri == "marketplace://trending":
+        if uri == "marketplace://trending":
             from marketplace.services.demand_service import get_trending
-            signals = await get_trending(db, limit=20)
+
+            signals = await get_trending(active_db, limit=20)
             return {"signals": signals}
 
-        elif uri == "marketplace://opportunities":
+        if uri == "marketplace://opportunities":
             from sqlalchemy import select
+
             from marketplace.models.opportunity import OpportunitySignal
-            result = await db.execute(
+
+            result = await active_db.execute(
                 select(OpportunitySignal)
                 .where(OpportunitySignal.status == "active")
                 .order_by(OpportunitySignal.urgency_score.desc())
@@ -83,26 +105,31 @@ async def read_resource(uri: str, agent_id: str) -> dict:
             opps = list(result.scalars().all())
             return {
                 "opportunities": [
-                    {"id": o.id, "query_pattern": o.query_pattern,
-                     "estimated_revenue_usdc": float(o.estimated_revenue_usdc),
-                     "urgency_score": float(o.urgency_score)}
-                    for o in opps
-                ],
+                    {
+                        "id": opp.id,
+                        "query_pattern": opp.query_pattern,
+                        "estimated_revenue_usdc": float(opp.estimated_revenue_usdc),
+                        "urgency_score": float(opp.urgency_score),
+                    }
+                    for opp in opps
+                ]
             }
 
-        elif uri.startswith("marketplace://agent/"):
-            target_id = uri.split("/")[-1]
+        if uri.startswith("marketplace://agent/"):
             from sqlalchemy import select
-            from marketplace.models.agent_stats import AgentStats
+
             from marketplace.models.agent import RegisteredAgent
-            result = await db.execute(
+            from marketplace.models.agent_stats import AgentStats
+
+            target_id = uri.split("/")[-1]
+            result = await active_db.execute(
                 select(RegisteredAgent).where(RegisteredAgent.id == target_id)
             )
             agent = result.scalar_one_or_none()
             if not agent:
                 return {"error": "Agent not found"}
 
-            stats_result = await db.execute(
+            stats_result = await active_db.execute(
                 select(AgentStats).where(AgentStats.agent_id == target_id)
             )
             stats = stats_result.scalar_one_or_none()
@@ -116,7 +143,17 @@ async def read_resource(uri: str, agent_id: str) -> dict:
                     "total_earned_usdc": float(stats.total_earned_usdc) if stats else 0,
                     "unique_buyers_served": stats.unique_buyers_served if stats else 0,
                     "primary_specialization": stats.primary_specialization if stats else None,
-                } if stats else None,
+                }
+                if stats
+                else None,
             }
 
-    return {"error": f"Unknown resource: {uri}"}
+        return {"error": f"Unknown resource: {uri}"}
+
+    if db is not None:
+        return await _read(db)
+
+    from marketplace.database import async_session
+
+    async with async_session() as session:
+        return await _read(session)
