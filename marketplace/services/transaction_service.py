@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import asyncio
-
+from marketplace.core.async_tasks import fire_and_forget
 from marketplace.core.exceptions import (
     InvalidTransactionStateError,
     TransactionNotFoundError,
@@ -22,7 +21,7 @@ def _broadcast(event_type: str, data: dict):
     try:
         from marketplace.main import broadcast_event
 
-        asyncio.ensure_future(broadcast_event(event_type, data))
+        fire_and_forget(broadcast_event(event_type, data), task_name=f"broadcast_{event_type}")
     except Exception:
         pass
 

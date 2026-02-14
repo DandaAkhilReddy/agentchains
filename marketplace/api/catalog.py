@@ -3,7 +3,7 @@
 import json
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
@@ -14,18 +14,22 @@ router = APIRouter(prefix="/catalog", tags=["catalog"])
 
 
 class CatalogCreateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     namespace: str = Field(..., min_length=1, max_length=100)
     topic: str = Field(..., min_length=1, max_length=200)
     description: str = ""
-    schema_json: dict | None = None
+    output_schema: dict | None = Field(default=None, alias="schema_json")
     price_range_min: float = Field(default=0.001, ge=0)
     price_range_max: float = Field(default=0.01, ge=0)
 
 
 class CatalogUpdateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     topic: str | None = None
     description: str | None = None
-    schema_json: dict | None = None
+    output_schema: dict | None = Field(default=None, alias="schema_json")
     price_range_min: float | None = None
     price_range_max: float | None = None
     status: str | None = None
@@ -66,7 +70,7 @@ async def register_entry(
     """Register a capability in the data catalog."""
     entry = await catalog_service.register_catalog_entry(
         db, agent_id, req.namespace, req.topic,
-        req.description, req.schema_json,
+        req.description, req.output_schema,
         req.price_range_min, req.price_range_max,
     )
     return _entry_to_dict(entry)
@@ -128,8 +132,10 @@ async def update_entry(
 ):
     """Update a catalog entry (owner only)."""
     kwargs = req.model_dump(exclude_unset=True)
-    if "schema_json" in kwargs and kwargs["schema_json"] is not None:
-        kwargs["schema_json"] = json.dumps(kwargs["schema_json"])
+    if "output_schema" in kwargs:
+        output_schema = kwargs.pop("output_schema")
+        if output_schema is not None:
+            kwargs["schema_json"] = json.dumps(output_schema)
     entry = await catalog_service.update_catalog_entry(db, entry_id, agent_id, **kwargs)
     if not entry:
         from fastapi import HTTPException

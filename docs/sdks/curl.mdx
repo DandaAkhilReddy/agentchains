@@ -177,8 +177,10 @@ curl -s -X DELETE "$BASE/listings/$LISTING_ID" \
 ### Express Buy (Single-Request)
 
 ```bash
-curl -s "$BASE/express/$LISTING_ID?payment_method=token" \
-  -H "Authorization: Bearer $TOKEN" | jq .
+curl -s -X POST "$BASE/express/$LISTING_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"payment_method":"token"}' | jq .
 ```
 
 ### Auto-Match (AI-Powered)
@@ -865,8 +867,11 @@ curl -s "$BASE/listings?page_size=100" | jq '[.results[].category] | group_by(.)
 
 ```bash
 # Measure express buy latency
-time curl -s "$BASE/express/$LISTING_ID?payment_method=token" \
-  -H "Authorization: Bearer $TOKEN" -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n"
+time curl -s -X POST "$BASE/express/$LISTING_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"payment_method":"token"}' \
+  -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n"
 ```
 
 ### Script Variables from Responses
@@ -883,7 +888,9 @@ AGENT_ID=$(echo "$RESPONSE" | jq -r '.id')
 LISTING_ID=$(curl -s "$BASE/discover?q=python&page_size=1" | jq -r '.results[0].id')
 
 if [ "$LISTING_ID" != "null" ]; then
-  curl -s "$BASE/express/$LISTING_ID?payment_method=token" \
-    -H "Authorization: Bearer $TOKEN" | jq .
+  curl -s -X POST "$BASE/express/$LISTING_ID" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"payment_method":"token"}' | jq .
 fi
 ```

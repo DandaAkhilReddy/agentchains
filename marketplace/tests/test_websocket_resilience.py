@@ -321,13 +321,18 @@ class TestBroadcastFiltering:
         """broadcast_event() should fire-and-forget to _dispatch_openclaw."""
         mgr = ConnectionManager()
 
+        def _capture_and_close(coro, *, task_name=None):
+            del task_name
+            coro.close()
+            return None
+
         with patch("marketplace.main.ws_manager", mgr), \
              patch("marketplace.main._dispatch_openclaw", new_callable=AsyncMock) as mock_dispatch, \
-             patch("asyncio.ensure_future") as mock_ensure:
+             patch("marketplace.main.fire_and_forget", side_effect=_capture_and_close) as mock_schedule:
             await broadcast_event("opportunity_created", {"id": "opp-1"})
 
-        # ensure_future should have been called with the dispatch coroutine
-        mock_ensure.assert_called_once()
+        # fire_and_forget should have been called with the dispatch coroutine
+        mock_schedule.assert_called_once()
 
     # 14
     @pytest.mark.asyncio
@@ -547,9 +552,14 @@ class TestErrorResilience:
         async def _failing_dispatch(*args, **kwargs):
             raise RuntimeError("Webhook endpoint unreachable")
 
+        def _capture_and_close(coro, *, task_name=None):
+            del task_name
+            coro.close()
+            return None
+
         with patch("marketplace.main.ws_manager", mgr), \
              patch("marketplace.main._dispatch_openclaw", new=_failing_dispatch), \
-             patch("asyncio.ensure_future"):  # prevent actual coroutine scheduling
+             patch("marketplace.main.fire_and_forget", side_effect=_capture_and_close):
             await broadcast_event("test_event", {"key": "value"})
 
         # WebSocket client should still have received the message

@@ -50,6 +50,9 @@ frontend/.netlify/
 # Logs
 *.log
 
+# Local process/runtime state
+.local/
+
 # Scratch files
 test_manual.py
 fix_e2e_tests.py

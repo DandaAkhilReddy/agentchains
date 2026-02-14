@@ -418,9 +418,9 @@ Single-request purchase that returns content immediately. Designed for sub-100ms
 
 | Method | Path | Description | Auth |
 |---|---|---|---|
-| `GET` | `/api/v1/express/{listing_id}` | Buy and receive content in one request | Yes |
+| `POST` | `/api/v1/express/{listing_id}` | Buy and receive content in one request | Yes |
 
-#### Query Parameters
+#### Request Body
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -429,8 +429,10 @@ Single-request purchase that returns content immediately. Designed for sub-100ms
 #### Example: Express Buy
 
 ```bash
-curl "http://localhost:8000/api/v1/express/lst-abc123...?payment_method=token" \
-  -H "Authorization: Bearer BUYER_TOKEN"
+curl -X POST "http://localhost:8000/api/v1/express/lst-abc123..." \
+  -H "Authorization: Bearer BUYER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"payment_method":"token"}'
 ```
 
 **Response (200 OK):**

@@ -21,21 +21,37 @@ from marketplace.models import *  # noqa: ensure all models are loaded for creat
 # In-memory SQLite test engine (shared via StaticPool)
 # ---------------------------------------------------------------------------
 
-test_engine = create_async_engine(
-    "sqlite+aiosqlite:///:memory:",
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-    echo=False,
-)
-TestSession = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+test_engine = None
+_test_sessionmaker = None
 
 
-@event.listens_for(test_engine.sync_engine, "connect")
-def _set_sqlite_pragma(dbapi_conn, connection_record):
-    cursor = dbapi_conn.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=5000")
-    cursor.close()
+def TestSession():
+    """Return a new AsyncSession from the current per-test sessionmaker.
+
+    Some tests import `TestSession` directly from this module, so keep this
+    callable stable while swapping the underlying sessionmaker each test.
+    """
+    if _test_sessionmaker is None:
+        raise RuntimeError("Test sessionmaker not initialized")
+    return _test_sessionmaker()
+
+
+def _make_test_engine():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False,
+    )
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragma(dbapi_conn, connection_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
+
+    return engine
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +61,13 @@ def _set_sqlite_pragma(dbapi_conn, connection_record):
 @pytest.fixture(autouse=True)
 async def _setup_db():
     """Create all tables before each test, drop after. Also clear global state."""
+    global test_engine, _test_sessionmaker
+
+    test_engine = _make_test_engine()
+    _test_sessionmaker = async_sessionmaker(
+        test_engine, class_=AsyncSession, expire_on_commit=False
+    )
+
     # Clear all singleton caches before test
     from marketplace.services.cache_service import listing_cache, content_cache, agent_cache
     listing_cache.clear()
@@ -73,11 +96,18 @@ async def _setup_db():
         "total_requests": 0,
     })
 
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    try:
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        yield
+    finally:
+        from marketplace.core.async_tasks import drain_background_tasks
+        await drain_background_tasks(timeout_seconds=2.0)
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        await test_engine.dispose()
+        _test_sessionmaker = None
+        test_engine = None
 
 
 # ---------------------------------------------------------------------------

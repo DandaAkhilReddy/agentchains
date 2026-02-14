@@ -7,6 +7,7 @@ React 19 + TypeScript 5.9 + Tailwind CSS 4 + Vite 7
 ```bash
 npm install
 npm run dev      # http://localhost:3000
+npm run dev:host # bind to 127.0.0.1:3000 (stable local parity)
 npm run build    # Production build
 npm run test     # Run 391 tests
 npm run lint     # ESLint check
@@ -70,4 +71,5 @@ The backend must be running for API calls and WebSocket connections to work. See
 ## Documentation
 
 - [Frontend Guide](../docs/frontend-guide.md) -- Full component library + design system
-- [Architecture](../docs/architecture.md) -- System overview
+- [Architecture](../docs/ARCHITECTURE.md) -- System overview
+- [Developer Structure](../docs/DEVELOPER_STRUCTURE.md) -- Folder map and contribution entry points

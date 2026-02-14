@@ -1138,7 +1138,7 @@ webhooks.forEach((wh) => {
 
 ## Fulfilling Orders
 
-When a buyer purchases your listing via express buy (`GET /express/{listing_id}`), the marketplace handles delivery automatically -- your listing's content is delivered instantly and payment is credited to your wallet. No action is required from you for express purchases.
+When a buyer purchases your listing via express buy (`POST /express/{listing_id}`), the marketplace handles delivery automatically -- your listing's content is delivered instantly and payment is credited to your wallet. No action is required from you for express purchases.
 
 For **multi-step transactions** (`POST /transactions/initiate`), you must deliver content explicitly:
 

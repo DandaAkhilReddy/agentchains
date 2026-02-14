@@ -1,6 +1,6 @@
 import asyncio
 import json
-import os
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,8 +13,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 
+from marketplace.core.async_tasks import fire_and_forget
 from marketplace.database import init_db
 from marketplace.models import *  # noqa: ensure all models are imported for create_all
+
+APP_VERSION = "0.4.0"
+logger = logging.getLogger(__name__)
 
 
 # WebSocket connection manager for live feed
@@ -24,7 +28,7 @@ class ConnectionManager:
     def __init__(self):
         self.active: set[WebSocket] = set()
 
-    async def connect(self, ws: WebSocket):
+    async def connect(self, ws: WebSocket) -> bool:
         if len(self.active) >= self.MAX_CONNECTIONS:
             await ws.close(code=4029, reason="Too many connections")
             return False
@@ -32,12 +36,12 @@ class ConnectionManager:
         self.active.add(ws)
         return True
 
-    def disconnect(self, ws: WebSocket):
+    def disconnect(self, ws: WebSocket) -> None:
         self.active.discard(ws)
 
-    async def broadcast(self, message: dict):
+    async def broadcast(self, message: dict) -> None:
         data = json.dumps(message)
-        dead = []
+        dead: list[WebSocket] = []
         for ws in self.active:
             try:
                 await ws.send_text(data)
@@ -50,7 +54,7 @@ class ConnectionManager:
 ws_manager = ConnectionManager()
 
 
-async def broadcast_event(event_type: str, data: dict):
+async def broadcast_event(event_type: str, data: dict) -> None:
     """Broadcast a typed event to all connected WebSocket clients and OpenClaw webhooks."""
     await ws_manager.broadcast({
         "type": event_type,
@@ -58,34 +62,36 @@ async def broadcast_event(event_type: str, data: dict):
         "data": data,
     })
     # Dispatch to OpenClaw webhooks in background (fire-and-forget)
-    asyncio.ensure_future(_dispatch_openclaw(event_type, data))
+    fire_and_forget(_dispatch_openclaw(event_type, data), task_name="dispatch_openclaw")
 
 
-async def _dispatch_openclaw(event_type: str, data: dict):
+async def _dispatch_openclaw(event_type: str, data: dict) -> None:
     """Background task to deliver events to registered OpenClaw webhooks."""
     try:
         from marketplace.database import async_session
         from marketplace.services.openclaw_service import dispatch_to_openclaw_webhooks
+
         async with async_session() as db:
             await dispatch_to_openclaw_webhooks(db, event_type, data)
     except Exception:
-        import logging
-        logging.getLogger(__name__).exception("Background task error")
+        logger.exception("Background task error")
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup: create tables
     await init_db()
+    from marketplace.config import settings
+    from marketplace.database import async_session
 
     # Start background demand aggregation (initial delay avoids lock contention at startup)
-    async def _demand_loop():
+    async def _demand_loop() -> None:
         await asyncio.sleep(30)  # Wait 30s before first run
         while True:
             try:
-                from marketplace.database import async_session
                 async with async_session() as db:
                     from marketplace.services import demand_service
+
                     signals = await demand_service.aggregate_demand(db)
                     opps = await demand_service.generate_opportunities(db)
                     # Broadcast high-velocity demand spikes
@@ -106,42 +112,42 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
                                 "urgency_score": float(o.urgency_score),
                             })
             except Exception:
-                import logging
-                logging.getLogger(__name__).exception("Background task error")
+                logger.exception("Background task error")
             await asyncio.sleep(300)  # Every 5 minutes
 
-    task = asyncio.create_task(_demand_loop())
+    demand_task = asyncio.create_task(_demand_loop())
 
     # Start CDN hot cache decay background task
     from marketplace.services.cdn_service import cdn_decay_loop
+
     cdn_task = asyncio.create_task(cdn_decay_loop())
 
     # Start monthly payout background task
-    async def _payout_loop():
+    async def _payout_loop() -> None:
         await asyncio.sleep(60)
         while True:
             try:
                 now = datetime.now(timezone.utc)
                 if now.day == settings.creator_payout_day:
                     from marketplace.services.payout_service import run_monthly_payout
+
                     async with async_session() as payout_db:
                         await run_monthly_payout(payout_db)
             except Exception:
-                import logging
-                logging.getLogger(__name__).exception("Background task error")
+                logger.exception("Background task error")
             await asyncio.sleep(3600)  # Check hourly
 
-    from marketplace.config import settings
-    from marketplace.database import async_session
     payout_task = asyncio.create_task(_payout_loop())
 
     yield
 
     # Shutdown: cancel background tasks and dispose connection pool
-    task.cancel()
+    demand_task.cancel()
     cdn_task.cancel()
     payout_task.cancel()
+
     from marketplace.database import dispose_engine
+
     await dispose_engine()
 
 
@@ -170,13 +176,14 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Agent-to-Agent Data Marketplace",
         description="Trade cached computation results between AI agents",
-        version="0.4.0",
+        version=APP_VERSION,
         lifespan=lifespan,
     )
 
-    # CORS — configurable via CORS_ORIGINS env var
+    # CORS configurable via CORS_ORIGINS env var
     from marketplace.config import settings
-    allowed_origins = [o.strip() for o in settings.cors_origins.split(",")]
+
+    allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
@@ -187,64 +194,29 @@ def create_app() -> FastAPI:
 
     # Rate limiting
     from marketplace.core.rate_limit_middleware import RateLimitMiddleware
+
     app.add_middleware(RateLimitMiddleware)
 
     # Security headers
     app.add_middleware(SecurityHeadersMiddleware)
 
-    # Register routers
-    from marketplace.api import (
-        analytics,
-        automatch,
-        catalog,
-        creators,
-        discovery,
-        express,
-        health,
-        listings,
-        registry,
-        reputation,
-        routing,
-        seller_api,
-        transactions,
-        verification,
-        wallet,
-        zkp,
-    )
+    # Register REST routers
+    from marketplace.api import API_PREFIX, API_ROUTERS
 
-    app.include_router(health.router, prefix="/api/v1")
-    app.include_router(registry.router, prefix="/api/v1")
-    app.include_router(listings.router, prefix="/api/v1")
-    app.include_router(discovery.router, prefix="/api/v1")
-    app.include_router(transactions.router, prefix="/api/v1")
-    app.include_router(verification.router, prefix="/api/v1")
-    app.include_router(reputation.router, prefix="/api/v1")
-    app.include_router(express.router, prefix="/api/v1")
-    app.include_router(automatch.router, prefix="/api/v1")
-    app.include_router(analytics.router, prefix="/api/v1")
-    app.include_router(zkp.router, prefix="/api/v1")
-    app.include_router(catalog.router, prefix="/api/v1")
-    app.include_router(seller_api.router, prefix="/api/v1")
-    app.include_router(routing.router, prefix="/api/v1")
-    app.include_router(wallet.router, prefix="/api/v1")
-    app.include_router(creators.router, prefix="/api/v1")
-
-    from marketplace.api import audit, redemptions
-    app.include_router(audit.router, prefix="/api/v1")
-    app.include_router(redemptions.router, prefix="/api/v1")
-
-    from marketplace.api.integrations import openclaw as openclaw_integration
-    app.include_router(openclaw_integration.router, prefix="/api/v1")
+    for router in API_ROUTERS:
+        app.include_router(router, prefix=API_PREFIX)
 
     # MCP server routes
     if settings.mcp_enabled:
         from marketplace.mcp.server import router as mcp_router
+
         app.include_router(mcp_router)
 
     # WebSocket for live feed (JWT-authenticated)
     @app.websocket("/ws/feed")
-    async def live_feed(ws: WebSocket, token: str = Query(None)):
+    async def live_feed(ws: WebSocket, token: str | None = Query(default=None)) -> None:
         from marketplace.core.auth import decode_token
+
         if not token:
             await ws.close(code=4001, reason="Missing token query parameter")
             return
@@ -265,9 +237,10 @@ def create_app() -> FastAPI:
             ws_manager.disconnect(ws)
 
     # CDN stats endpoint
-    @app.get("/api/v1/health/cdn")
-    async def cdn_health():
+    @app.get(f"{API_PREFIX}/health/cdn")
+    async def cdn_health() -> dict:
         from marketplace.services.cdn_service import get_cdn_stats
+
         return get_cdn_stats()
 
     # Serve frontend static files (built React app)
@@ -286,14 +259,14 @@ def create_app() -> FastAPI:
             return FileResponse(str(static_dir / "index.html"))
     else:
         @app.get("/")
-        async def root():
+        async def root() -> dict[str, str]:
             return {
                 "name": "Agent-to-Agent Data Marketplace",
-                "version": "0.4.0",
+                "version": APP_VERSION,
                 "docs": "/docs",
-                "health": "/api/v1/health",
+                "health": f"{API_PREFIX}/health",
                 "mcp": "/mcp/health",
-                "cdn": "/api/v1/health/cdn",
+                "cdn": f"{API_PREFIX}/health/cdn",
             }
 
     return app

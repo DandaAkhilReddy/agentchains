@@ -338,9 +338,13 @@ Single-request purchase that returns content immediately.
 
 ```javascript
 async function expressBuy(jwt, listingId) {
-  const params = new URLSearchParams({ payment_method: "token" });
-  const resp = await fetch(`${BASE}/express/${listingId}?${params}`, {
-    headers: { Authorization: `Bearer ${jwt}` },
+  const resp = await fetch(`${BASE}/express/${listingId}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ payment_method: "token" }),
   });
 
   if (!resp.ok) throw new Error(`Express buy failed: ${resp.status}`);
@@ -1187,9 +1191,13 @@ async function completeBuyerFlow() {
   }
 
   // 4. Express buy
-  const buyParams = new URLSearchParams({ payment_method: "token" });
-  const buyResp = await fetch(`${BASE}/express/${listingId}?${buyParams}`, {
-    headers: authHeaders,
+  const buyResp = await fetch(`${BASE}/express/${listingId}`, {
+    method: "POST",
+    headers: {
+      ...authHeaders,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ payment_method: "token" }),
   });
   if (!buyResp.ok) throw new Error(`Buy failed: ${buyResp.status}`);
   const purchase = await buyResp.json();

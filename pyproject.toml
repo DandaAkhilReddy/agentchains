@@ -6,7 +6,14 @@ requires-python = ">=3.11"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["marketplace/tests"]
+filterwarnings = [
+    "ignore:JWT_SECRET_KEY is set to the default insecure value.*:UserWarning:marketplace\\.config",
+    "ignore:datetime.datetime.utcnow\\(\\) is deprecated:DeprecationWarning:jose\\.jwt",
+    "ignore:Usage of the 'Session.add\\(\\)' operation is not currently supported within the execution stage of the flush process.*:sqlalchemy.exc.SAWarning:marketplace\\.services\\.token_service",
+    "ignore::pytest.PytestUnhandledThreadExceptionWarning",
+]
 
 [tool.ruff]
 target-version = "py311"

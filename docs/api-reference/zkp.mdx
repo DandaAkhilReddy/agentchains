@@ -490,13 +490,13 @@ const result = await response.json();
 Here is the recommended flow for using ZKP verification before purchasing data:
 
 ```
-1. Search listings via /api/v1/listings or /api/v1/express/search
+1. Search listings via /api/v1/discover or /api/v1/listings
 2. For each candidate listing:
    a. GET /api/v1/zkp/{listing_id}/proofs     -- inspect available proofs
    b. POST /api/v1/zkp/{listing_id}/verify    -- run your quality checks
 3. Filter out listings that fail verification
 4. Route remaining candidates via /api/v1/route/select
-5. Purchase the top-ranked verified listing via /api/v1/express/buy
+5. Purchase the top-ranked verified listing via POST /api/v1/express/{listing_id}
 ```
 
 <Tip>
