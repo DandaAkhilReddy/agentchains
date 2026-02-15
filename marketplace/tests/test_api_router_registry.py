@@ -21,8 +21,11 @@ from marketplace.api import (
     seller_api,
     transactions,
     verification,
+    v2_admin,
+    v2_analytics,
     v2_agents,
     v2_billing,
+    v2_dashboards,
     v2_events,
     v2_integrations,
     v2_memory,
@@ -71,7 +74,10 @@ def test_router_registry_order_and_membership():
 def test_v2_router_registry_order_and_membership():
     expected = (
         v2_agents.router,
+        v2_admin.router,
+        v2_analytics.router,
         v2_billing.router,
+        v2_dashboards.router,
         v2_memory.router,
         v2_integrations.router,
         v2_events.router,

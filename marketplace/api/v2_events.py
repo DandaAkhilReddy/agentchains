@@ -18,7 +18,11 @@ async def get_stream_token_v2(agent_id: str = Depends(get_current_agent_id)):
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)
     return {
         "agent_id": agent_id,
-        "stream_token": create_stream_token(agent_id),
+        "stream_token": create_stream_token(
+            agent_id,
+            token_type="stream_agent",
+            allowed_topics=["public.market", "private.agent"],
+        ),
         "expires_in_seconds": expires_in_seconds,
         "expires_at": expires_at.isoformat(),
         "ws_url": "/ws/v2/events",

@@ -1,75 +1,61 @@
-# AgentChains Frontend
+﻿# AgentChains Frontend
 
-React 19 + TypeScript 5.9 + Tailwind CSS 4 + Vite 7
+React 19 + TypeScript 5.9 + Tailwind CSS 4 + Vite 7.
 
 ## Quick Start
 
 ```bash
 npm install
 npm run dev      # http://localhost:3000
-npm run dev:host # bind to 127.0.0.1:3000 (stable local parity)
-npm run build    # Production build
-npm run test     # Run 391 tests
-npm run lint     # ESLint check
+npm run dev:host # bind to 127.0.0.1:3000 (local parity)
+npm run build
+npm run test
+npm run lint
 ```
 
-## Tech Stack
+## Structure
 
-- **React 19** -- UI framework
-- **TypeScript 5.9** -- Type safety
-- **Tailwind CSS 4** -- Styling (dark futuristic theme)
-- **Vite 7** -- Build tool (dev server on port 3000)
-- **TanStack React Query v5** -- Server state management
-- **Recharts 3** -- Charts and visualizations
-- **Lucide React** -- Icon library
-
-## Project Structure
-
-```
+```text
 src/
-├── pages/          # 13 page components
-├── components/     # 25 reusable UI components
-├── hooks/          # Auth + React Query hooks
-├── lib/            # API client, WebSocket, formatters
-├── types/          # TypeScript type definitions
-└── index.css       # Design system (@theme tokens)
+  pages/        # Role and workflow pages
+  components/   # Reusable UI components
+  hooks/        # Auth and React Query hooks
+  lib/          # API client and websocket helpers
+  types/        # API and domain types
+  test/         # Shared test helpers
 ```
 
-## Key Components
+## Role Dashboard Surface
 
-- **Shell** -- App layout with sidebar and top bar
-- **Sidebar** -- Navigation with collapsible sections
-- **PageHeader** -- Consistent page titles with actions
-- **StatCard** -- Metric display with trend indicators
-- **DataTable** -- Sortable, filterable data tables
-- **Pagination** -- Page navigation for lists
-- **Badge** -- Status and category labels
-- **MiniChart** -- Inline sparkline charts
-- **ProgressRing** -- Circular progress indicators
-- **AnimatedCounter** -- Smooth number transitions
+Primary role flows:
+- `src/pages/RoleLandingPage.tsx`
+- `src/pages/AgentDashboardPage.tsx`
+- `src/pages/CreatorDashboardPage.tsx`
+- `src/pages/AdminDashboardPage.tsx`
 
-## Design System
+Wiring points:
+- `src/App.tsx`
+- `src/components/Sidebar.tsx`
+- `src/lib/api.ts`
+- `src/types/api.ts`
 
-Dark theme with glass morphism. See [Frontend Guide](../docs/frontend-guide.md) for full details.
+## API and WebSocket
 
-Key classes:
+- REST proxy: `/api` -> `http://localhost:8000`
+- WebSocket proxy: `/ws` -> `ws://localhost:8000`
+- Canonical realtime endpoint: `/ws/v2/events`
 
-| Class | Purpose |
-|-------|---------|
-| `.glass-card` | Translucent card with backdrop blur |
-| `.btn-primary` | Primary action button |
-| `.btn-secondary` | Secondary action button |
-| `.futuristic-input` | Styled form input |
-| `.gradient-text` | Gradient text effect |
+## Quality Gates
 
-## API Proxy
+```bash
+npm run test
+npm run lint
+npm run build
+```
 
-Vite proxies `/api` to `http://localhost:8000` and `/ws` to `ws://localhost:8000`.
+## Related Docs
 
-The backend must be running for API calls and WebSocket connections to work. See the root README for backend setup.
-
-## Documentation
-
-- [Frontend Guide](../docs/frontend-guide.md) -- Full component library + design system
-- [Architecture](../docs/ARCHITECTURE.md) -- System overview
-- [Developer Structure](../docs/DEVELOPER_STRUCTURE.md) -- Folder map and contribution entry points
+- `../README.md`
+- `../docs/API.md`
+- `../docs/SECURITY_NO_LEAK_WEBSOCKET_MIGRATION.md`
+- `../docs/ADMIN_DASHBOARD_RUNBOOK.md`

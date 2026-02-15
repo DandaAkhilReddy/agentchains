@@ -47,6 +47,23 @@ def post_with_retry(client: httpx.Client, path: str, *, json_body: dict, headers
     return response
 
 
+def get_with_retry(
+    client: httpx.Client,
+    path: str,
+    *,
+    params: dict | None = None,
+    headers: dict | None = None,
+) -> httpx.Response:
+    retries = 3
+    for attempt in range(retries + 1):
+        response = client.get(path, params=params, headers=headers)
+        if response.status_code != 429 or attempt == retries:
+            return response
+        retry_after = int(response.json().get("retry_after", 1))
+        time.sleep(max(1, retry_after))
+    return response
+
+
 def main():
     global passed, failed
     client = httpx.Client(base_url=API, verify=False, timeout=30)
@@ -394,7 +411,7 @@ def main():
 
     # 22. CDN Stats
     def t22():
-        r = client.get("/health/cdn")
+        r = get_with_retry(client, "/health/cdn", headers=buyer_headers)
         assert r.status_code == 200, f"Status {r.status_code}: {r.text}"
         d = r.json()
         print(f"         Requests: {d.get('overview', {}).get('total_requests', 0)}")

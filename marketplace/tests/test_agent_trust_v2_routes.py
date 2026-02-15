@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy import select
 
 from marketplace.core.async_tasks import drain_background_tasks
-from marketplace.core.auth import decode_token
+from marketplace.core.auth import decode_stream_token
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.agent_trust import MemorySnapshotChunk, WebhookDelivery
 from marketplace.services.event_subscription_service import (
@@ -256,9 +256,9 @@ async def test_v2_stream_token_and_signed_webhook_delivery(client, monkeypatch):
     )
     assert stream.status_code == 200
     stream_body = stream.json()
-    payload = decode_token(stream_body["stream_token"])
+    payload = decode_stream_token(stream_body["stream_token"])
     assert payload["sub"] == agent_id
-    assert payload["type"] == "stream"
+    assert payload["type"] == "stream_agent"
 
     create_sub = await client.post(
         "/api/v2/integrations/webhooks",

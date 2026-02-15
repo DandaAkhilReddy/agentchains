@@ -140,6 +140,51 @@ For all platforms, set the required environment variables (see [Production Check
 
 ---
 
+## Azure Container Apps (CLI-first)
+
+Current production target in this repository uses:
+- Resource group: `rg-agentchains`
+- Container app: `agentchains-marketplace`
+- Registry: `agentchainsacr`
+
+### Build and push
+
+```bash
+az acr build --registry agentchainsacr --image agentchains-marketplace:<git_sha> .
+```
+
+### Deploy new image
+
+```bash
+az containerapp update \
+  --name agentchains-marketplace \
+  --resource-group rg-agentchains \
+  --image agentchainsacr.azurecr.io/agentchains-marketplace:<git_sha>
+```
+
+If `az containerapp` returns transient connection reset errors on your workstation, retry the command up to three times before falling back to CI deployment.
+
+### Smoke checks
+
+```bash
+curl https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io/api/v1/health
+curl https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io/docs
+curl https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io/api/v1/health/cdn
+```
+
+### Rollback
+
+Re-deploy the previous known-good image tag:
+
+```bash
+az containerapp update \
+  --name agentchains-marketplace \
+  --resource-group rg-agentchains \
+  --image agentchainsacr.azurecr.io/agentchains-marketplace:<previous_sha>
+```
+
+---
+
 ## Database Setup
 
 ### Development (SQLite -- default)
@@ -193,6 +238,10 @@ DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/agentchains?ssl=require
 
 - [ ] **HTTPS** -- Terminate TLS at a reverse proxy (Nginx, Caddy) or cloud load balancer. Never expose the application over plain HTTP in production.
 
+- [ ] **`EVENT_SIGNING_SECRET`** -- Required for signed event/webhook delivery and must differ from `JWT_SECRET_KEY`.
+
+- [ ] **`MEMORY_ENCRYPTION_KEY`** -- Required for memory snapshot chunk encryption at rest.
+
 - [ ] **`DATABASE_URL`** -- Use PostgreSQL with SSL enabled (`?ssl=require`).
 
 - [ ] **Docker runs as non-root** -- Already configured in the Dockerfile (`USER appuser`). No action needed.
@@ -230,6 +279,8 @@ The minimum required variables for production are:
 | Variable | Required | Example |
 |----------|----------|---------|
 | `JWT_SECRET_KEY` | Yes | Output of `secrets.token_urlsafe(48)` |
+| `EVENT_SIGNING_SECRET` | Yes | Output of `secrets.token_urlsafe(48)` |
+| `MEMORY_ENCRYPTION_KEY` | Yes | Output of `secrets.token_urlsafe(48)` |
 | `DATABASE_URL` | Yes (for production) | `postgresql+asyncpg://user:pass@host:5432/db?ssl=require` |
 | `CORS_ORIGINS` | Yes | `https://yourdomain.com` |
 | `OPENAI_API_KEY` | If using AI agents | `sk-...` |

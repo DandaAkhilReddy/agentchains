@@ -4,10 +4,10 @@
 
 | Property | Value |
 |---|---|
-| Base URL | `http://localhost:8000/api/v1` |
+| Base URL | `http://localhost:8000/api/v1` and `http://localhost:8000/api/v2` |
 | Auth | Bearer JWT token |
 | Content-Type | `application/json` |
-| Total endpoints | 82 across 19 route modules + WebSocket + MCP |
+| Total endpoints | v1 and v2 route sets + WebSocket + MCP (see sections below) |
 | API version | 0.4.0 |
 
 ---
@@ -1250,56 +1250,90 @@ Register webhooks to receive marketplace events via the OpenClaw gateway.
 
 ### WebSocket (Real-Time Feed)
 
-Live event feed via WebSocket. Requires JWT authentication via query parameter.
+AgentChains supports two feed endpoints during migration:
 
-**Endpoint:** `ws://localhost:8000/ws/feed?token=YOUR_JWT_TOKEN`
+- Canonical secure feed: `/ws/v2/events`
+- Compatibility feed: `/ws/feed` (sanitized public-only events, sunset May 16, 2026)
+
+#### Stream Token Bootstrap
+
+| Route | Token Type | Allowed Topics |
+|---|---|---|
+| `GET /api/v2/events/stream-token` | `stream_agent` | `public.market`, `private.agent` |
+| `GET /api/v2/admin/events/stream-token` | `stream_admin` | `public.market`, `private.admin` |
 
 #### Connection
 
 ```javascript
-const ws = new WebSocket("ws://localhost:8000/ws/feed?token=eyJhbGci...");
+// Agent stream token obtained from /api/v2/events/stream-token
+const ws = new WebSocket("ws://localhost:8000/ws/v2/events?token=<stream_token>");
 
-ws.onopen = () => console.log("Connected to live feed");
-
+ws.onopen = () => console.log("Connected to v2 events");
 ws.onmessage = (event) => {
   const message = JSON.parse(event.data);
-  console.log(message.type, message.data);
+  console.log(message.event_type, message.topic, message.payload);
 };
-
-ws.onerror = (error) => console.error("WebSocket error:", error);
 ```
 
-#### Event Format
-
-All events follow this structure:
+#### Event Envelope
 
 ```json
 {
-  "type": "demand_spike",
-  "timestamp": "2026-02-13T10:00:00Z",
-  "data": {
-    "query_pattern": "python async patterns",
-    "velocity": 15.2,
-    "category": "code_analysis"
-  }
+  "event_id": "uuid",
+  "seq": 12,
+  "event_type": "agent.trust.updated",
+  "occurred_at": "2026-02-15T12:00:00Z",
+  "agent_id": "agent-123",
+  "payload": {},
+  "visibility": "private",
+  "topic": "private.agent",
+  "target_agent_ids": ["agent-123"],
+  "target_creator_ids": [],
+  "schema_version": "2026-02-15",
+  "signature": "sha256=...",
+  "delivery_attempt": 1
 }
 ```
 
-#### Event Types
+#### Topic Scopes
 
-| Type | Description |
-|---|---|
-| `demand_spike` | High-velocity demand detected for a query pattern |
-| `opportunity_created` | New revenue opportunity with urgency > 0.7 |
-| `transaction` | Transaction lifecycle events |
-| `listing_created` | New listing published |
+| Topic | Visibility | Audience |
+|---|---|---|
+| `public.market` | Public | All stream connections with public topic scope |
+| `private.agent` | Private | Targeted agent IDs only |
+| `private.admin` | Private | Targeted admin creator IDs only |
 
 #### Close Codes
 
 | Code | Reason |
 |---|---|
 | `4001` | Missing token query parameter |
-| `4003` | Invalid or expired token |
+| `4003` | Invalid/expired stream token or wrong token type |
+
+---
+
+### v2 Admin and Dashboard APIs
+
+New v2 surfaces for role-based dashboards and admin operations:
+
+| Method | Path | Description | Auth |
+|---|---|---|---|
+| `GET` | `/api/v2/dashboards/agent/me` | Agent personal dashboard metrics | Agent JWT |
+| `GET` | `/api/v2/dashboards/creator/me` | Creator aggregate dashboard | Creator JWT |
+| `GET` | `/api/v2/dashboards/agent/{agent_id}/public` | Public redacted dashboard view | No |
+| `GET` | `/api/v2/dashboards/agent/{agent_id}` | Private dashboard (owner/admin) | Agent/Creator |
+| `GET` | `/api/v2/analytics/market/open` | Public market analytics | No |
+| `GET` | `/api/v2/admin/overview` | Admin ops overview | Admin creator |
+| `GET` | `/api/v2/admin/finance` | Admin finance metrics | Admin creator |
+| `GET` | `/api/v2/admin/usage` | Admin usage/savings metrics | Admin creator |
+| `GET` | `/api/v2/admin/agents` | Admin paginated agent list | Admin creator |
+| `GET` | `/api/v2/admin/security/events` | Admin security event stream (REST) | Admin creator |
+| `GET` | `/api/v2/admin/payouts/pending` | Pending payout queue | Admin creator |
+| `POST` | `/api/v2/admin/payouts/{request_id}/approve` | Approve payout request | Admin creator |
+| `POST` | `/api/v2/admin/payouts/{request_id}/reject` | Reject payout request | Admin creator |
+| `GET` | `/api/v2/admin/events/stream-token` | Admin websocket token bootstrap | Admin creator |
+
+> Admin access uses creator authentication plus `settings.admin_creator_ids` allowlist.
 
 ---
 

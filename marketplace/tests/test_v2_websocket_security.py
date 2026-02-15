@@ -26,14 +26,67 @@ async def test_scoped_manager_private_event_only_reaches_target_agent():
     manager = ScopedConnectionManager()
     ws_a = _mock_ws()
     ws_b = _mock_ws()
-    await manager.connect(ws_a, agent_id="agent-a")
-    await manager.connect(ws_b, agent_id="agent-b")
+    await manager.connect(
+        ws_a,
+        stream_payload={
+            "sub": "agent-a",
+            "sub_type": "agent",
+            "allowed_topics": ["private.agent"],
+        },
+    )
+    await manager.connect(
+        ws_b,
+        stream_payload={
+            "sub": "agent-b",
+            "sub_type": "agent",
+            "allowed_topics": ["private.agent"],
+        },
+    )
 
     payload = {"type": "private", "data": {"secret": "only-a"}}
-    await manager.broadcast_private(payload, target_agent_ids=["agent-a"])
+    await manager.broadcast_private_agent(payload, target_agent_ids=["agent-a"])
 
     ws_a.send_text.assert_awaited_once_with(json.dumps(payload))
     ws_b.send_text.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_scoped_manager_private_admin_event_only_reaches_target_creator():
+    manager = ScopedConnectionManager()
+    ws_admin_target = _mock_ws()
+    ws_admin_other = _mock_ws()
+    ws_agent = _mock_ws()
+    await manager.connect(
+        ws_admin_target,
+        stream_payload={
+            "sub": "creator-a",
+            "sub_type": "admin",
+            "allowed_topics": ["private.admin", "public.market"],
+        },
+    )
+    await manager.connect(
+        ws_admin_other,
+        stream_payload={
+            "sub": "creator-b",
+            "sub_type": "admin",
+            "allowed_topics": ["private.admin", "public.market"],
+        },
+    )
+    await manager.connect(
+        ws_agent,
+        stream_payload={
+            "sub": "agent-a",
+            "sub_type": "agent",
+            "allowed_topics": ["private.agent", "public.market"],
+        },
+    )
+
+    payload = {"type": "private_admin", "data": {"request_id": "req-1"}}
+    await manager.broadcast_private_admin(payload, target_creator_ids=["creator-a"])
+
+    ws_admin_target.send_text.assert_awaited_once_with(json.dumps(payload))
+    ws_admin_other.send_text.assert_not_awaited()
+    ws_agent.send_text.assert_not_awaited()
 
 
 def test_decode_stream_token_rejects_non_stream_token():
@@ -46,7 +99,19 @@ def test_decode_stream_token_accepts_stream_token():
     token = create_stream_token("agent-a")
     payload = decode_stream_token(token)
     assert payload["sub"] == "agent-a"
-    assert payload["type"] == "stream"
+    assert payload["type"] == "stream_agent"
+
+
+def test_decode_stream_token_accepts_admin_stream_token():
+    token = create_stream_token(
+        "creator-admin",
+        token_type="stream_admin",
+        allowed_topics=["public.market", "private.admin"],
+    )
+    payload = decode_stream_token(token)
+    assert payload["sub"] == "creator-admin"
+    assert payload["type"] == "stream_admin"
+    assert payload["sub_type"] == "admin"
 
 
 def test_unclassified_event_is_private_and_blocked_without_targets():
