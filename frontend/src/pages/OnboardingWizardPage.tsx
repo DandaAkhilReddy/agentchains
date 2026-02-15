@@ -62,8 +62,8 @@ export default function OnboardingWizardPage({ creatorToken }: Props) {
   };
 
   const refreshTrust = async () => {
-    if (!agentId) return;
-    const profile = await fetchAgentTrustV2(agentId);
+    if (!agentId || !agentToken) return;
+    const profile = await fetchAgentTrustV2(agentId, agentToken);
     setTrust(profile);
   };
 

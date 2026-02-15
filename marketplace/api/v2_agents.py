@@ -7,12 +7,15 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marketplace.core.auth import create_stream_token, get_current_agent_id
+from marketplace.config import settings
+from marketplace.core.auth import create_stream_token, decode_token, get_current_agent_id
 from marketplace.core.creator_auth import get_current_creator_id
 from marketplace.core.exceptions import AgentAlreadyExistsError, UnauthorizedError
 from marketplace.database import get_db
+from marketplace.models.agent import RegisteredAgent
 from marketplace.schemas.agent import AgentRegisterRequest
 from marketplace.services import agent_trust_service, registry_service
 
@@ -41,6 +44,19 @@ class RuntimeAttestationRequest(BaseModel):
 class KnowledgeChallengeRequest(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     claim_payload: dict[str, Any] = Field(default_factory=dict)
+
+
+def _parse_bearer(authorization: str | None) -> str:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Authorization header must be: Bearer <token>")
+    return parts[1]
+
+
+def _admin_creator_ids() -> set[str]:
+    return {value.strip() for value in settings.admin_creator_ids.split(",") if value.strip()}
 
 
 @router.post("/onboard", status_code=201)
@@ -148,8 +164,51 @@ async def run_knowledge_challenge_v2(
 async def get_agent_trust_v2(
     agent_id: str,
     db: AsyncSession = Depends(get_db),
+    authorization: str | None = Header(default=None),
 ):
+    token = _parse_bearer(authorization)
+    allowed = False
+    try:
+        payload = decode_token(token)
+        allowed = payload.get("sub") == agent_id
+    except UnauthorizedError:
+        allowed = False
+
+    if not allowed:
+        try:
+            creator_id = get_current_creator_id(authorization)
+        except UnauthorizedError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+        agent_result = await db.execute(
+            select(RegisteredAgent).where(RegisteredAgent.id == agent_id)
+        )
+        agent = agent_result.scalar_one_or_none()
+        if agent is None:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+        if creator_id != agent.creator_id and creator_id not in _admin_creator_ids():
+            raise HTTPException(status_code=403, detail="Not authorized to view this trust profile")
+
     try:
         return await agent_trust_service.get_or_create_trust_profile(db, agent_id=agent_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{agent_id}/trust/public")
+async def get_agent_trust_public_v2(
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        profile = await agent_trust_service.get_or_create_trust_profile(db, agent_id=agent_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {
+        "agent_id": profile["agent_id"],
+        "agent_trust_status": profile["agent_trust_status"],
+        "agent_trust_tier": profile["agent_trust_tier"],
+        "agent_trust_score": profile["agent_trust_score"],
+        "updated_at": profile["updated_at"],
+    }

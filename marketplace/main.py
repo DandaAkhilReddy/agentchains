@@ -54,18 +54,87 @@ class ConnectionManager:
 ws_manager = ConnectionManager()
 
 
+class ScopedConnectionManager:
+    """Connection manager that tracks agent ownership for private event routing."""
+
+    MAX_CONNECTIONS = 2000
+
+    def __init__(self):
+        self.active: dict[WebSocket, str] = {}
+
+    async def connect(self, ws: WebSocket, *, agent_id: str) -> bool:
+        if len(self.active) >= self.MAX_CONNECTIONS:
+            await ws.close(code=4029, reason="Too many connections")
+            return False
+        await ws.accept()
+        self.active[ws] = agent_id
+        return True
+
+    def disconnect(self, ws: WebSocket) -> None:
+        self.active.pop(ws, None)
+
+    async def broadcast_public(self, message: dict) -> None:
+        data = json.dumps(message)
+        dead: list[WebSocket] = []
+        for ws in self.active:
+            try:
+                await ws.send_text(data)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
+    async def broadcast_private(self, message: dict, *, target_agent_ids: list[str]) -> None:
+        if not target_agent_ids:
+            return
+        data = json.dumps(message)
+        targets = set(target_agent_ids)
+        dead: list[WebSocket] = []
+        for ws, agent_id in self.active.items():
+            if agent_id not in targets:
+                continue
+            try:
+                await ws.send_text(data)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
+
+ws_scoped_manager = ScopedConnectionManager()
+
+
 async def broadcast_event(event_type: str, data: dict) -> None:
     """Broadcast a typed event to WebSocket clients and webhook subscribers."""
-    from marketplace.services.event_subscription_service import build_event_envelope
+    from marketplace.services.event_subscription_service import (
+        build_event_envelope,
+        should_dispatch_event,
+    )
 
     envelope = build_event_envelope(
         event_type,
         data,
         agent_id=data.get("agent_id"),
     )
-    await ws_manager.broadcast(envelope)
+    if not should_dispatch_event(envelope):
+        return
+
+    visibility = envelope.get("visibility", "private")
+    if visibility == "public":
+        await ws_manager.broadcast(envelope)
+        await ws_scoped_manager.broadcast_public(envelope)
+        # Legacy OpenClaw fan-out is restricted to public events only.
+        fire_and_forget(
+            _dispatch_openclaw(event_type, envelope.get("payload", data)),
+            task_name="dispatch_openclaw",
+        )
+    else:
+        await ws_scoped_manager.broadcast_private(
+            envelope,
+            target_agent_ids=envelope.get("target_agent_ids", []),
+        )
+
     # Dispatch to webhook integrations in background (fire-and-forget).
-    fire_and_forget(_dispatch_openclaw(event_type, data), task_name="dispatch_openclaw")
     fire_and_forget(
         _dispatch_event_subscriptions(envelope),
         task_name="dispatch_event_subscriptions",
@@ -129,7 +198,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                             await broadcast_event("opportunity_created", {
                                 "id": o.id,
                                 "query_pattern": o.query_pattern,
-                                "estimated_revenue_usdc": float(o.estimated_revenue_usdc),
+                                "estimated_revenue_usd": float(o.estimated_revenue_usdc),
                                 "urgency_score": float(o.urgency_score),
                             })
             except Exception:
@@ -160,12 +229,40 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     payout_task = asyncio.create_task(_payout_loop())
 
+    # Security artifact retention cleanup
+    async def _security_retention_loop() -> None:
+        await asyncio.sleep(120)
+        while True:
+            try:
+                async with async_session() as security_db:
+                    from marketplace.services.event_subscription_service import (
+                        redact_old_webhook_deliveries,
+                    )
+                    from marketplace.services.memory_service import (
+                        redact_old_memory_verification_evidence,
+                    )
+
+                    await redact_old_webhook_deliveries(
+                        security_db,
+                        retention_days=settings.security_event_retention_days,
+                    )
+                    await redact_old_memory_verification_evidence(
+                        security_db,
+                        retention_days=settings.security_event_retention_days,
+                    )
+            except Exception:
+                logger.exception("Background task error")
+            await asyncio.sleep(12 * 3600)
+
+    security_retention_task = asyncio.create_task(_security_retention_loop())
+
     yield
 
     # Shutdown: cancel background tasks and dispose connection pool
     demand_task.cancel()
     cdn_task.cancel()
     payout_task.cancel()
+    security_retention_task.cancel()
 
     from marketplace.database import dispose_engine
 
@@ -254,11 +351,46 @@ def create_app() -> FastAPI:
         if not connected:
             return
         try:
+            await ws.send_text(
+                json.dumps(
+                    {
+                        "type": "deprecation_notice",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "data": {
+                            "endpoint": "/ws/feed",
+                            "replacement": "/ws/v2/events",
+                            "sunset": "2026-05-16T00:00:00Z",
+                        },
+                    }
+                )
+            )
             while True:
                 # Keep connection alive, receive pings
                 await ws.receive_text()
         except WebSocketDisconnect:
             ws_manager.disconnect(ws)
+
+    @app.websocket("/ws/v2/events")
+    async def live_feed_v2(ws: WebSocket, token: str | None = Query(default=None)) -> None:
+        from marketplace.core.auth import decode_stream_token
+
+        if not token:
+            await ws.close(code=4001, reason="Missing token query parameter")
+            return
+        try:
+            payload = decode_stream_token(token)
+        except Exception:
+            await ws.close(code=4003, reason="Invalid or expired stream token")
+            return
+
+        connected = await ws_scoped_manager.connect(ws, agent_id=payload["sub"])
+        if not connected:
+            return
+        try:
+            while True:
+                await ws.receive_text()
+        except WebSocketDisconnect:
+            ws_scoped_manager.disconnect(ws)
 
     # CDN stats endpoint
     @app.get(f"{API_PREFIX}/health/cdn")

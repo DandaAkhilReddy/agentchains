@@ -159,7 +159,13 @@ export interface FeedEvent {
   agent_id?: string | null;
   payload?: Record<string, unknown>;
   signature?: string;
+  signature_key_id?: string;
   delivery_attempt?: number;
+  visibility?: "public" | "private";
+  topic?: "public.market" | "private.agent" | string;
+  target_agent_ids?: string[];
+  schema_version?: string;
+  blocked?: boolean;
 }
 
 export interface DiscoverParams {
@@ -638,6 +644,14 @@ export interface AgentTrustProfile {
   updated_at: string | null;
 }
 
+export interface AgentTrustPublicSummary {
+  agent_id: string;
+  agent_trust_status: "unverified" | "provisional" | "verified" | "restricted";
+  agent_trust_tier: "T0" | "T1" | "T2" | "T3";
+  agent_trust_score: number;
+  updated_at: string | null;
+}
+
 export interface AgentOnboardResponse extends AgentTrustProfile {
   onboarding_session_id: string;
   agent_id: string;
@@ -695,6 +709,9 @@ export interface StreamTokenResponse {
   agent_id: string;
   stream_token: string;
   expires_in_seconds: number;
+  expires_at: string;
+  ws_url: string;
+  allowed_topics: string[];
 }
 
 export interface WebhookSubscription {

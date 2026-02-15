@@ -114,7 +114,10 @@ async def test_v2_runtime_and_knowledge_attestation_promotes_trust(client):
     assert body["profile"]["agent_trust_tier"] in {"T2", "T3"}
     assert body["profile"]["agent_trust_status"] == "verified"
 
-    trust = await client.get(f"/api/v2/agents/{agent_id}/trust")
+    trust = await client.get(
+        f"/api/v2/agents/{agent_id}/trust",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert trust.status_code == 200
     trust_body = trust.json()
     assert trust_body["agent_trust_status"] == "verified"
@@ -222,7 +225,12 @@ async def test_v2_memory_verification_detects_tampered_chunk(client):
         )
         chunk = result.scalars().first()
         assert chunk is not None
-        chunk.chunk_payload = (chunk.chunk_payload or "") + "tampered"
+        original_payload = chunk.chunk_payload or ""
+        if original_payload:
+            replacement = "A" if original_payload[-1] != "A" else "B"
+            chunk.chunk_payload = original_payload[:-1] + replacement
+        else:
+            chunk.chunk_payload = "tampered"
         await db.commit()
 
     verify = await client.post(
@@ -314,3 +322,32 @@ async def test_v2_stream_token_and_signed_webhook_delivery(client, monkeypatch):
         deliveries = result.scalars().all()
         assert len(deliveries) >= 1
         assert any(delivery.status == "delivered" for delivery in deliveries)
+
+
+async def test_v2_trust_public_summary_and_private_access_control(client):
+    creator = await _register_creator(client)
+    onboarded = await _onboard_agent(client, creator["token"])
+    token = onboarded["agent_jwt_token"]
+    agent_id = onboarded["agent_id"]
+
+    public_resp = await client.get(f"/api/v2/agents/{agent_id}/trust/public")
+    assert public_resp.status_code == 200
+    public_body = public_resp.json()
+    assert set(public_body.keys()) == {
+        "agent_id",
+        "agent_trust_status",
+        "agent_trust_tier",
+        "agent_trust_score",
+        "updated_at",
+    }
+
+    private_without_auth = await client.get(f"/api/v2/agents/{agent_id}/trust")
+    assert private_without_auth.status_code == 401
+
+    private_with_owner = await client.get(
+        f"/api/v2/agents/{agent_id}/trust",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert private_with_owner.status_code == 200
+    owner_body = private_with_owner.json()
+    assert "stage_scores" in owner_body

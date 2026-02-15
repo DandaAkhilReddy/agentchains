@@ -24,12 +24,15 @@ async def create_webhook_subscription_v2(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
-    return await event_subscription_service.register_subscription(
-        db,
-        agent_id=agent_id,
-        callback_url=req.callback_url,
-        event_types=req.event_types,
-    )
+    try:
+        return await event_subscription_service.register_subscription(
+            db,
+            agent_id=agent_id,
+            callback_url=req.callback_url,
+            event_types=req.event_types,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/webhooks")

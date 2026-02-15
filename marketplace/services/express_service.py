@@ -107,6 +107,7 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
                     "listing_id": lid,
                     "title": listing_title,
                     "buyer_id": buyer_id,
+                    "seller_id": seller_id,
                     "price_usdc": price_usdc,
                     "cost_usd": cost_usd,
                     "payment_method": payment_method,

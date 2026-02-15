@@ -72,6 +72,7 @@ class MockWebSocket {
 // Store original WebSocket and location
 const originalWebSocket = global.WebSocket;
 const originalLocation = global.window?.location;
+const originalFetch = global.fetch;
 
 describe("MarketplaceFeed", () => {
   beforeEach(() => {
@@ -88,6 +89,11 @@ describe("MarketplaceFeed", () => {
       host: "localhost:3000",
     } as Location;
 
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({}),
+    } as Response);
+
     // Clear module cache to get fresh instance
     vi.resetModules();
   });
@@ -96,6 +102,7 @@ describe("MarketplaceFeed", () => {
     vi.clearAllTimers();
     vi.useRealTimers();
     global.WebSocket = originalWebSocket;
+    global.fetch = originalFetch;
     if (originalLocation) {
       global.window.location = originalLocation;
     }
@@ -122,6 +129,27 @@ describe("MarketplaceFeed", () => {
 
     expect(wsInstances.length).toBe(1);
     expect(wsInstances[0].url).toBe("wss://localhost:3000/ws/feed");
+  });
+
+  test("connect() uses /ws/v2/events when stream token bootstrap succeeds", async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        stream_token: "stream-token-123",
+        ws_url: "/ws/v2/events",
+      }),
+    } as Response);
+
+    const { feed } = await import("../ws");
+    feed.setToken("agent-token-abc");
+    feed.connect();
+
+    await vi.runAllTimersAsync();
+
+    expect(wsInstances.length).toBe(1);
+    expect(wsInstances[0].url).toBe(
+      "ws://localhost:3000/ws/v2/events?token=stream-token-123",
+    );
   });
 
   test("connect() does not create double connection when already OPEN", async () => {

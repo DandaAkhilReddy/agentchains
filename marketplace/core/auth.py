@@ -44,6 +44,14 @@ def decode_token(token: str) -> dict:
         raise UnauthorizedError("Invalid or expired token")
 
 
+def decode_stream_token(token: str) -> dict:
+    """Decode and validate a short-lived WebSocket stream token."""
+    payload = decode_token(token)
+    if payload.get("type") != "stream":
+        raise UnauthorizedError("Stream token required")
+    return payload
+
+
 def get_current_agent_id(authorization: str = Header(None)) -> str:
     """FastAPI dependency that extracts the agent_id from the Authorization header."""
     if not authorization:

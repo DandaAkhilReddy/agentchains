@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+import os
 import random
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from marketplace.config import settings
 from marketplace.core.async_tasks import fire_and_forget
 from marketplace.models.agent_trust import (
     MemorySnapshot,
@@ -37,6 +41,33 @@ def _utcnow() -> datetime:
 
 def _hash_text(text: str) -> str:
     return f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}"
+
+
+def _memory_key() -> bytes:
+    # Derive a 256-bit key from configured material to support simple env-based keys.
+    material = (settings.memory_encryption_key or "").strip()
+    if not material:
+        raise RuntimeError("MEMORY_ENCRYPTION_KEY must be configured")
+    return hashlib.sha256(material.encode("utf-8")).digest()
+
+
+def _encrypt_chunk_payload(plaintext: str) -> str:
+    nonce = os.urandom(12)
+    ciphertext = AESGCM(_memory_key()).encrypt(nonce, plaintext.encode("utf-8"), None)
+    encoded = base64.urlsafe_b64encode(nonce + ciphertext).decode("ascii")
+    return f"enc:v1:{encoded}"
+
+
+def _decrypt_chunk_payload(payload: str) -> str:
+    raw = payload or ""
+    if not raw.startswith("enc:v1:"):
+        # Backward compatibility for legacy unencrypted rows.
+        return raw
+    encoded = raw.split("enc:v1:", 1)[1]
+    data = base64.urlsafe_b64decode(encoded.encode("ascii"))
+    nonce, ciphertext = data[:12], data[12:]
+    plaintext = AESGCM(_memory_key()).decrypt(nonce, ciphertext, None)
+    return plaintext.decode("utf-8")
 
 
 def _json_load(value: Any, fallback: Any) -> Any:
@@ -166,7 +197,7 @@ async def import_snapshot(
                 snapshot_id=snapshot_id,
                 chunk_index=idx,
                 chunk_hash=_hash_text(payload),
-                chunk_payload=payload,
+                chunk_payload=_encrypt_chunk_payload(payload),
                 record_count=len(records_chunk),
             )
         )
@@ -237,13 +268,20 @@ async def verify_snapshot(
     integrity_ok = True
     mismatch_reason = ""
     for chunk in chunks:
-        expected_hash = _hash_text(chunk.chunk_payload or "")
+        try:
+            plaintext_payload = _decrypt_chunk_payload(chunk.chunk_payload or "")
+        except Exception:
+            integrity_ok = False
+            mismatch_reason = f"chunk_decrypt_failed:{chunk.chunk_index}"
+            break
+
+        expected_hash = _hash_text(plaintext_payload)
         if expected_hash != chunk.chunk_hash:
             integrity_ok = False
             mismatch_reason = f"chunk_hash_mismatch:{chunk.chunk_index}"
             break
         stored_hashes.append(chunk.chunk_hash)
-        parsed = _json_load(chunk.chunk_payload, [])
+        parsed = _json_load(plaintext_payload, [])
         if isinstance(parsed, list):
             for record in parsed:
                 if isinstance(record, dict):
@@ -368,3 +406,26 @@ async def get_snapshot(
     if snapshot is None:
         raise ValueError("Snapshot not found")
     return _serialize_snapshot(snapshot)
+
+
+async def redact_old_memory_verification_evidence(
+    db: AsyncSession,
+    *,
+    retention_days: int | None = None,
+) -> int:
+    """Redact sampled entries and detailed evidence outside retention window."""
+    days = retention_days if retention_days is not None else settings.security_event_retention_days
+    cutoff = _utcnow() - timedelta(days=max(1, days))
+    result = await db.execute(
+        select(MemoryVerificationRun).where(MemoryVerificationRun.created_at < cutoff)
+    )
+    rows = result.scalars().all()
+    redacted = 0
+    for row in rows:
+        if row.sampled_entries_json != "[]" or row.evidence_json != '{"redacted":true}':
+            row.sampled_entries_json = "[]"
+            row.evidence_json = '{"redacted":true}'
+            redacted += 1
+    if redacted:
+        await db.commit()
+    return redacted
