@@ -8,6 +8,7 @@ This folder contains operational and utility scripts for local development.
   - Generates key material used by local/testing flows.
 - `reset_db.py`
   - Resets local database state.
+  - Optional: `--purge-content-store` removes local cached content artifacts.
 - `seed_db.py`
   - Seeds baseline marketplace entities.
 - `seed_demand.py`
@@ -44,6 +45,14 @@ E2E scripts target local by default, but can be pointed at another deployment:
 ```bash
 set MARKETPLACE_URL=https://your-deployment.example.com
 python scripts/test_azure.py
+```
+
+Safety guard for mutating integration scripts:
+- `test_e2e.py`, `test_adk_agents.py`, and `test_azure.py` refuse non-local targets by default.
+- To intentionally run against a remote deployment, set:
+
+```bash
+set ALLOW_REMOTE_MUTATING_TESTS=1
 ```
 
 ## Maintenance Rules

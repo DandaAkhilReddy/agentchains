@@ -14,8 +14,11 @@ import sys
 import time
 import uuid
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
+
+ALLOW_REMOTE_MUTATING_TESTS_ENV = "ALLOW_REMOTE_MUTATING_TESTS"
 
 
 def _wait_for_health(base_api: str, timeout_seconds: int = 20) -> bool:
@@ -272,6 +275,17 @@ def main() -> int:
                 "error",
             ],
         )
+    else:
+        parsed = urlparse(base_url)
+        host = (parsed.hostname or "").lower()
+        is_local = host in {"127.0.0.1", "localhost", "::1"}
+        if not is_local and os.getenv(ALLOW_REMOTE_MUTATING_TESTS_ENV, "").strip() != "1":
+            print(
+                "Refusing to run mutating E2E flow on non-local target.\n"
+                f"Target: {base_url}\n"
+                f"Set {ALLOW_REMOTE_MUTATING_TESTS_ENV}=1 to override intentionally."
+            )
+            return 2
 
     base_api = f"{base_url}/api/v1"
     if not _wait_for_health(base_api, timeout_seconds=20):
