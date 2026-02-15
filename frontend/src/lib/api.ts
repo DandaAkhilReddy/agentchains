@@ -36,9 +36,19 @@ import type {
   CreatorWallet,
   RedemptionRequest,
   RedemptionMethodInfo,
+  AgentOnboardResponse,
+  RuntimeAttestationResponse,
+  KnowledgeChallengeResponse,
+  AgentTrustProfile,
+  MemoryImportResponse,
+  MemoryVerifyResponse,
+  MemorySnapshot,
+  StreamTokenResponse,
+  WebhookSubscription,
 } from "../types/api";
 
 const BASE = "/api/v1";
+const BASE_V2 = "/api/v2";
 
 async function get<T>(
   path: string,
@@ -122,6 +132,82 @@ async function authDelete<T>(
   token: string,
 ): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${await res.text()}`);
+  }
+  return res.json();
+}
+
+async function getV2<T>(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+): Promise<T> {
+  const url = new URL(`${BASE_V2}${path}`, window.location.origin);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== "") {
+        url.searchParams.set(k, String(v));
+      }
+    }
+  }
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${await res.text()}`);
+  }
+  return res.json();
+}
+
+async function authGetV2<T>(
+  path: string,
+  token: string,
+  params?: Record<string, string | number | undefined>,
+): Promise<T> {
+  const url = new URL(`${BASE_V2}${path}`, window.location.origin);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== "") {
+        url.searchParams.set(k, String(v));
+      }
+    }
+  }
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${await res.text()}`);
+  }
+  return res.json();
+}
+
+async function authPostV2<T>(
+  path: string,
+  token: string,
+  body: unknown,
+): Promise<T> {
+  const res = await fetch(`${BASE_V2}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${await res.text()}`);
+  }
+  return res.json();
+}
+
+async function authDeleteV2<T>(
+  path: string,
+  token: string,
+): Promise<T> {
+  const res = await fetch(`${BASE_V2}${path}`, {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -368,6 +454,105 @@ export const cancelRedemption = (token: string, id: string) =>
 
 export const fetchRedemptionMethods = () =>
   get<{ methods: RedemptionMethodInfo[] }>("/redemptions/methods");
+
+// -- Agent Trust + Memory (v2) --
+
+export const onboardAgentV2 = (
+  creatorToken: string,
+  body: {
+    name: string;
+    description?: string;
+    agent_type: "seller" | "buyer" | "both";
+    public_key: string;
+    wallet_address?: string;
+    capabilities?: string[];
+    a2a_endpoint?: string;
+    memory_import_intent?: boolean;
+  },
+) => authPostV2<AgentOnboardResponse>("/agents/onboard", creatorToken, body);
+
+export const attestRuntimeV2 = (
+  agentToken: string,
+  agentId: string,
+  body: {
+    runtime_name: string;
+    runtime_version?: string;
+    sdk_version?: string;
+    endpoint_reachable?: boolean;
+    supports_memory?: boolean;
+  },
+) =>
+  authPostV2<RuntimeAttestationResponse>(
+    `/agents/${agentId}/attest/runtime`,
+    agentToken,
+    body,
+  );
+
+export const runKnowledgeChallengeV2 = (
+  agentToken: string,
+  agentId: string,
+  body: {
+    capabilities?: string[];
+    claim_payload?: Record<string, unknown>;
+  },
+) =>
+  authPostV2<KnowledgeChallengeResponse>(
+    `/agents/${agentId}/attest/knowledge/run`,
+    agentToken,
+    body,
+  );
+
+export const fetchAgentTrustV2 = (agentId: string) =>
+  getV2<AgentTrustProfile>(`/agents/${agentId}/trust`);
+
+export const importMemorySnapshotV2 = (
+  agentToken: string,
+  body: {
+    source_type?: string;
+    label?: string;
+    records: Record<string, unknown>[];
+    chunk_size?: number;
+    source_metadata?: Record<string, unknown>;
+    encrypted_blob_ref?: string;
+  },
+) => authPostV2<MemoryImportResponse>("/memory/snapshots/import", agentToken, body);
+
+export const verifyMemorySnapshotV2 = (
+  agentToken: string,
+  snapshotId: string,
+  body?: { sample_size?: number },
+) =>
+  authPostV2<MemoryVerifyResponse>(
+    `/memory/snapshots/${snapshotId}/verify`,
+    agentToken,
+    body ?? {},
+  );
+
+export const fetchMemorySnapshotV2 = (agentToken: string, snapshotId: string) =>
+  authGetV2<MemorySnapshot>(`/memory/snapshots/${snapshotId}`, agentToken);
+
+export const fetchStreamTokenV2 = (agentToken: string) =>
+  authGetV2<StreamTokenResponse>("/events/stream-token", agentToken);
+
+export const createWebhookSubscriptionV2 = (
+  agentToken: string,
+  body: { callback_url: string; event_types?: string[] },
+) => authPostV2<WebhookSubscription>("/integrations/webhooks", agentToken, body);
+
+export const fetchWebhookSubscriptionsV2 = (agentToken: string) =>
+  authGetV2<{ subscriptions: WebhookSubscription[]; count: number }>(
+    "/integrations/webhooks",
+    agentToken,
+  );
+
+export const deleteWebhookSubscriptionV2 = (
+  agentToken: string,
+  subscriptionId: string,
+) =>
+  authDeleteV2<{ deleted: boolean }>(
+    `/integrations/webhooks/${subscriptionId}`,
+    agentToken,
+  );
 
 // ── System Metrics (combined) ──
 

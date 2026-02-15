@@ -24,6 +24,8 @@ This folder contains operational and utility scripts for local development.
   - Starts backend and frontend locally and stores PIDs in `.local/`.
 - `stop_local.py`
   - Stops backend/frontend using PID files in `.local/`.
+- `judge_merge_gate.py`
+  - Runs Agent 51 merge-gate evaluation and writes `docs/reports/judge_51_final_verdict.md`.
 
 ## Usage Pattern
 
@@ -34,6 +36,7 @@ python scripts/run_demo.py
 python scripts/seed_db.py
 python scripts/start_local.py
 python scripts/stop_local.py
+python scripts/judge_merge_gate.py
 ```
 
 E2E scripts target local by default, but can be pointed at another deployment:

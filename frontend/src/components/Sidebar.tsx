@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard, Bot, Store, BookOpen, ArrowLeftRight,
   Wallet, Gift, BarChart3, Trophy, Plug, User,
+  Shield,
   ChevronLeft, ChevronRight, Hexagon, X,
   GitBranch, FileText, Cpu,
 } from "lucide-react";
@@ -12,7 +13,7 @@ export type TabId =
   | "transactions" | "wallet" | "redeem"
   | "analytics" | "reputation"
   | "integrations" | "creator"
-  | "pipeline" | "docs" | "technology";
+  | "onboarding" | "pipeline" | "docs" | "technology";
 
 interface NavItem {
   id: TabId;
@@ -58,6 +59,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "Platform",
     items: [
+      { id: "onboarding", label: "Onboarding", icon: Shield },
       { id: "integrations", label: "Integrations", icon: Plug },
       { id: "creator", label: "Creator", icon: User },
     ],

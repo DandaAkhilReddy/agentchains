@@ -14,6 +14,7 @@ const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const CatalogPage = lazy(() => import("./pages/CatalogPage"));
 const WalletPage = lazy(() => import("./pages/WalletPage"));
 const IntegrationsPage = lazy(() => import("./pages/IntegrationsPage"));
+const OnboardingWizardPage = lazy(() => import("./pages/OnboardingWizardPage"));
 const CreatorLoginPage = lazy(() => import("./pages/CreatorLoginPage"));
 const CreatorDashboardPage = lazy(() => import("./pages/CreatorDashboardPage"));
 const RedemptionPage = lazy(() => import("./pages/RedemptionPage"));
@@ -99,6 +100,20 @@ export default function App() {
                 {activeTab === "reputation" && <ReputationPage />}
                 {activeTab === "integrations" && (
                   <Suspense fallback={loading}><IntegrationsPage /></Suspense>
+                )}
+                {activeTab === "onboarding" && (
+                  <Suspense fallback={loading}>
+                    {creatorAuth.isAuthenticated ? (
+                      <OnboardingWizardPage creatorToken={creatorAuth.token!} />
+                    ) : (
+                      <CreatorLoginPage
+                        onLogin={async (email, password) => { await creatorAuth.login(email, password); }}
+                        onRegister={async (data) => { await creatorAuth.register(data); }}
+                        loading={creatorAuth.loading}
+                        error={creatorAuth.error}
+                      />
+                    )}
+                  </Suspense>
                 )}
                 {activeTab === "creator" && (
                   <Suspense fallback={loading}>
