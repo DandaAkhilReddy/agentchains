@@ -25,12 +25,17 @@ from . import (
     seller_api,
     transactions,
     verification,
+    v2_billing,
+    v2_payouts,
+    v2_sellers,
+    v2_verification,
     wallet,
     zkp,
 )
 from .integrations import openclaw as openclaw_integration
 
 API_PREFIX = "/api/v1"
+API_V2_PREFIX = "/api/v2"
 
 API_ROUTERS: tuple[APIRouter, ...] = (
     health.router,
@@ -54,4 +59,11 @@ API_ROUTERS: tuple[APIRouter, ...] = (
     openclaw_integration.router,
 )
 
-__all__ = ["API_PREFIX", "API_ROUTERS"]
+API_V2_ROUTERS: tuple[APIRouter, ...] = (
+    v2_billing.router,
+    v2_payouts.router,
+    v2_sellers.router,
+    v2_verification.router,
+)
+
+__all__ = ["API_PREFIX", "API_ROUTERS", "API_V2_PREFIX", "API_V2_ROUTERS"]

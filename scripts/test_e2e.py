@@ -51,6 +51,23 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _request_with_retry(
+    client: httpx.Client,
+    method: str,
+    url: str,
+    *,
+    retries: int = 3,
+    **kwargs: Any,
+) -> httpx.Response:
+    for attempt in range(retries + 1):
+        response = client.request(method, url, **kwargs)
+        if response.status_code != 429 or attempt == retries:
+            return response
+        retry_after = int(response.json().get("retry_after", 1))
+        time.sleep(max(1, retry_after))
+    return response
+
+
 def _run_flow(base_api: str) -> None:
     client = httpx.Client(timeout=30)
 
@@ -62,7 +79,9 @@ def _run_flow(base_api: str) -> None:
 
     # 1. Register seller
     print("1. Registering seller agent...")
-    resp = client.post(
+    resp = _request_with_retry(
+        client,
+        "POST",
         f"{base_api}/agents/register",
         json={
             "name": seller_name,
@@ -80,7 +99,9 @@ def _run_flow(base_api: str) -> None:
 
     # 2. Register buyer
     print("2. Registering buyer agent...")
-    resp = client.post(
+    resp = _request_with_retry(
+        client,
+        "POST",
         f"{base_api}/agents/register",
         json={
             "name": buyer_name,
@@ -113,7 +134,9 @@ def _run_flow(base_api: str) -> None:
             ],
         }
     )
-    resp = client.post(
+    resp = _request_with_retry(
+        client,
+        "POST",
         f"{base_api}/listings",
         json={
             "title": "Web search: Python async patterns",
@@ -145,7 +168,9 @@ def _run_flow(base_api: str) -> None:
     # 6. Buyer initiates purchase
     print("6. Buyer initiating purchase...")
     best = results["results"][0]
-    resp = client.post(
+    resp = _request_with_retry(
+        client,
+        "POST",
         f"{base_api}/transactions/initiate",
         json={"listing_id": best["id"]},
         headers={"Authorization": f"Bearer {buyer_token}"},
@@ -159,7 +184,9 @@ def _run_flow(base_api: str) -> None:
 
     # 7. Confirm payment (simulated)
     print("7. Confirming x402 payment (simulated)...")
-    resp = client.post(
+    resp = _request_with_retry(
+        client,
+        "POST",
         f"{base_api}/transactions/{tx_id}/confirm-payment",
         json={"payment_signature": "", "payment_tx_hash": ""},
         headers={"Authorization": f"Bearer {buyer_token}"},
@@ -171,7 +198,9 @@ def _run_flow(base_api: str) -> None:
 
     # 8. Seller delivers content
     print("8. Seller delivering content...")
-    resp = client.post(
+    resp = _request_with_retry(
+        client,
+        "POST",
         f"{base_api}/transactions/{tx_id}/deliver",
         json={"content": content},
         headers={"Authorization": f"Bearer {seller_token}"},
@@ -183,7 +212,9 @@ def _run_flow(base_api: str) -> None:
 
     # 9. Buyer verifies
     print("9. Buyer verifying content hash...")
-    resp = client.post(
+    resp = _request_with_retry(
+        client,
+        "POST",
         f"{base_api}/transactions/{tx_id}/verify",
         json={},
         headers={"Authorization": f"Bearer {buyer_token}"},
