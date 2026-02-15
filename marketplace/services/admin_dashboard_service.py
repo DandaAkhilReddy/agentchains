@@ -10,6 +10,7 @@ from marketplace.config import settings
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.agent_trust import AgentTrustProfile
 from marketplace.models.audit_log import AuditLog
+from marketplace.models.dual_layer import ConsumerOrder, PlatformFee
 from marketplace.models.listing import DataListing
 from marketplace.models.redemption import RedemptionRequest
 from marketplace.models.transaction import Transaction
@@ -81,6 +82,9 @@ async def get_admin_finance(db: AsyncSession) -> dict:
     tx_result = await db.execute(select(Transaction).where(Transaction.status == "completed"))
     completed_tx = list(tx_result.scalars().all())
     platform_volume = sum(float(tx.amount_usdc or 0) for tx in completed_tx)
+    consumer_orders_count = int((await db.execute(select(func.count(ConsumerOrder.id)))).scalar() or 0)
+    fee_result = await db.execute(select(func.sum(PlatformFee.fee_usd)))
+    platform_fee_volume_usd = float(fee_result.scalar() or 0)
 
     pending_payouts = await db.execute(
         select(RedemptionRequest).where(RedemptionRequest.status == "pending")
@@ -111,6 +115,8 @@ async def get_admin_finance(db: AsyncSession) -> dict:
     return {
         "platform_volume_usd": round(platform_volume, 6),
         "completed_transaction_count": len(completed_tx),
+        "consumer_orders_count": consumer_orders_count,
+        "platform_fee_volume_usd": round(platform_fee_volume_usd, 6),
         "payout_pending_count": len(pending_rows),
         "payout_pending_usd": round(sum(float(r.amount_usd or 0) for r in pending_rows), 6),
         "payout_processing_count": len(processing_rows),

@@ -319,6 +319,31 @@ Core v2:
 - `GET /api/v2/dashboards/*`
 - `GET /api/v2/admin/*`
 
+## Dual-Layer APIs (Developer + Buyer)
+
+Builder layer (developer publishing):
+- `GET /api/v2/builder/templates`
+- `POST /api/v2/builder/projects`
+- `GET /api/v2/builder/projects`
+- `POST /api/v2/builder/projects/{project_id}/publish`
+- `GET /api/v2/creators/me/developer-profile`
+- `PUT /api/v2/creators/me/developer-profile`
+
+Buyer layer (no-code consumption):
+- `POST /api/v2/users/register`
+- `POST /api/v2/users/login`
+- `GET /api/v2/users/me`
+- `GET /api/v2/market/listings`
+- `GET /api/v2/market/listings/{listing_id}`
+- `POST /api/v2/market/orders`
+- `GET /api/v2/market/orders/me`
+- `GET /api/v2/market/orders/{order_id}`
+- `GET /api/v2/market/collections/featured`
+
+Trust-first checkout rule:
+- Verified listings are prioritized.
+- Unverified listings require explicit confirmation (`allow_unverified=true`) at order time.
+
 ## Docs Map (Read Next)
 
 - `docs/API.md`

@@ -1542,3 +1542,51 @@ curl http://localhost:8000/mcp/health
 # Open Swagger UI (interactive API explorer)
 open http://localhost:8000/docs
 ```
+
+---
+
+## Dual-Layer APIs (Builder + Buyer)
+
+The platform now exposes additive v2 APIs for a two-layer model:
+
+- Builder Layer: developers create projects, publish listings, and earn USD.
+- Buyer Layer: end users browse trusted listings and buy without coding.
+
+### Builder Layer
+
+| Method | Path | Purpose | Auth |
+|---|---|---|---|
+| `GET` | `/api/v2/builder/templates` | List starter templates | No |
+| `POST` | `/api/v2/builder/projects` | Create draft builder project | Creator |
+| `GET` | `/api/v2/builder/projects` | List creator projects | Creator |
+| `POST` | `/api/v2/builder/projects/{project_id}/publish` | Publish project to listing | Creator |
+| `GET` | `/api/v2/creators/me/developer-profile` | Read developer profile | Creator |
+| `PUT` | `/api/v2/creators/me/developer-profile` | Update developer profile | Creator |
+
+### Buyer Layer
+
+| Method | Path | Purpose | Auth |
+|---|---|---|---|
+| `POST` | `/api/v2/users/register` | Register buyer account | No |
+| `POST` | `/api/v2/users/login` | Login buyer account | No |
+| `GET` | `/api/v2/users/me` | Buyer profile | User |
+| `GET` | `/api/v2/users/events/stream-token` | User websocket token | User |
+| `GET` | `/api/v2/market/listings` | Browse market listings | No |
+| `GET` | `/api/v2/market/listings/{listing_id}` | Listing detail | No |
+| `POST` | `/api/v2/market/orders` | Create buyer order | User |
+| `GET` | `/api/v2/market/orders/me` | Buyer order history | User |
+| `GET` | `/api/v2/market/orders/{order_id}` | Buyer order detail | User |
+| `GET` | `/api/v2/market/collections/featured` | Featured listing collections | No |
+
+### Trust-First Buyer Policy
+
+Market browse uses verified-first ranking.
+
+- `verified_secure_data` listings are shown first.
+- Non-verified listings require explicit buyer acknowledgment during order creation by setting:
+
+```json
+{
+  "allow_unverified": true
+}
+```
