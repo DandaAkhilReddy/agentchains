@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 import pytest
 
-from marketplace.config import Settings, settings
+from marketplace.config import Settings, settings, validate_security_posture
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -311,3 +311,52 @@ class TestConfigReloadAndValidation:
             assert s.x402_network == "base-sepolia"
             assert s.jwt_expire_hours == 48
             assert s.cdn_hot_cache_max_bytes == 134217728  # 128 MB
+
+
+class TestProductionSecurityGuardrails:
+    """Security-first production guardrail validation."""
+
+    def test_prod_rejects_default_event_signing_secret(self):
+        with patch.dict(
+            os.environ,
+            {
+                "ENVIRONMENT": "production",
+                "JWT_SECRET_KEY": "super-strong-jwt-secret-2026",
+                "EVENT_SIGNING_SECRET": "dev-event-signing-secret-change-in-production",
+                "MEMORY_ENCRYPTION_KEY": "super-strong-memory-key-2026",
+                "CORS_ORIGINS": "https://app.example.com",
+            },
+            clear=False,
+        ):
+            with pytest.raises(RuntimeError):
+                validate_security_posture(Settings())
+
+    def test_prod_rejects_equal_event_and_jwt_secret(self):
+        with patch.dict(
+            os.environ,
+            {
+                "ENVIRONMENT": "production",
+                "JWT_SECRET_KEY": "same-secret-for-both",
+                "EVENT_SIGNING_SECRET": "same-secret-for-both",
+                "MEMORY_ENCRYPTION_KEY": "super-strong-memory-key-2026",
+                "CORS_ORIGINS": "https://app.example.com",
+            },
+            clear=False,
+        ):
+            with pytest.raises(RuntimeError):
+                validate_security_posture(Settings())
+
+    def test_prod_rejects_wildcard_cors(self):
+        with patch.dict(
+            os.environ,
+            {
+                "ENVIRONMENT": "production",
+                "JWT_SECRET_KEY": "super-strong-jwt-secret-2026",
+                "EVENT_SIGNING_SECRET": "super-strong-event-secret-2026",
+                "MEMORY_ENCRYPTION_KEY": "super-strong-memory-key-2026",
+                "CORS_ORIGINS": "*",
+            },
+            clear=False,
+        ):
+            with pytest.raises(RuntimeError):
+                validate_security_posture(Settings())

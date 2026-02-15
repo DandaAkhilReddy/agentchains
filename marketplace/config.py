@@ -5,6 +5,9 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    # Environment
+    environment: str = "development"  # development | test | production
+
     # Server
     marketplace_host: str = "0.0.0.0"
     marketplace_port: int = 8000
@@ -52,8 +55,11 @@ class Settings(BaseSettings):
     trust_webhook_max_retries: int = 3
     trust_webhook_timeout_seconds: int = 10
     trust_webhook_max_failures: int = 5
-    event_signing_secret: str = ""
+    event_signing_secret: str = "dev-event-signing-secret-change-in-production"
+    event_signing_key_id: str = "v1"
     stream_token_expire_minutes: int = 30
+    memory_encryption_key: str = "dev-memory-encryption-key-change-in-production"
+    security_event_retention_days: int = 30
 
     # Creator Economy
     creator_royalty_pct: float = 1.0  # 100% — creator gets all agent earnings
@@ -81,20 +87,52 @@ settings = Settings()
 
 # Warn on insecure defaults (logged at startup, not a hard error for dev convenience)
 _logger = logging.getLogger("marketplace.config")
-_INSECURE_SECRETS = {"dev-secret-change-in-production", "change-me-to-a-random-string", "change-me-to-a-random-64-char-string"}
-if settings.jwt_secret_key in _INSECURE_SECRETS:
-    if "postgresql" in settings.database_url or "postgres" in settings.database_url:
-        raise RuntimeError(
-            "FATAL: JWT_SECRET_KEY is set to an insecure default. "
-            "Set a strong random secret via the JWT_SECRET_KEY environment variable before deploying to production."
+_INSECURE_SECRETS = {
+    "dev-secret-change-in-production",
+    "change-me-to-a-random-string",
+    "change-me-to-a-random-64-char-string",
+    "dev-event-signing-secret-change-in-production",
+    "dev-memory-encryption-key-change-in-production",
+}
+def validate_security_posture(cfg: Settings) -> None:
+    is_prod = cfg.environment.lower() in {"production", "prod"}
+
+    if cfg.jwt_secret_key in _INSECURE_SECRETS:
+        if is_prod:
+            raise RuntimeError(
+                "FATAL: JWT_SECRET_KEY is set to an insecure default. "
+                "Set a strong random secret via the JWT_SECRET_KEY environment variable before deploying to production."
+            )
+        warnings.warn(
+            "JWT_SECRET_KEY is set to the default insecure value. "
+            "Set a strong random secret via the JWT_SECRET_KEY environment variable for production.",
+            stacklevel=1,
         )
-    warnings.warn(
-        "JWT_SECRET_KEY is set to the default insecure value. "
-        "Set a strong random secret via the JWT_SECRET_KEY environment variable for production.",
-        stacklevel=1,
-    )
-if settings.cors_origins == "*":
-    _logger.warning(
-        "CORS_ORIGINS is set to '*' (allow all). "
-        "Configure specific origins for production via the CORS_ORIGINS environment variable."
-    )
+
+    if cfg.cors_origins == "*":
+        if is_prod:
+            raise RuntimeError(
+                "FATAL: CORS_ORIGINS cannot be '*' in production. "
+                "Set explicit trusted origins via the CORS_ORIGINS environment variable."
+            )
+        _logger.warning(
+            "CORS_ORIGINS is set to '*' (allow all). "
+            "Configure specific origins for production via the CORS_ORIGINS environment variable."
+        )
+
+    if is_prod:
+        if not cfg.event_signing_secret or cfg.event_signing_secret in _INSECURE_SECRETS:
+            raise RuntimeError(
+                "FATAL: EVENT_SIGNING_SECRET must be set to a strong random value in production."
+            )
+        if cfg.event_signing_secret == cfg.jwt_secret_key:
+            raise RuntimeError(
+                "FATAL: EVENT_SIGNING_SECRET must be different from JWT_SECRET_KEY in production."
+            )
+        if not cfg.memory_encryption_key or cfg.memory_encryption_key in _INSECURE_SECRETS:
+            raise RuntimeError(
+                "FATAL: MEMORY_ENCRYPTION_KEY must be set to a strong random value in production."
+            )
+
+
+validate_security_posture(settings)

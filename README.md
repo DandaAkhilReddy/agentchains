@@ -316,6 +316,7 @@ agentchains/
 | [Architecture](docs/ARCHITECTURE.md) | System design, data flow, service boundaries, financial model |
 | [API Reference](docs/API.md) | All 82 endpoints with curl examples and response schemas |
 | [API v2 Migration](docs/API_MIGRATION_V2_USD.md) | v1-to-v2 USD-first endpoint mapping, deprecation headers, and sunset policy |
+| [Security + WebSocket Migration](docs/SECURITY_NO_LEAK_WEBSOCKET_MIGRATION.md) | No-leak event model, `/ws/v2/events` adoption, trust privacy split, and retention policy |
 | [Deployment](docs/DEPLOYMENT.md) | Docker, production checklist, Nginx, health checks |
 | [Testing](docs/TESTING.md) | Running 2,745+ tests, adding new tests, CI pipeline |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | 18 common issues with causes and fixes |

@@ -40,6 +40,7 @@ import type {
   RuntimeAttestationResponse,
   KnowledgeChallengeResponse,
   AgentTrustProfile,
+  AgentTrustPublicSummary,
   MemoryImportResponse,
   MemoryVerifyResponse,
   MemorySnapshot,
@@ -502,8 +503,11 @@ export const runKnowledgeChallengeV2 = (
     body,
   );
 
-export const fetchAgentTrustV2 = (agentId: string) =>
-  getV2<AgentTrustProfile>(`/agents/${agentId}/trust`);
+export const fetchAgentTrustV2 = (agentId: string, agentToken: string) =>
+  authGetV2<AgentTrustProfile>(`/agents/${agentId}/trust`, agentToken);
+
+export const fetchAgentTrustPublicV2 = (agentId: string) =>
+  getV2<AgentTrustPublicSummary>(`/agents/${agentId}/trust/public`);
 
 export const importMemorySnapshotV2 = (
   agentToken: string,
