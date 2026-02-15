@@ -11,11 +11,13 @@ import os
 import sys
 import time
 from typing import Callable
+from urllib.parse import urlparse
 
 import httpx
 
 BASE = os.getenv("MARKETPLACE_URL", "http://127.0.0.1:8000").rstrip("/")
 API = f"{BASE}/api/v1"
+ALLOW_REMOTE_MUTATING_TESTS_ENV = "ALLOW_REMOTE_MUTATING_TESTS"
 
 passed = 0
 failed = 0
@@ -66,6 +68,17 @@ def get_with_retry(
 
 def main():
     global passed, failed
+    parsed = urlparse(BASE)
+    host = (parsed.hostname or "").lower()
+    is_local = host in {"127.0.0.1", "localhost", "::1"}
+    if not is_local and os.getenv(ALLOW_REMOTE_MUTATING_TESTS_ENV, "").strip() != "1":
+        print(
+            "Refusing to run mutating E2E checks on non-local target.\n"
+            f"Target: {BASE}\n"
+            f"Set {ALLOW_REMOTE_MUTATING_TESTS_ENV}=1 to override intentionally."
+        )
+        return 2
+
     client = httpx.Client(base_url=API, verify=False, timeout=30)
     mcp_client = httpx.Client(base_url=BASE, verify=False, timeout=30)
 
@@ -458,8 +471,8 @@ def main():
         for name, err in errors:
             print(f"    {name}: {err[:160]}")
 
-    sys.exit(0 if failed == 0 else 1)
+    return 0 if failed == 0 else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

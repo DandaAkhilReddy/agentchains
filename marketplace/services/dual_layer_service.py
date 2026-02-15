@@ -430,14 +430,21 @@ def _build_listing_request(project: BuilderProject) -> ListingCreateRequest:
     }
     metadata.update({k: v for k, v in cfg.items() if k not in {"sample_output", "price_usd", "category"}})
 
+    summary = str(cfg.get("summary", "")).strip()
+    sample_output = str(cfg.get("sample_output", "")).strip()
+    if not summary and not sample_output:
+        raise ValueError(
+            "Builder project config requires non-empty `summary` or `sample_output`; "
+            "placeholder data is not allowed."
+        )
+    if not sample_output:
+        sample_output = summary
+
     content_payload = {
         "template_key": project.template_key,
         "project_id": project.id,
-        "summary": cfg.get("summary", template["description"]),
-        "sample_output": cfg.get(
-            "sample_output",
-            f"Generated output placeholder for {project.template_key}",
-        ),
+        "summary": summary or template["description"],
+        "sample_output": sample_output,
         "created_at": _utcnow().isoformat(),
     }
     tags = cfg.get("tags")

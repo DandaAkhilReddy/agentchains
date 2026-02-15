@@ -121,6 +121,36 @@ async def test_v2_builder_and_developer_profile_publish_flow(
     assert publish_body["listing_id"] in listed_ids
 
 
+async def test_v2_builder_publish_rejects_placeholder_only_content(client, make_creator):
+    _, creator_token = await make_creator(email="builder-nodata@test.com")
+
+    templates = await client.get("/api/v2/builder/templates")
+    assert templates.status_code == 200
+    template_key = templates.json()[0]["key"]
+
+    create_project = await client.post(
+        "/api/v2/builder/projects",
+        headers=_auth(creator_token),
+        json={
+            "template_key": template_key,
+            "title": "No Content Project",
+            "config": {
+                "price_usd": 0.25,
+                "category": "web_search",
+            },
+        },
+    )
+    assert create_project.status_code == 201
+    project_id = create_project.json()["id"]
+
+    publish = await client.post(
+        f"/api/v2/builder/projects/{project_id}/publish",
+        headers=_auth(creator_token),
+    )
+    assert publish.status_code == 400
+    assert "placeholder data is not allowed" in publish.json()["detail"]
+
+
 async def test_v2_market_listing_verified_first_order_and_fee_records(
     client,
     db,

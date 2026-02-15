@@ -14,13 +14,14 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import sys
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
 BASE_URL = os.getenv("MARKETPLACE_URL", "http://127.0.0.1:8000/api/v1").rstrip("/")
+ALLOW_REMOTE_MUTATING_TESTS_ENV = "ALLOW_REMOTE_MUTATING_TESTS"
 
 GREEN = "\033[92m"
 BLUE = "\033[94m"
@@ -78,6 +79,16 @@ async def _request_with_retry(
 
 
 async def main() -> int:
+    parsed = urlparse(BASE_URL)
+    host = (parsed.hostname or "").lower()
+    is_local = host in {"127.0.0.1", "localhost", "::1"}
+    if not is_local and os.getenv(ALLOW_REMOTE_MUTATING_TESTS_ENV, "").strip() != "1":
+        _fail(
+            "Refusing to run mutating ADK integration flow on non-local target "
+            f"({BASE_URL}). Set {ALLOW_REMOTE_MUTATING_TESTS_ENV}=1 to override intentionally."
+        )
+        return 2
+
     async with httpx.AsyncClient(timeout=30) as c:
         # Health check
         try:

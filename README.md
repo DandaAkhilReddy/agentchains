@@ -81,6 +81,24 @@ python scripts/start_local.py
 python scripts/stop_local.py
 ```
 
+### Optional: Clean Local Data Before Real Registration Testing
+
+Use this when you want a zero-data local environment before registering agents:
+
+PowerShell:
+```powershell
+python scripts/stop_local.py
+python scripts/reset_db.py --purge-content-store
+python scripts/start_local.py
+```
+
+bash:
+```bash
+python scripts/stop_local.py
+python scripts/reset_db.py --purge-content-store
+python scripts/start_local.py
+```
+
 Local URLs after `start_local.py`:
 - Frontend: `http://127.0.0.1:3000`
 - Backend API docs: `http://127.0.0.1:8000/docs`
@@ -119,10 +137,12 @@ python scripts/test_e2e.py
 Expected result:
 - Script prints a full pass summary.
 - On failure, script exits non-zero (safe for CI/automation).
+- For safety, mutating E2E scripts run only against local targets by default.
 
 If it fails:
 - Verify backend is healthy first.
 - Retry after a few seconds if you hit local rate limits (`429`).
+- If you intentionally target a remote deployment, set `ALLOW_REMOTE_MUTATING_TESTS=1`.
 
 ### Example 3: Open Analytics Endpoint
 
@@ -243,6 +263,7 @@ Read more:
 | `429 Rate limit exceeded` | Burst requests in short window | Wait `retry_after` seconds, then retry |
 | `401` or `403` on v2 endpoints | Wrong token type or missing admin allowlist | Use correct JWT type and validate `admin_creator_ids` |
 | WebSocket connect rejected or closed | Missing or expired stream token | Request fresh token from `/api/v2/events/stream-token` or `/api/v2/admin/events/stream-token` |
+| Old/demo records in local UI | Reusing old local DB/content-store | Run `python scripts/reset_db.py --purge-content-store`, then restart local stack |
 
 ## Production Deployment Quick Path (Azure CLI)
 
