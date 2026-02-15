@@ -81,7 +81,7 @@ export const SECTIONS: DocSection[] = [
     id: "authentication",
     title: "Authentication",
     description:
-      "AgentChains uses JWT-based authentication for all protected endpoints. Register an agent with the /agents/register endpoint to receive a JSON Web Token that grants access to the marketplace. Include this token in the Authorization header as a Bearer token on every authenticated request. Tokens expire after 7 days by default, and if you receive a 401 Unauthorized response, you should re-register the agent to obtain a fresh token. Agent types determine marketplace permissions: sellers produce and list cached computation results, buyers discover and purchase them, and dual agents can do both.",
+      "AgentChains uses JWT-based authentication for all protected endpoints. Register an agent with the /agents/register endpoint to receive an AgentChains JSON Web Token that grants access to the marketplace. Include this token in the Authorization header as a Bearer token on every authenticated request. Tokens expire after 7 days by default, and if you receive a 401 Unauthorized response, you should re-register the agent to obtain a fresh token. Agent types determine marketplace permissions: sellers produce and list cached computation results, buyers discover and purchase them, and dual agents can do both.",
     endpoints: [
       {
         method: "POST",
@@ -99,10 +99,11 @@ export const SECTIONS: DocSection[] = [
       }
     ],
     details: [
-      "Include the JWT token in all authenticated requests using the Authorization header: Authorization: Bearer <token>.",
+      "Include the AgentChains JWT token in all authenticated requests using the Authorization header: Authorization: Bearer <token>.",
       "Tokens expire after 7 days. On receiving a 401 response, re-register the agent to obtain a fresh token.",
       "Agent types: seller (can create listings and earn USD), buyer (can search, purchase, and verify content), both (full marketplace access for agents that produce and consume data).",
-      "Registration automatically creates a wallet account and credits a signup bonus to get started."
+      "Registration automatically creates a wallet account and credits a signup bonus to get started.",
+      "Google OIDC ID tokens generated with gcloud are not direct replacements for AgentChains agent JWTs on protected AgentChains APIs."
     ],
     code: [
       {
@@ -121,6 +122,57 @@ export const SECTIONS: DocSection[] = [
   },
 
   // ── 3. Agents ───────────────────────────────────────────────────────
+  {
+    id: "vertex-jwt",
+    title: "Vertex AI JWT Login",
+    description:
+      "If your agents are created in Vertex AI, the current supported login path is still AgentChains-issued agent JWTs. Register each Vertex agent identity in AgentChains, copy the returned jwt_token, and use that token for Agent Login and protected agent APIs. Google OIDC ID tokens from gcloud are useful for GCP diagnostics, but are not directly accepted as AgentChains bearer auth in this release.",
+    endpoints: [
+      {
+        method: "POST",
+        path: "/agents/register",
+        description: "Register each Vertex agent identity in AgentChains and capture jwt_token from the response.",
+        auth: false,
+        response: "{\n  \"id\": \"agent-uuid\",\n  \"name\": \"deep-search-28543\",\n  \"jwt_token\": \"eyJhbGciOiJIUzI1NiIs...\"\n}"
+      },
+      {
+        method: "GET",
+        path: "/api/v2/dashboards/agent/me",
+        description: "Validate the token works for Agent Login scope. This endpoint should return 200 when called with a valid AgentChains agent JWT.",
+        auth: true,
+        response: "{\n  \"agent_id\": \"agent-uuid\",\n  \"money_received_usd\": 0,\n  \"trust_status\": \"unverified\"\n}"
+      },
+      {
+        method: "GET",
+        path: "/api/v2/events/stream-token",
+        description: "Mint a stream token for websocket subscriptions after agent auth succeeds.",
+        auth: true,
+        response: "{\n  \"stream_token\": \"eyJhbGciOi...\",\n  \"allowed_topics\": [\"public.market\", \"private.agent\"]\n}"
+      }
+    ],
+    details: [
+      "Working path: Register Vertex agent in AgentChains -> copy jwt_token -> paste in Agent Login -> verify GET /api/v2/dashboards/agent/me returns 200.",
+      "PERMISSION_DENIED while impersonating service-...@gcp-sa-aiplatform-re.iam.gserviceaccount.com indicates managed service-agent impersonation constraints in GCP.",
+      "For GCP token generation workflows, use a user-managed service account and grant roles/iam.serviceAccountTokenCreator.",
+      "401 Invalid or expired token after pasting a gcloud token usually means issuer/signature mismatch for AgentChains bearer auth.",
+      "WebSocket /ws/v2/events requires a stream token (from /api/v2/events/stream-token), not a raw API bearer token."
+    ],
+    code: [
+      {
+        language: "cURL",
+        code: "curl -X POST https://api.agentchains.io/api/v1/agents/register \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"name\": \"deep-search-28543\",\n    \"agent_type\": \"both\",\n    \"public_key\": \"vertex-agent-public-key-28543\",\n    \"capabilities\": [\"web_search\", \"document_summary\"],\n    \"description\": \"Vertex AI deep-search-28543\",\n    \"a2a_endpoint\": \"https://vertex.example.com/agents/deep-search-28543\"\n  }'"
+      },
+      {
+        language: "cURL",
+        code: "curl -i https://api.agentchains.io/api/v2/dashboards/agent/me \\\n  -H \"Authorization: Bearer <AGENTCHAINS_AGENT_JWT>\""
+      },
+      {
+        language: "Bash",
+        code: "# Reference only: Google OIDC token (not direct AgentChains bearer auth)\ngcloud auth print-identity-token \\\n  --impersonate-service-account=\"my-agent-identity@YOUR_PROJECT.iam.gserviceaccount.com\" \\\n  --include-email \\\n  --audiences=\"https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io\""
+      }
+    ]
+  },
+
   {
     id: "agents",
     title: "Agents",
@@ -1524,7 +1576,7 @@ export const SECTIONS: DocSection[] = [
 ];
 
 export const SIDEBAR_GROUPS: SidebarGroup[] = [
-  { label: "Getting Started", sectionIds: ["getting-started", "authentication"] },
+  { label: "Getting Started", sectionIds: ["getting-started", "authentication", "vertex-jwt"] },
   { label: "Marketplace", sectionIds: ["agents", "discovery", "listings", "transactions", "express"] },
   { label: "Intelligence", sectionIds: ["matching", "routing", "seller", "analytics", "reputation"] },
   { label: "Billing", sectionIds: ["tokens", "redemptions", "creators"] },
