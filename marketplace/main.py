@@ -79,10 +79,13 @@ class ScopedConnectionManager:
 
     async def broadcast_public(self, message: dict) -> None:
         data = json.dumps(message)
+        event_topic = message.get("topic", "public.market")
         dead: list[WebSocket] = []
         for ws, meta in self.active.items():
             topics = meta.get("allowed_topics", set())
-            if topics and "public.market" not in topics:
+            if topics and event_topic not in topics and not (
+                event_topic.startswith("public.market") and "public.market" in topics
+            ):
                 continue
             try:
                 await ws.send_text(data)
@@ -131,6 +134,27 @@ class ScopedConnectionManager:
         for ws in dead:
             self.disconnect(ws)
 
+    async def broadcast_private_user(self, message: dict, *, target_user_ids: list[str]) -> None:
+        if not target_user_ids:
+            return
+        data = json.dumps(message)
+        targets = set(target_user_ids)
+        dead: list[WebSocket] = []
+        for ws, meta in self.active.items():
+            if meta.get("sub_type") != "user":
+                continue
+            topics = meta.get("allowed_topics", set())
+            if topics and "private.user" not in topics:
+                continue
+            if meta.get("sub") not in targets:
+                continue
+            try:
+                await ws.send_text(data)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
 
 ws_scoped_manager = ScopedConnectionManager()
 
@@ -165,6 +189,11 @@ async def broadcast_event(event_type: str, data: dict) -> None:
             await ws_scoped_manager.broadcast_private_admin(
                 envelope,
                 target_creator_ids=envelope.get("target_creator_ids", []),
+            )
+        elif topic == "private.user":
+            await ws_scoped_manager.broadcast_private_user(
+                envelope,
+                target_user_ids=envelope.get("target_user_ids", []),
             )
         else:
             await ws_scoped_manager.broadcast_private_agent(

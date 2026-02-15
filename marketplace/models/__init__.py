@@ -33,6 +33,13 @@ from marketplace.models.agent_trust import (
     EventSubscription,
     WebhookDelivery,
 )
+from marketplace.models.dual_layer import (
+    BuilderProject,
+    ConsumerOrder,
+    DeveloperProfile,
+    EndUser,
+    PlatformFee,
+)
 
 __all__ = [
     "RegisteredAgent",
@@ -70,4 +77,9 @@ __all__ = [
     "MemoryVerificationRun",
     "EventSubscription",
     "WebhookDelivery",
+    "EndUser",
+    "ConsumerOrder",
+    "DeveloperProfile",
+    "BuilderProject",
+    "PlatformFee",
 ]

@@ -31,6 +31,10 @@ class CreatorDashboardV2Response(BaseModel):
     creator_total_earned_usd: float
     total_agent_earnings_usd: float
     total_agent_spent_usd: float
+    creator_gross_revenue_usd: float = 0.0
+    creator_platform_fees_usd: float = 0.0
+    creator_net_revenue_usd: float = 0.0
+    creator_pending_payout_usd: float = 0.0
     total_agents: int
     active_agents: int
     money_saved_for_others_usd: float
@@ -68,6 +72,8 @@ class AdminOverviewResponse(BaseModel):
 class AdminFinanceResponse(BaseModel):
     platform_volume_usd: float
     completed_transaction_count: int
+    consumer_orders_count: int = 0
+    platform_fee_volume_usd: float = 0.0
     payout_pending_count: int
     payout_pending_usd: float
     payout_processing_count: int
@@ -129,6 +135,10 @@ class OpenMarketAnalyticsResponse(BaseModel):
     total_agents: int
     total_listings: int
     total_completed_transactions: int
+    end_users_count: int = 0
+    consumer_orders_count: int = 0
+    developer_profiles_count: int = 0
+    platform_fee_volume_usd: float = 0.0
     platform_volume_usd: float
     total_money_saved_usd: float
     top_agents_by_revenue: list[dict]

@@ -13,7 +13,7 @@ from marketplace.models.agent import RegisteredAgent
 from marketplace.models.agent_trust import AgentTrustProfile
 from marketplace.models.listing import DataListing
 from marketplace.models.transaction import Transaction
-from marketplace.services import creator_service
+from marketplace.services import creator_service, dual_layer_service
 from marketplace.services.match_service import FRESH_COST_ESTIMATES
 
 
@@ -162,6 +162,7 @@ async def get_agent_dashboard(db: AsyncSession, agent_id: str) -> dict:
 async def get_creator_dashboard_v2(db: AsyncSession, creator_id: str) -> dict:
     creator = await creator_service.get_creator_dashboard(db, creator_id)
     wallet = await creator_service.get_creator_wallet(db, creator_id)
+    dual_layer = await dual_layer_service.get_creator_dual_layer_metrics(db, creator_id=creator_id)
     agents = creator.get("agents", [])
 
     active_agents = sum(1 for row in agents if row.get("status") == "active")
@@ -178,6 +179,18 @@ async def get_creator_dashboard_v2(db: AsyncSession, creator_id: str) -> dict:
         "creator_total_earned_usd": _safe_float(wallet.get("total_earned", 0.0), default=0.0),
         "total_agent_earnings_usd": _safe_float(creator.get("total_agent_earnings", 0.0), default=0.0),
         "total_agent_spent_usd": _safe_float(creator.get("total_agent_spent", 0.0), default=0.0),
+        "creator_gross_revenue_usd": _safe_float(
+            dual_layer.get("creator_gross_revenue_usd", 0.0), default=0.0
+        ),
+        "creator_platform_fees_usd": _safe_float(
+            dual_layer.get("creator_platform_fees_usd", 0.0), default=0.0
+        ),
+        "creator_net_revenue_usd": _safe_float(
+            dual_layer.get("creator_net_revenue_usd", 0.0), default=0.0
+        ),
+        "creator_pending_payout_usd": _safe_float(
+            dual_layer.get("creator_pending_payout_usd", 0.0), default=0.0
+        ),
         "total_agents": _safe_int(creator.get("agents_count", 0), default=0),
         "active_agents": active_agents,
         "money_saved_for_others_usd": round(total_saved, 6),
@@ -292,12 +305,17 @@ async def get_open_market_analytics(db: AsyncSession, limit: int = 10) -> dict:
         key=lambda item: item["usage_count"],
         reverse=True,
     )[:limit]
+    dual_layer = await dual_layer_service.get_dual_layer_open_metrics(db)
 
     return {
         "generated_at": _utcnow(),
         "total_agents": total_agents,
         "total_listings": total_listings,
         "total_completed_transactions": total_completed,
+        "end_users_count": dual_layer["end_users_count"],
+        "consumer_orders_count": dual_layer["consumer_orders_count"],
+        "developer_profiles_count": dual_layer["developer_profiles_count"],
+        "platform_fee_volume_usd": dual_layer["platform_fee_volume_usd"],
         "platform_volume_usd": round(platform_volume, 6),
         "total_money_saved_usd": round(total_saved, 6),
         "top_agents_by_revenue": top_agents_by_revenue,

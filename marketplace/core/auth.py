@@ -28,8 +28,18 @@ def create_stream_token(
     """Create a short-lived JWT for WebSocket stream subscription."""
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.stream_token_expire_minutes)
     if allowed_topics is None:
-        allowed_topics = ["public.market", "private.agent"]
-    subject_type = "admin" if token_type == "stream_admin" else "agent"
+        if token_type == "stream_admin":
+            allowed_topics = ["public.market", "private.admin"]
+        elif token_type == "stream_user":
+            allowed_topics = ["public.market", "public.market.orders", "private.user"]
+        else:
+            allowed_topics = ["public.market", "private.agent"]
+    if token_type == "stream_admin":
+        subject_type = "admin"
+    elif token_type == "stream_user":
+        subject_type = "user"
+    else:
+        subject_type = "agent"
     payload = {
         "sub": subject_id,
         "type": token_type,
@@ -50,7 +60,9 @@ def decode_token(token: str) -> dict:
         token_type = payload.get("type")
         if token_type == "creator":
             raise UnauthorizedError("Creator tokens cannot be used for agent endpoints")
-        if token_type in {"stream", "stream_agent", "stream_admin"}:
+        if token_type == "user":
+            raise UnauthorizedError("User tokens cannot be used for agent endpoints")
+        if token_type in {"stream", "stream_agent", "stream_admin", "stream_user"}:
             raise UnauthorizedError("Stream tokens cannot be used for API endpoints")
         return payload
     except JWTError:
@@ -65,7 +77,7 @@ def decode_stream_token(token: str) -> dict:
         raise UnauthorizedError("Invalid or expired token")
     if payload.get("sub") is None:
         raise UnauthorizedError("Token missing subject")
-    if payload.get("type") not in {"stream", "stream_agent", "stream_admin"}:
+    if payload.get("type") not in {"stream", "stream_agent", "stream_admin", "stream_user"}:
         raise UnauthorizedError("Stream token required")
     return payload
 
