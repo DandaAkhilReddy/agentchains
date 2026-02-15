@@ -20,6 +20,21 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _as_non_empty_str(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _collect_listing_ids(transactions: list[Transaction]) -> set[str]:
+    listing_ids: set[str] = set()
+    for tx in transactions:
+        listing_id = _as_non_empty_str(tx.listing_id)
+        if listing_id:
+            listing_ids.add(listing_id)
+    return listing_ids
+
+
 def _load_json(value: str | None, fallback: dict) -> dict:
     if not value:
         return fallback
@@ -75,13 +90,16 @@ async def get_agent_dashboard(db: AsyncSession, agent_id: str) -> dict:
     )
     buyer_transactions = list(buyer_tx_result.scalars().all())
 
-    listing_ids = {tx.listing_id for tx in seller_transactions}
+    listing_ids = _collect_listing_ids(seller_transactions)
     listing_map: dict[str, DataListing] = {}
     if listing_ids:
-        listing_result = await db.execute(
-            select(DataListing).where(DataListing.id.in_(listing_ids))
-        )
-        listing_map = {row.id: row for row in listing_result.scalars().all()}
+        try:
+            listing_result = await db.execute(
+                select(DataListing).where(DataListing.id.in_(listing_ids))
+            )
+            listing_map = {row.id: row for row in listing_result.scalars().all()}
+        except Exception:
+            listing_map = {}
 
     money_received = sum(float(tx.amount_usdc or 0) for tx in seller_transactions)
     money_spent = sum(float(tx.amount_usdc or 0) for tx in buyer_transactions)
@@ -184,18 +202,21 @@ async def get_open_market_analytics(db: AsyncSession, limit: int = 10) -> dict:
 
     by_seller: dict[str, float] = {}
     by_usage: dict[str, int] = {}
-    listing_ids = {tx.listing_id for tx in completed_transactions}
+    listing_ids = _collect_listing_ids(completed_transactions)
     listing_map: dict[str, DataListing] = {}
     if listing_ids:
-        listing_rows = await db.execute(
-            select(DataListing).where(DataListing.id.in_(listing_ids))
-        )
-        listing_map = {row.id: row for row in listing_rows.scalars().all()}
+        try:
+            listing_rows = await db.execute(
+                select(DataListing).where(DataListing.id.in_(listing_ids))
+            )
+            listing_map = {row.id: row for row in listing_rows.scalars().all()}
+        except Exception:
+            listing_map = {}
 
     category_usage: dict[str, dict] = {}
     total_saved = 0.0
     for tx in completed_transactions:
-        seller_id = tx.seller_id
+        seller_id = _as_non_empty_str(tx.seller_id) or "unknown"
         amount = float(tx.amount_usdc or 0)
         by_seller[seller_id] = by_seller.get(seller_id, 0.0) + amount
         by_usage[seller_id] = by_usage.get(seller_id, 0) + 1

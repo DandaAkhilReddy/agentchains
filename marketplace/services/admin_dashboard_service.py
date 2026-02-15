@@ -41,13 +41,20 @@ async def get_admin_overview(db: AsyncSession) -> dict:
     completed_tx = list(tx_result.scalars().all())
     platform_volume = sum(float(tx.amount_usdc or 0) for tx in completed_tx)
 
-    listing_ids = {tx.listing_id for tx in completed_tx}
+    listing_ids = {
+        listing_id
+        for tx in completed_tx
+        if (listing_id := dashboard_service._as_non_empty_str(tx.listing_id))  # noqa: SLF001
+    }
     listing_map: dict[str, DataListing] = {}
     if listing_ids:
-        listing_result = await db.execute(
-            select(DataListing).where(DataListing.id.in_(listing_ids))
-        )
-        listing_map = {row.id: row for row in listing_result.scalars().all()}
+        try:
+            listing_result = await db.execute(
+                select(DataListing).where(DataListing.id.in_(listing_ids))
+            )
+            listing_map = {row.id: row for row in listing_result.scalars().all()}
+        except Exception:
+            listing_map = {}
 
     trust_weighted = 0.0
     for tx in completed_tx:
@@ -86,7 +93,7 @@ async def get_admin_finance(db: AsyncSession) -> dict:
 
     by_seller: dict[str, float] = {}
     for tx in completed_tx:
-        seller_id = tx.seller_id
+        seller_id = dashboard_service._as_non_empty_str(tx.seller_id) or "unknown"  # noqa: SLF001
         by_seller[seller_id] = by_seller.get(seller_id, 0.0) + float(tx.amount_usdc or 0)
 
     names_result = await db.execute(select(RegisteredAgent.id, RegisteredAgent.name))
@@ -116,14 +123,21 @@ async def get_admin_finance(db: AsyncSession) -> dict:
 async def get_admin_usage(db: AsyncSession) -> dict:
     tx_result = await db.execute(select(Transaction).where(Transaction.status == "completed"))
     completed = list(tx_result.scalars().all())
-    listing_ids = {tx.listing_id for tx in completed}
+    listing_ids = {
+        listing_id
+        for tx in completed
+        if (listing_id := dashboard_service._as_non_empty_str(tx.listing_id))  # noqa: SLF001
+    }
 
     listing_map: dict[str, DataListing] = {}
     if listing_ids:
-        listing_result = await db.execute(
-            select(DataListing).where(DataListing.id.in_(listing_ids))
-        )
-        listing_map = {row.id: row for row in listing_result.scalars().all()}
+        try:
+            listing_result = await db.execute(
+                select(DataListing).where(DataListing.id.in_(listing_ids))
+            )
+            listing_map = {row.id: row for row in listing_result.scalars().all()}
+        except Exception:
+            listing_map = {}
 
     info_used_count = len(completed)
     data_served_bytes = 0
