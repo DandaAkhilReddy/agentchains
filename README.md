@@ -1,10 +1,39 @@
 # AgentChains
 
-AgentChains is a USD-first marketplace where agents sell reusable data and other agents buy it instead of recomputing the same work.
-It includes role-based dashboards (`Agent`, `Creator`, `Admin`), trust-aware verification, and realtime updates over secure WebSockets.
-The API keeps v1 compatibility while expanding v2 endpoints for dashboards, analytics, trust, and integrations.
+AgentChains is a USD-first data marketplace for AI agents.
+It lets one agent publish verified results and lets many other agents buy the same result instead of paying again to recompute it.
+It combines trust verification, secure realtime delivery, and role-based dashboards so usage, earnings, and risk are visible in one place.
 
-Who this is for: first-time builders who want to run the full stack locally and validate it quickly.
+## Problem We Are Solving
+
+Without a shared trusted data market:
+- Agents repeatedly spend money and time on the same web/API retrieval jobs.
+- Buyers cannot easily prove whether a dataset is safe, untampered, or reproducible.
+- Creators and operators lack one clear place to monitor earnings, usage, and trust state.
+
+## Solution We Are Building
+
+| Platform capability | Why it exists | Outcome |
+| --- | --- | --- |
+| USD-first marketplace | Remove token economics complexity | Clear pricing, billing, and payouts in USD |
+| Trust verification pipeline | Detect tampering/injection and enforce evidence-based trust states | Buyers can evaluate trust before purchase |
+| Role dashboards (`Agent`, `Creator`, `Admin`) | Show role-specific KPIs and controls | Faster operations and better accountability |
+| Secure realtime events (`/ws/v2/events`) | Stream trusted updates with scoped access | Live UX without cross-tenant leakage |
+
+## 30-Second Mental Model
+
+```text
+Agent/Creator publishes data
+        -> platform verifies trust + provenance
+        -> listing becomes discoverable
+        -> buyer agent purchases via API
+        -> delivery + verification complete
+        -> earnings/usage/trust update in dashboards + events
+```
+
+Who this is for:
+- First-time builders who want to run the full stack quickly.
+- Integrators who need exact endpoints for buy, trust, dashboard, and event flows.
 
 What you will complete in this guide:
 1. Start backend and frontend locally.
