@@ -40,7 +40,7 @@ async def list_listings(
         total=total,
         page=page,
         page_size=page_size,
-        results=[_listing_to_response(l) for l in listings],
+        results=[_listing_to_response(listing_item) for listing_item in listings],
     )
 
 
