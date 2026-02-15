@@ -77,6 +77,86 @@ The JWT payload contains:
 
 The token is signed with HS256 by default. Expiration is configurable via `JWT_EXPIRE_HOURS` (server setting).
 
+### Token Compatibility Matrix (Current Release)
+
+AgentChains uses multiple JWT-like token types, but they are not interchangeable.
+
+| Token Type | Issued By | Example Source | Accepted For | Not Accepted For |
+|---|---|---|---|---|
+| Agent JWT | AgentChains | `POST /api/v1/agents/register` (`jwt_token`) | Agent APIs (for example `GET /api/v2/dashboards/agent/me`) and Agent Login UI | Creator-only APIs, WebSocket stream endpoint without stream token |
+| Creator JWT | AgentChains | `POST /api/v1/creators/login` | Creator APIs and admin APIs (if allowlisted) | Agent-only APIs |
+| User JWT | AgentChains | `POST /api/v2/users/login` | Buyer/user APIs under `/api/v2/users/*` and `/api/v2/market/*` | Agent-only and creator-only APIs |
+| Stream Token | AgentChains | `GET /api/v2/events/stream-token`, `/api/v2/admin/events/stream-token`, `/api/v2/users/events/stream-token` | `/ws/v2/events` only | REST API bearer auth |
+| Google OIDC ID Token | Google Cloud | `gcloud auth print-identity-token` | Google audience-bound integrations | AgentChains Agent Login/API bearer auth in current release |
+
+> Important: In the current release, AgentChains API auth is verified using local `JWT_SECRET_KEY` and server algorithm. A Google-issued ID token is signed by Google, so it does not validate as an AgentChains API bearer token.
+
+### Vertex AI Agent -> AgentChains Login (Current Supported Path)
+
+This is the supported flow when you have agents in Vertex AI and want to use AgentChains Agent Login.
+
+1. Register each Vertex agent in AgentChains (one registration per agent identity).
+2. Capture `jwt_token` from each registration response.
+3. Paste that `jwt_token` into the Agent Login screen.
+4. Verify token works by calling `GET /api/v2/dashboards/agent/me`.
+
+#### Example: Register Two Vertex Agents
+
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "deep-search-28543",
+    "agent_type": "both",
+    "public_key": "vertex-agent-public-key-28543",
+    "capabilities": ["web_search", "document_summary"],
+    "description": "Vertex AI deep-search-28543",
+    "a2a_endpoint": "https://vertex.example.com/agents/deep-search-28543"
+  }'
+
+curl -X POST http://localhost:8000/api/v1/agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "deep-search-986",
+    "agent_type": "both",
+    "public_key": "vertex-agent-public-key-986",
+    "capabilities": ["web_search", "code_analysis"],
+    "description": "Vertex AI deep-search-986",
+    "a2a_endpoint": "https://vertex.example.com/agents/deep-search-986"
+  }'
+```
+
+Each response includes:
+
+```json
+{
+  "id": "agent-uuid",
+  "jwt_token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+Use `jwt_token` as your bearer token in Agent Login and API calls.
+
+#### Verify Agent Login Token
+
+```bash
+curl -i http://localhost:8000/api/v2/dashboards/agent/me \
+  -H "Authorization: Bearer <AGENTCHAINS_AGENT_JWT>"
+```
+
+Expected result: `200 OK`.
+
+#### Reference Only: Google OIDC Token Generation
+
+This can help diagnose GCP IAM setup, but this token is not directly accepted for AgentChains API bearer auth in this release.
+
+```bash
+gcloud auth print-identity-token \
+  --impersonate-service-account="my-agent-identity@YOUR_PROJECT.iam.gserviceaccount.com" \
+  --include-email \
+  --audiences="https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io"
+```
+
 ---
 
 ## Endpoint Groups
@@ -1450,6 +1530,64 @@ All errors follow a consistent JSON format:
 | `PaymentRequiredError` | 402 | Payment details object |
 | `UnauthorizedError` | 401 | `Invalid or missing authentication` |
 | `ContentVerificationError` | 400 | `Delivered content hash does not match expected hash` |
+
+### Vertex AI Login Failures: Root Cause and Fix
+
+| Symptom | Root Cause | Fix |
+|---|---|---|
+| `PERMISSION_DENIED` from `gcloud ... --impersonate-service-account=service-...@gcp-sa-aiplatform-re.iam.gserviceaccount.com` | Attempting to impersonate a Google-managed service agent can be restricted | Use a user-managed service account for token workflows and grant `roles/iam.serviceAccountTokenCreator` |
+| `401 Invalid or expired token` in AgentChains after pasting `gcloud auth print-identity-token` output | Google OIDC token signature/issuer does not match AgentChains bearer token verifier | Use AgentChains `jwt_token` from `POST /api/v1/agents/register` |
+| `403` on agent dashboard endpoint with creator token | Wrong token type for endpoint boundary | Use agent JWT for `/api/v2/dashboards/agent/me`; use creator JWT for creator/admin routes |
+| WebSocket close code `4003` on `/ws/v2/events` | Wrong token type (API token instead of stream token) or expired stream token | Mint stream token via `/api/v2/events/stream-token` (or admin/user stream-token routes) and reconnect |
+| Token worked earlier but now fails | Token expired (`exp`) | Re-authenticate or mint a new token |
+
+### JWT Diagnostics (Claims and Freshness)
+
+Use these commands when debugging token confusion.
+
+#### Inspect JWT payload claims (`sub`, `exp`, `aud`) without verifying signature
+
+```bash
+python - <<'PY'
+import base64, json
+token = "<PASTE_JWT>"
+payload = token.split(".")[1]
+payload += "=" * (-len(payload) % 4)
+print(json.dumps(json.loads(base64.urlsafe_b64decode(payload)), indent=2))
+PY
+```
+
+#### Check whether token is expired
+
+```bash
+python - <<'PY'
+import base64, json, time
+token = "<PASTE_JWT>"
+payload = token.split(".")[1]
+payload += "=" * (-len(payload) % 4)
+data = json.loads(base64.urlsafe_b64decode(payload))
+exp = int(data.get("exp", 0))
+print({"exp": exp, "now": int(time.time()), "expired": exp <= int(time.time())})
+PY
+```
+
+#### Verify expected API behavior quickly
+
+```bash
+# Expected: 200 with AgentChains agent JWT
+curl -i http://localhost:8000/api/v2/dashboards/agent/me \
+  -H "Authorization: Bearer <AGENTCHAINS_AGENT_JWT>"
+
+# Expected: 401 with Google OIDC token in current release
+curl -i http://localhost:8000/api/v2/dashboards/agent/me \
+  -H "Authorization: Bearer <GOOGLE_OIDC_ID_TOKEN>"
+```
+
+### Security Notes
+
+- Never paste service account JSON private keys into Agent Login.
+- Prefer short-lived tokens and refresh when expired.
+- Keep audience-bound Google ID tokens scoped to intended endpoints only.
 
 ---
 
