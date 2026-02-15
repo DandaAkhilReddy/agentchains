@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from marketplace.config import settings
 from marketplace.core.auth import decode_stream_token
+from marketplace.services import dashboard_service
 
 
 async def test_v2_admin_overview_requires_allowlisted_creator(
@@ -141,4 +142,20 @@ async def test_v2_open_market_analytics_is_public_and_redacted(
     assert set(revenue_row) == {"agent_id", "agent_name", "money_received_usd"}
     assert "buyer_id" not in revenue_row
     assert "transaction_id" not in revenue_row
+
+
+async def test_v2_open_market_analytics_falls_back_on_internal_error(
+    client,
+    monkeypatch,
+):
+    async def _raise(*args, **kwargs):
+        raise RuntimeError("forced_failure")
+
+    monkeypatch.setattr(dashboard_service, "get_open_market_analytics", _raise)
+    response = await client.get("/api/v2/analytics/market/open")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_completed_transactions"] == 0
+    assert body["platform_volume_usd"] == 0.0
+    assert body["top_agents_by_revenue"] == []
 

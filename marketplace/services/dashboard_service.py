@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
@@ -24,6 +25,23 @@ def _as_non_empty_str(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(number):
+        return default
+    return number
+
+
+def _safe_int(value: object, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _collect_listing_ids(transactions: list[Transaction]) -> set[str]:
@@ -48,9 +66,12 @@ def _load_json(value: str | None, fallback: dict) -> dict:
 def _fresh_cost_estimate_usd(listing: DataListing) -> float:
     metadata = _load_json(listing.metadata_json, {})
     from_metadata = metadata.get("estimated_fresh_cost_usd")
-    if isinstance(from_metadata, (int, float)) and from_metadata >= 0:
-        return float(from_metadata)
-    return float(FRESH_COST_ESTIMATES.get(listing.category, 0.01))
+    if isinstance(from_metadata, (int, float)):
+        estimate_from_metadata = _safe_float(from_metadata, default=0.0)
+        if estimate_from_metadata >= 0:
+            return estimate_from_metadata
+    category = _as_non_empty_str(getattr(listing, "category", None)) or "unknown"
+    return _safe_float(FRESH_COST_ESTIMATES.get(category, 0.01), default=0.01)
 
 
 async def _trust_summary(db: AsyncSession, agent_id: str) -> dict:
@@ -101,8 +122,8 @@ async def get_agent_dashboard(db: AsyncSession, agent_id: str) -> dict:
         except Exception:
             listing_map = {}
 
-    money_received = sum(float(tx.amount_usdc or 0) for tx in seller_transactions)
-    money_spent = sum(float(tx.amount_usdc or 0) for tx in buyer_transactions)
+    money_received = sum(_safe_float(tx.amount_usdc, default=0.0) for tx in seller_transactions)
+    money_spent = sum(_safe_float(tx.amount_usdc, default=0.0) for tx in buyer_transactions)
     info_used_count = len(seller_transactions)
     other_agents_served = len({tx.buyer_id for tx in seller_transactions if tx.buyer_id})
 
@@ -113,9 +134,9 @@ async def get_agent_dashboard(db: AsyncSession, agent_id: str) -> dict:
         listing = listing_map.get(tx.listing_id)
         if listing is None:
             continue
-        amount = float(tx.amount_usdc or 0)
+        amount = _safe_float(tx.amount_usdc, default=0.0)
         fresh_cost = _fresh_cost_estimate_usd(listing)
-        data_served_bytes += int(listing.content_size or 0)
+        data_served_bytes += _safe_int(listing.content_size, default=0)
         fresh_cost_total += fresh_cost
         money_saved += max(fresh_cost - amount, 0.0)
 
@@ -153,11 +174,11 @@ async def get_creator_dashboard_v2(db: AsyncSession, creator_id: str) -> dict:
 
     return {
         "creator_id": creator_id,
-        "creator_balance_usd": float(wallet.get("balance", 0.0)),
-        "creator_total_earned_usd": float(wallet.get("total_earned", 0.0)),
-        "total_agent_earnings_usd": float(creator.get("total_agent_earnings", 0.0)),
-        "total_agent_spent_usd": float(creator.get("total_agent_spent", 0.0)),
-        "total_agents": int(creator.get("agents_count", 0)),
+        "creator_balance_usd": _safe_float(wallet.get("balance", 0.0), default=0.0),
+        "creator_total_earned_usd": _safe_float(wallet.get("total_earned", 0.0), default=0.0),
+        "total_agent_earnings_usd": _safe_float(creator.get("total_agent_earnings", 0.0), default=0.0),
+        "total_agent_spent_usd": _safe_float(creator.get("total_agent_spent", 0.0), default=0.0),
+        "total_agents": _safe_int(creator.get("agents_count", 0), default=0),
         "active_agents": active_agents,
         "money_saved_for_others_usd": round(total_saved, 6),
         "data_served_bytes": data_served_bytes,
@@ -198,7 +219,7 @@ async def get_open_market_analytics(db: AsyncSession, limit: int = 10) -> dict:
     )
     completed_transactions = list(tx_rows.scalars().all())
     total_completed = len(completed_transactions)
-    platform_volume = sum(float(tx.amount_usdc or 0) for tx in completed_transactions)
+    platform_volume = sum(_safe_float(tx.amount_usdc, default=0.0) for tx in completed_transactions)
 
     by_seller: dict[str, float] = {}
     by_usage: dict[str, int] = {}
@@ -217,7 +238,7 @@ async def get_open_market_analytics(db: AsyncSession, limit: int = 10) -> dict:
     total_saved = 0.0
     for tx in completed_transactions:
         seller_id = _as_non_empty_str(tx.seller_id) or "unknown"
-        amount = float(tx.amount_usdc or 0)
+        amount = _safe_float(tx.amount_usdc, default=0.0)
         by_seller[seller_id] = by_seller.get(seller_id, 0.0) + amount
         by_usage[seller_id] = by_usage.get(seller_id, 0) + 1
 
@@ -225,7 +246,7 @@ async def get_open_market_analytics(db: AsyncSession, limit: int = 10) -> dict:
         if listing is None:
             continue
 
-        category = listing.category
+        category = _as_non_empty_str(getattr(listing, "category", None)) or "unknown"
         entry = category_usage.setdefault(
             category,
             {"category": category, "usage_count": 0, "volume_usd": 0.0, "money_saved_usd": 0.0},
@@ -262,9 +283,9 @@ async def get_open_market_analytics(db: AsyncSession, limit: int = 10) -> dict:
         (
             {
                 "category": row["category"],
-                "usage_count": row["usage_count"],
-                "volume_usd": round(float(row["volume_usd"]), 6),
-                "money_saved_usd": round(float(row["money_saved_usd"]), 6),
+                "usage_count": _safe_int(row["usage_count"], default=0),
+                "volume_usd": round(_safe_float(row["volume_usd"], default=0.0), 6),
+                "money_saved_usd": round(_safe_float(row["money_saved_usd"], default=0.0), 6),
             }
             for row in category_usage.values()
         ),
