@@ -12,7 +12,7 @@ from marketplace.schemas.listing import (
     ListingUpdateRequest,
     SellerSummary,
 )
-from marketplace.services import listing_service
+from marketplace.services import listing_service, trust_verification_service
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
@@ -88,6 +88,8 @@ def _listing_to_response(listing) -> ListingResponse:
             id=listing.seller.id,
             name=listing.seller.name,
         )
+    trust_payload = trust_verification_service.build_trust_payload(listing)
+    price_usd = float(listing.price_usdc)
 
     return ListingResponse(
         id=listing.id,
@@ -99,7 +101,8 @@ def _listing_to_response(listing) -> ListingResponse:
         content_hash=listing.content_hash,
         content_size=listing.content_size,
         content_type=listing.content_type,
-        price_usdc=float(listing.price_usdc),
+        price_usdc=price_usd,
+        price_usd=price_usd,
         currency=listing.currency,
         metadata=metadata,
         tags=tags,
@@ -107,6 +110,10 @@ def _listing_to_response(listing) -> ListingResponse:
         freshness_at=listing.freshness_at,
         expires_at=listing.expires_at,
         status=listing.status,
+        trust_status=trust_payload["trust_status"],
+        trust_score=trust_payload["trust_score"],
+        verification_summary=trust_payload["verification_summary"],
+        provenance=trust_payload["provenance"],
         access_count=listing.access_count,
         created_at=listing.created_at,
         updated_at=listing.updated_at,

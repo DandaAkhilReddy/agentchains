@@ -201,10 +201,13 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Register REST routers
-    from marketplace.api import API_PREFIX, API_ROUTERS
+    from marketplace.api import API_PREFIX, API_ROUTERS, API_V2_PREFIX, API_V2_ROUTERS
 
     for router in API_ROUTERS:
         app.include_router(router, prefix=API_PREFIX)
+
+    for router in API_V2_ROUTERS:
+        app.include_router(router, prefix=API_V2_PREFIX)
 
     # MCP server routes
     if settings.mcp_enabled:

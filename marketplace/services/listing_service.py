@@ -10,6 +10,7 @@ from marketplace.models.listing import DataListing
 from marketplace.schemas.listing import ListingCreateRequest, ListingUpdateRequest
 from marketplace.services.cache_service import listing_cache
 from marketplace.services.storage_service import get_storage
+from marketplace.services import trust_verification_service
 
 
 async def create_listing(
@@ -19,6 +20,7 @@ async def create_listing(
     storage = get_storage()
     content_bytes = req.content.encode("utf-8")
     content_hash = storage.put(content_bytes)
+    price_usd = req.price_usd if req.price_usd is not None else req.price_usdc
 
     listing = DataListing(
         seller_id=seller_id,
@@ -27,7 +29,7 @@ async def create_listing(
         category=req.category,
         content_hash=content_hash,
         content_size=len(content_bytes),
-        price_usdc=req.price_usdc,
+        price_usdc=price_usd,
         metadata_json=json.dumps(req.metadata),
         tags=json.dumps(req.tags),
         quality_score=req.quality_score,
@@ -49,6 +51,22 @@ async def create_listing(
     except Exception:
         pass  # Don't fail listing creation if ZKP generation fails
 
+    # Strict trust verification baseline (non-blocking for listing publish)
+    try:
+        await trust_verification_service.bootstrap_listing_trust_artifacts(
+            db,
+            listing,
+            req.metadata,
+        )
+        await trust_verification_service.run_strict_verification(
+            db,
+            listing,
+            requested_by=seller_id,
+            trigger_source="listing_create",
+        )
+    except Exception:
+        pass
+
     # Cache the new listing
     listing_cache.put(f"listing:{listing.id}", listing)
 
@@ -63,6 +81,7 @@ async def create_listing(
                     "listing_id": listing.id,
                     "title": listing.title,
                     "category": listing.category,
+                    "price_usd": float(listing.price_usdc),
                     "price_usdc": float(listing.price_usdc),
                     "seller_id": seller_id,
                 },

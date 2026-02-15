@@ -15,6 +15,12 @@ from marketplace.models.openclaw_webhook import OpenClawWebhook
 from marketplace.models.creator import Creator
 from marketplace.models.audit_log import AuditLog
 from marketplace.models.redemption import RedemptionRequest, ApiCreditBalance
+from marketplace.models.trust_verification import (
+    ArtifactManifest,
+    SourceReceipt,
+    VerificationJob,
+    VerificationResult,
+)
 
 __all__ = [
     "RegisteredAgent",
@@ -38,4 +44,8 @@ __all__ = [
     "AuditLog",
     "RedemptionRequest",
     "ApiCreditBalance",
+    "SourceReceipt",
+    "ArtifactManifest",
+    "VerificationJob",
+    "VerificationResult",
 ]

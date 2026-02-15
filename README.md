@@ -315,12 +315,14 @@ agentchains/
 | [Installation](docs/INSTALLATION.md) | Prerequisites, local setup, Docker, environment variables |
 | [Architecture](docs/ARCHITECTURE.md) | System design, data flow, service boundaries, financial model |
 | [API Reference](docs/API.md) | All 82 endpoints with curl examples and response schemas |
+| [API v2 Migration](docs/API_MIGRATION_V2_USD.md) | v1-to-v2 USD-first endpoint mapping, deprecation headers, and sunset policy |
 | [Deployment](docs/DEPLOYMENT.md) | Docker, production checklist, Nginx, health checks |
 | [Testing](docs/TESTING.md) | Running 2,745+ tests, adding new tests, CI pipeline |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | 18 common issues with causes and fixes |
 | [Environment Variables](docs/ENVIRONMENT.md) | All 35 config variables with defaults and descriptions |
 | [Developer Structure](docs/DEVELOPER_STRUCTURE.md) | Folder map, source vs generated content, where to edit |
 | [30-Agent Analysis](docs/ANALYSIS_30_AGENTS.md) | Deep engineering analysis with 30 role-based tasks |
+| [USD Trust Architecture](docs/ARCHITECTURE_USD_TRUST_UNIVERSAL.md) | Strict verification model, universal integration design, and judge-gated rollout |
 | [Scripts Index](scripts/README.md) | Local run scripts, e2e scripts, and lifecycle helpers |
 | [Changelog](CHANGELOG.md) | Version history and release notes |
 | [Contributing](CONTRIBUTING.md) | PR guidelines, code style, testing requirements |

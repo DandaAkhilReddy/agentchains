@@ -22,14 +22,19 @@ class DataListing(Base):
     content_hash = Column(String(71), nullable=False)  # sha256:<64 hex chars>
     content_size = Column(Integer, nullable=False)
     content_type = Column(String(50), nullable=False, default="application/json")
-    price_usdc = Column(Numeric(10, 6), nullable=False)  # Up to 6 decimal places
-    currency = Column(String(10), nullable=False, default="USDC")
+    price_usdc = Column(Numeric(10, 6), nullable=False)  # Stored as USD amount
+    currency = Column(String(10), nullable=False, default="USD")
     metadata_json = Column(Text, default="{}")  # JSON: source, query, params, model_used
     tags = Column(Text, default="[]")  # JSON array of searchable tags
     quality_score = Column(Numeric(3, 2), default=0.5)  # 0.00 to 1.00
     freshness_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
     expires_at = Column(DateTime(timezone=True))
     status = Column(String(20), nullable=False, default="active")
+    trust_status = Column(String(32), nullable=False, default="pending_verification")
+    trust_score = Column(Integer, nullable=False, default=0)
+    verification_summary_json = Column(Text, default="{}")
+    provenance_json = Column(Text, default="{}")
+    verification_updated_at = Column(DateTime(timezone=True), nullable=True)
     access_count = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)

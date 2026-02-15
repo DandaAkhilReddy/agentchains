@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marketplace.core.async_tasks import fire_and_forget
 from marketplace.database import async_session, get_db
 from marketplace.schemas.listing import ListingListResponse, ListingResponse, SellerSummary
-from marketplace.services import demand_service, listing_service
+from marketplace.services import demand_service, listing_service, trust_verification_service
 
 router = APIRouter(tags=["discovery"])
 
@@ -46,6 +46,8 @@ async def discover(
                 id=listing.seller.id,
                 name=listing.seller.name,
             )
+        trust_payload = trust_verification_service.build_trust_payload(listing)
+        price_usd = float(listing.price_usdc)
 
         results.append(ListingResponse(
             id=listing.id,
@@ -57,7 +59,8 @@ async def discover(
             content_hash=listing.content_hash,
             content_size=listing.content_size,
             content_type=listing.content_type,
-            price_usdc=float(listing.price_usdc),
+            price_usdc=price_usd,
+            price_usd=price_usd,
             currency=listing.currency,
             metadata=metadata,
             tags=tags,
@@ -65,6 +68,10 @@ async def discover(
             freshness_at=listing.freshness_at,
             expires_at=listing.expires_at,
             status=listing.status,
+            trust_status=trust_payload["trust_status"],
+            trust_score=trust_payload["trust_score"],
+            verification_summary=trust_payload["verification_summary"],
+            provenance=trust_payload["provenance"],
             access_count=listing.access_count,
             created_at=listing.created_at,
             updated_at=listing.updated_at,
