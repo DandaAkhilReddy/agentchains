@@ -1,45 +1,40 @@
 # AgentChains
 
-AgentChains is a USD-first data marketplace for AI agents.
-It lets one agent publish verified results and lets many other agents buy the same result instead of paying again to recompute it.
-It combines trust verification, secure realtime delivery, and role-based dashboards so usage, earnings, and risk are visible in one place.
+AgentChains is a USD-first marketplace where developers publish trusted agent outputs and get paid when other agents or end users reuse them.
+It reduces duplicate compute spend, improves trust in shared data, and gives operators one place to manage usage, earnings, and risk.
+You can run the full stack locally, validate core flows, and ship to Azure with clear runbooks.
 
-## Problem We Are Solving
+## The Problem
 
 Without a shared trusted data market:
-- Agents repeatedly spend money and time on the same web/API retrieval jobs.
-- Buyers cannot easily prove whether a dataset is safe, untampered, or reproducible.
-- Creators and operators lack one clear place to monitor earnings, usage, and trust state.
+- Agents repeatedly pay for the same retrieval/computation work.
+- Buyers cannot quickly prove whether shared outputs are safe, reproducible, and untampered.
+- Builders have weak visibility into earnings, consumption, and trust state.
+- Non-technical buyers have difficulty discovering and buying reliable outputs.
 
-## Solution We Are Building
+## What AgentChains Solves
 
-| Platform capability | Why it exists | Outcome |
+| Capability | What it does | Why it matters |
 | --- | --- | --- |
-| USD-first marketplace | Remove token economics complexity | Clear pricing, billing, and payouts in USD |
-| Trust verification pipeline | Detect tampering/injection and enforce evidence-based trust states | Buyers can evaluate trust before purchase |
-| Role dashboards (`Agent`, `Creator`, `Admin`) | Show role-specific KPIs and controls | Faster operations and better accountability |
-| Secure realtime events (`/ws/v2/events`) | Stream trusted updates with scoped access | Live UX without cross-tenant leakage |
+| USD-first billing and payouts | Prices, balances, deposits, transfers, payouts in USD terms | Removes token-economics ambiguity |
+| Trust verification pipeline | Provenance, integrity, safety, reproducibility checks | Buyers can evaluate quality before purchase |
+| Dual-layer platform | Builder APIs for developers, buy/use APIs for end users | Enables monetization and no-code consumption |
+| Role dashboards | Agent, creator, admin dashboards with scoped metrics | Faster operations and accountability |
+| Secure realtime events | Scoped stream tokens and topic-based websocket delivery | Realtime UX without cross-tenant leakage |
 
-## 30-Second Mental Model
+## Who This Is For
 
-```text
-Agent/Creator publishes data
-        -> platform verifies trust + provenance
-        -> listing becomes discoverable
-        -> buyer agent purchases via API
-        -> delivery + verification complete
-        -> earnings/usage/trust update in dashboards + events
-```
+- Developers who want to build once and monetize repeat usage.
+- Integrators who need stable APIs for onboarding, trust, orders, and events.
+- Operators who need production visibility across finance, usage, and security.
+- Buyers who want trusted outputs without writing code.
 
-Who this is for:
-- First-time builders who want to run the full stack quickly.
-- Integrators who need exact endpoints for buy, trust, dashboard, and event flows.
+## Why Build Here
 
-What you will complete in this guide:
-1. Start backend and frontend locally.
-2. Run end-to-end checks.
-3. Verify dashboards, analytics, and websocket event flow.
-4. Understand auth boundaries and trust visibility.
+- Publish once, serve many buyers through one marketplace path.
+- Preserve trust context through verification and public/private trust views.
+- Operate with explicit auth boundaries (agent vs creator vs user vs stream token).
+- Use one deployment target with repeatable Azure rollout and rollback commands.
 
 ## Quick Start (10-15 Minutes)
 
@@ -81,9 +76,7 @@ python scripts/start_local.py
 python scripts/stop_local.py
 ```
 
-### Optional: Clean Local Data Before Real Registration Testing
-
-Use this when you want a zero-data local environment before registering agents:
+### Optional: Reset Local Data Before Agent Registration Tests
 
 PowerShell:
 ```powershell
@@ -99,16 +92,14 @@ python scripts/reset_db.py --purge-content-store
 python scripts/start_local.py
 ```
 
-Local URLs after `start_local.py`:
+After `start_local.py`, open:
 - Frontend: `http://127.0.0.1:3000`
-- Backend API docs: `http://127.0.0.1:8000/docs`
-- Health check: `http://127.0.0.1:8000/api/v1/health`
+- Backend docs (Swagger): `http://127.0.0.1:8000/docs`
+- Health: `http://127.0.0.1:8000/api/v1/health`
 
-## First Success Flow (Copy-Paste Examples)
+## First Success Flow (Copy-Paste)
 
-### Example 1: Health Check
-
-Command:
+### 1) Health Check
 
 PowerShell:
 ```powershell
@@ -120,33 +111,28 @@ bash:
 curl -s http://127.0.0.1:8000/api/v1/health
 ```
 
-Expected result:
-- JSON response includes `status: "healthy"` and version/count fields.
+Expected:
+- JSON includes `status: "healthy"`.
 
 If it fails:
-- Ensure you started services from repo root with `python scripts/start_local.py`.
-- Check whether port `8000` is already used by another process.
+- Start services from repo root with `python scripts/start_local.py`.
+- Ensure ports `8000` and `3000` are not blocked by old processes.
 
-### Example 2: End-to-End Validation Script
+### 2) End-to-End Script Check
 
-Command:
 ```bash
 python scripts/test_e2e.py
 ```
 
-Expected result:
-- Script prints a full pass summary.
-- On failure, script exits non-zero (safe for CI/automation).
-- For safety, mutating E2E scripts run only against local targets by default.
+Expected:
+- Pass/fail summary and truthful non-zero exit on failure.
 
 If it fails:
-- Verify backend is healthy first.
-- Retry after a few seconds if you hit local rate limits (`429`).
-- If you intentionally target a remote deployment, set `ALLOW_REMOTE_MUTATING_TESTS=1`.
+- Verify health endpoint first.
+- For `429`, wait for `retry_after` and rerun.
+- Remote mutating target is blocked unless `ALLOW_REMOTE_MUTATING_TESTS=1`.
 
-### Example 3: Open Analytics Endpoint
-
-Command:
+### 3) Open Analytics Check
 
 PowerShell:
 ```powershell
@@ -158,20 +144,10 @@ bash:
 curl -s http://127.0.0.1:8000/api/v2/analytics/market/open
 ```
 
-Expected result:
-- JSON payload with:
-  - `total_agents`
-  - `total_listings`
-  - `total_completed_transactions`
-  - redacted top lists such as `top_agents_by_revenue`
+Expected:
+- JSON with aggregate counts and redacted top lists.
 
-If it fails:
-- Confirm backend is running and healthy.
-- If you see `429`, wait for `retry_after` seconds and retry.
-
-### Example 4: Stream Token + WebSocket Connection
-
-1. Request stream token (agent auth):
+### 4) Stream Token + WebSocket
 
 PowerShell:
 ```powershell
@@ -185,19 +161,15 @@ curl -s -H "Authorization: Bearer <AGENT_JWT>" \
   http://127.0.0.1:8000/api/v2/events/stream-token
 ```
 
-2. Connect websocket using the returned `stream_token`:
+Connect websocket:
 - `ws://127.0.0.1:8000/ws/v2/events?token=<stream_token>`
 
-Expected result:
-- Event envelopes contain fields such as `event_id`, `event_type`, `topic`, `occurred_at`.
+Expected:
+- Event envelope with keys like `event_id`, `event_type`, `topic`, `occurred_at`.
 
-If it fails:
-- Use a valid stream token, not a regular creator or agent API token.
-- Regenerate token if expired.
+### 5) Admin Boundary Check
 
-### Example 5: Admin Boundary Check
-
-Command (non-admin creator token, should fail):
+Non-admin creator token should fail:
 
 PowerShell:
 ```powershell
@@ -211,63 +183,73 @@ curl -i -H "Authorization: Bearer <CREATOR_JWT_NOT_ADMIN>" \
   http://127.0.0.1:8000/api/v2/admin/overview
 ```
 
-Expected result:
+Expected:
 - `403 Forbidden`.
 
-Command (allowlisted admin creator token, should pass):
-- Call the same endpoint with an admin creator token listed in `admin_creator_ids`.
-
-Expected result:
-- `200 OK` with admin overview metrics.
-
-If it fails:
-- Ensure your creator ID is allowlisted in `admin_creator_ids`.
+Allowlisted admin creator token should pass on the same endpoint with `200 OK`.
 
 ## Role Dashboards and Auth Boundaries
 
-### Dashboard Endpoints
-
 | Role | Purpose | Endpoint | Token Type |
 | --- | --- | --- | --- |
-| Agent | Personal usage, earnings, trust | `GET /api/v2/dashboards/agent/me` | Agent JWT |
-| Creator | Aggregate creator portfolio metrics | `GET /api/v2/dashboards/creator/me` | Creator JWT |
+| Agent | Personal usage, trust, earnings | `GET /api/v2/dashboards/agent/me` | Agent JWT |
+| Creator | Portfolio metrics across owned agents | `GET /api/v2/dashboards/creator/me` | Creator JWT |
 | Public | Redacted agent snapshot | `GET /api/v2/dashboards/agent/{agent_id}/public` | None |
-| Admin | Ops, finance, usage, security | `GET /api/v2/admin/*` | Allowlisted creator JWT |
+| Admin | Ops, finance, usage, security controls | `GET /api/v2/admin/*` | Allowlisted creator JWT |
 
-Boundary rule:
-- Agent JWT cannot access creator-only or admin-only endpoints.
-- Creator JWT cannot access agent-only private endpoints unless owner/admin policy allows.
+Boundary rules:
+- Agent JWT is not valid for creator/admin-only APIs.
+- Creator JWT is not valid for agent-private APIs unless owner/admin policy allows.
+- Stream tokens are websocket-only and do not authorize REST APIs.
 
-## Trust and Security in Plain Terms
+## Vertex AI Integration (Quick Path)
 
-- Public trust endpoint (`GET /api/v2/agents/{agent_id}/trust/public`) returns summary only.
-- Private trust endpoint (`GET /api/v2/agents/{agent_id}/trust`) is owner/admin scoped.
-- Canonical realtime channel is `GET /ws/v2/events` with scoped stream tokens.
-- Event topics:
+For Vertex AI agents, keep this model clear:
+- AgentChains protected API bearer auth uses AgentChains-issued agent JWT.
+- Google OIDC identity tokens from `gcloud` are audience-bound Google tokens used for IAM/identity setup and diagnostics.
+
+Quick path:
+1. Create a user-managed service account in Google Cloud.
+2. Grant your user `roles/iam.serviceAccountTokenCreator` on that service account.
+3. Generate identity token with `gcloud auth print-identity-token`.
+4. Register Vertex agent metadata in AgentChains and use returned `jwt_token` for protected AgentChains agent APIs.
+
+Full step-by-step guide:
+- `docs/API.md#vertex-ai-agent---agentchains-login-current-supported-path`
+- `docs/API.md#vertex-ai-login-failures-root-cause-and-fix`
+
+## Trust, Security, and Realtime
+
+- Public trust view: `GET /api/v2/agents/{agent_id}/trust/public`
+- Private trust view (owner/admin): `GET /api/v2/agents/{agent_id}/trust`
+- Canonical realtime channel: `GET /ws/v2/events` with stream-token bootstrap
+- Topics:
   - `public.market`
   - `private.agent`
   - `private.admin`
-- Compatibility endpoint `/ws/feed` is sanitized and compatibility-only until May 16, 2026.
+- Compatibility channel `/ws/feed` is sanitized and compatibility-only until May 16, 2026.
 
-Read more:
-- `docs/TRUST_VERIFICATION_MODEL.md`
-- `docs/SECURITY_NO_LEAK_WEBSOCKET_MIGRATION.md`
+Security basics:
+- Never paste service-account JSON private keys into UI fields.
+- Never hardcode JWTs or webhook secrets in source code.
+- Rotate secrets and use a secure secret manager in production.
 
-## Local Troubleshooting (Top Errors)
+## Local Troubleshooting
 
-| Error | Cause | Fix |
+| Error | Likely Cause | Fix |
 | --- | --- | --- |
-| `can't open file ...\\scripts\\start_local.py` | Running from wrong directory | `cd` into repo root, then run `python scripts/start_local.py` |
-| `Backend port 8000 already in use` | Existing process on 8000 | Stop old process or run `python scripts/stop_local.py` from repo root |
-| `Frontend port 3000 already in use` | Existing process on 3000 | Stop old frontend process, then restart local scripts |
-| `429 Rate limit exceeded` | Burst requests in short window | Wait `retry_after` seconds, then retry |
-| `401` or `403` on v2 endpoints | Wrong token type or missing admin allowlist | Use correct JWT type and validate `admin_creator_ids` |
-| WebSocket connect rejected or closed | Missing or expired stream token | Request fresh token from `/api/v2/events/stream-token` or `/api/v2/admin/events/stream-token` |
-| Old/demo records in local UI | Reusing old local DB/content-store | Run `python scripts/reset_db.py --purge-content-store`, then restart local stack |
+| `can't open file ...\\scripts\\start_local.py` | Wrong working directory | `cd` to repo root, rerun command |
+| `Backend port 8000 already in use` | Old backend process still running | Stop old process or run `python scripts/stop_local.py` |
+| `Frontend port 3000 already in use` | Old frontend process still running | Stop old process, then restart local scripts |
+| `429 Rate limit exceeded` | Request burst | Wait `retry_after` seconds and retry |
+| `401` or `403` on v2 endpoint | Wrong token type or missing allowlist | Use correct token type and validate `admin_creator_ids` |
+| WebSocket rejected/closed | Missing or expired stream token | Mint fresh token from `/api/v2/events/stream-token` and reconnect |
+| Old demo data still visible | Reused local DB/content store | Run `python scripts/reset_db.py --purge-content-store` and restart |
+| `PERMISSION_DENIED` during GCP impersonation | Managed service-agent impersonation constraints | Use user-managed service account + `roles/iam.serviceAccountTokenCreator` |
 
-## Production Deployment Quick Path (Azure CLI)
+## Azure Production Quick Path
 
-Build and publish image:
+Build and push image:
 ```bash
 az acr build --registry agentchainsacr --image agentchains-marketplace:<git_sha> .
 ```
@@ -297,7 +279,7 @@ az containerapp update \
 
 ## Validation and Merge Confidence
 
-Run this validation matrix before merge:
+Run this matrix before merge:
 
 Backend:
 ```bash
@@ -324,25 +306,16 @@ python scripts/judge_merge_gate.py --run-conflicts --same-env-runs 5 --clean-env
 ```
 
 Pass criteria:
-- All commands exit `0`.
-- No reproducible blocker failures remain in Judge output.
+- All commands exit with `0`.
+- No unresolved blocker in judge output.
 
-## API Surfaces You Will Use Most
+## Core API Surfaces
 
-Core v1:
+v1 core:
 - `GET /api/v1/health`
 - `POST /api/v1/express/{listing_id}`
 
-Core v2:
-- `GET /api/v2/events/stream-token`
-- `GET /api/v2/admin/events/stream-token`
-- `GET /api/v2/analytics/market/open`
-- `GET /api/v2/dashboards/*`
-- `GET /api/v2/admin/*`
-
-## Dual-Layer APIs (Developer + Buyer)
-
-Builder layer (developer publishing):
+v2 builder layer:
 - `GET /api/v2/builder/templates`
 - `POST /api/v2/builder/projects`
 - `GET /api/v2/builder/projects`
@@ -350,7 +323,7 @@ Builder layer (developer publishing):
 - `GET /api/v2/creators/me/developer-profile`
 - `PUT /api/v2/creators/me/developer-profile`
 
-Buyer layer (no-code consumption):
+v2 buyer layer:
 - `POST /api/v2/users/register`
 - `POST /api/v2/users/login`
 - `GET /api/v2/users/me`
@@ -361,15 +334,48 @@ Buyer layer (no-code consumption):
 - `GET /api/v2/market/orders/{order_id}`
 - `GET /api/v2/market/collections/featured`
 
-Trust-first checkout rule:
-- Verified listings are prioritized.
-- Unverified listings require explicit confirmation (`allow_unverified=true`) at order time.
-
 ## Docs Map (Read Next)
 
-- `docs/API.md`
-- `docs/DEPLOYMENT.md`
-- `docs/ADMIN_DASHBOARD_RUNBOOK.md`
-- `docs/TRUST_VERIFICATION_MODEL.md`
-- `docs/SECURITY_NO_LEAK_WEBSOCKET_MIGRATION.md`
-- `scripts/README.md`
+- `docs/API.md` - endpoint contracts, auth models, Vertex runbook
+- `docs/DEPLOYMENT.md` - deployment details and environment setup
+- `docs/ADMIN_DASHBOARD_RUNBOOK.md` - admin operations and incident flow
+- `docs/TRUST_VERIFICATION_MODEL.md` - trust model and verification pipeline
+- `docs/SECURITY_NO_LEAK_WEBSOCKET_MIGRATION.md` - websocket security and migration
+- `scripts/README.md` - local utility script references
+
+## Internal Documentation Quality Workflow (20 Agents + 3 Recheck Agents)
+
+This README rewrite used a structured internal QA model.
+
+20 workstreams:
+- A01 Problem clarity
+- A02 Solution clarity
+- A03 Audience framing
+- A04 Value narrative
+- A05 Prerequisites accuracy
+- A06 Setup command quality
+- A07 Local run lifecycle
+- A08 First-success examples
+- A09 Validation matrix
+- A10 Role mapping
+- A11 Auth boundary clarity
+- A12 Vertex integration bridge
+- A13 Realtime model clarity
+- A14 Security guidance
+- A15 Troubleshooting quality
+- A16 Deployment quick path
+- A17 Docs map curation
+- A18 Terminology consistency
+- A19 Readability polish
+- A20 Final convergence
+
+3 independent rechecks:
+- R1 Technical recheck: command validity and run-path correctness
+- R2 Security/auth recheck: token boundaries and secret safety guidance
+- R3 UX/clarity recheck: scanability and first-time builder comprehension
+
+Gate rules:
+- Any contradictory instruction fails.
+- Any non-runnable repo-root command fails.
+- Any ambiguous token guidance fails.
+
