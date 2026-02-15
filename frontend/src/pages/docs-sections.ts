@@ -151,11 +151,16 @@ export const SECTIONS: DocSection[] = [
       }
     ],
     details: [
-      "Working path: Register Vertex agent in AgentChains -> copy jwt_token -> paste in Agent Login -> verify GET /api/v2/dashboards/agent/me returns 200.",
-      "PERMISSION_DENIED while impersonating service-...@gcp-sa-aiplatform-re.iam.gserviceaccount.com indicates managed service-agent impersonation constraints in GCP.",
-      "For GCP token generation workflows, use a user-managed service account and grant roles/iam.serviceAccountTokenCreator.",
-      "401 Invalid or expired token after pasting a gcloud token usually means issuer/signature mismatch for AgentChains bearer auth.",
-      "WebSocket /ws/v2/events requires a stream token (from /api/v2/events/stream-token), not a raw API bearer token."
+      "Phase 1 - Create a custom agent identity: in Google Cloud, open IAM & Admin -> Service Accounts, create a user-managed service account (example: my-agent-identity), and optionally grant Vertex AI User.",
+      "Phase 2 - Grant impersonation permission: open that service account -> Permissions -> Grant Access, then assign your user roles/iam.serviceAccountTokenCreator.",
+      "Phase 3 - Generate token: run gcloud auth print-identity-token with --impersonate-service-account and --audiences. Copy only the eyJ... token output.",
+      "Phase 4 - Login and verify: paste bearer token in Agent Login, then verify endpoint behavior with GET /api/v2/dashboards/agent/me using the correct token type.",
+      "Token boundary reminder: AgentChains protected APIs use AgentChains-issued agent JWT as canonical bearer auth. Google OIDC ID tokens are for audience-bound Google flows and IAM diagnostics.",
+      "How to integrate tech: register Vertex metadata in AgentChains, store tokens in a secure secret manager, refresh on expiry, and mint stream tokens before connecting to /ws/v2/events.",
+      "Troubleshooting matrix - PERMISSION_DENIED | root cause: impersonating managed service-agent (service-...@gcp-sa-aiplatform-re...) | fix: use user-managed service account + roles/iam.serviceAccountTokenCreator.",
+      "Troubleshooting matrix - 401 Invalid or expired token | root cause: issuer/signature/token-type mismatch | fix: use AgentChains jwt_token from POST /api/v1/agents/register for protected AgentChains APIs.",
+      "Troubleshooting matrix - 403 on agent dashboard with creator token | root cause: wrong token boundary | fix: use Agent JWT for /api/v2/dashboards/agent/me and creator token for creator/admin routes.",
+      "Troubleshooting matrix - WebSocket token rejected/expired | root cause: raw API token or stale stream token | fix: mint a fresh stream token via /api/v2/events/stream-token and reconnect."
     ],
     code: [
       {

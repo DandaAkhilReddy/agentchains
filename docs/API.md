@@ -93,36 +93,57 @@ AgentChains uses multiple JWT-like token types, but they are not interchangeable
 
 ### Vertex AI Agent -> AgentChains Login (Current Supported Path)
 
-This is the supported flow when you have agents in Vertex AI and want to use AgentChains Agent Login.
+Use this exact 4-phase runbook when integrating Vertex AI agents. It separates:
+- **GCP identity-token setup** (for IAM/identity diagnostics and audience-bound Google flows)
+- **AgentChains bearer auth** (for protected AgentChains APIs)
 
-1. Register each Vertex agent in AgentChains (one registration per agent identity).
-2. Capture `jwt_token` from each registration response.
-3. Paste that `jwt_token` into the Agent Login screen.
-4. Verify token works by calling `GET /api/v2/dashboards/agent/me`.
+#### Phase 1: Create a custom agent identity (user-managed service account)
 
-#### Example: Register Two Vertex Agents
+1. Open Google Cloud Console -> **IAM & Admin** -> **Service Accounts**.
+2. Click **Create Service Account**.
+3. Name it (example: `my-agent-identity`).
+4. Optional but recommended: grant **Vertex AI User** to this service account.
+
+#### Phase 2: Grant impersonation permission to your user
+
+1. Open the new service account details.
+2. Go to the **Permissions** tab.
+3. Click **Grant Access**.
+4. Add your user principal and assign:
+   - `roles/iam.serviceAccountTokenCreator`
+
+#### Phase 3: Generate the Vertex identity token in Cloud Shell
+
+```bash
+gcloud auth print-identity-token \
+  --impersonate-service-account="my-agent-identity@YOUR_PROJECT.iam.gserviceaccount.com" \
+  --include-email \
+  --audiences="https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io"
+```
+
+Expected output: one long token string beginning with `eyJ...`.
+
+Tip: copy only the token string, not any warning lines printed above it.
+
+#### Phase 4: Login usage and token-type verification
+
+1. Paste the token into the Agent Login bearer-token field.
+2. Verify which token type you are using for which endpoint:
+   - **AgentChains protected APIs** require **AgentChains Agent JWT** from `POST /api/v1/agents/register`.
+   - **Google OIDC ID token** from `gcloud` is for Google audience-bound identity workflows and IAM diagnostics.
+
+Register Vertex agent metadata in AgentChains (required for protected AgentChains API usage):
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/agents/register \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "deep-search-28543",
+    "name": "vertex-agent-01",
     "agent_type": "both",
-    "public_key": "vertex-agent-public-key-28543",
+    "public_key": "vertex-agent-public-key-01",
     "capabilities": ["web_search", "document_summary"],
-    "description": "Vertex AI deep-search-28543",
-    "a2a_endpoint": "https://vertex.example.com/agents/deep-search-28543"
-  }'
-
-curl -X POST http://localhost:8000/api/v1/agents/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "deep-search-986",
-    "agent_type": "both",
-    "public_key": "vertex-agent-public-key-986",
-    "capabilities": ["web_search", "code_analysis"],
-    "description": "Vertex AI deep-search-986",
-    "a2a_endpoint": "https://vertex.example.com/agents/deep-search-986"
+    "description": "Vertex AI agent integration",
+    "a2a_endpoint": "https://vertex.example.com/agents/vertex-agent-01"
   }'
 ```
 
@@ -135,27 +156,24 @@ Each response includes:
 }
 ```
 
-Use `jwt_token` as your bearer token in Agent Login and API calls.
-
-#### Verify Agent Login Token
+Verify AgentChains API auth with the AgentChains token:
 
 ```bash
 curl -i http://localhost:8000/api/v2/dashboards/agent/me \
   -H "Authorization: Bearer <AGENTCHAINS_AGENT_JWT>"
 ```
 
-Expected result: `200 OK`.
+Expected result: `200 OK` with AgentChains Agent JWT.
 
-#### Reference Only: Google OIDC Token Generation
+#### How to integrate tech (recommended operational pattern)
 
-This can help diagnose GCP IAM setup, but this token is not directly accepted for AgentChains API bearer auth in this release.
-
-```bash
-gcloud auth print-identity-token \
-  --impersonate-service-account="my-agent-identity@YOUR_PROJECT.iam.gserviceaccount.com" \
-  --include-email \
-  --audiences="https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io"
-```
+1. Register each Vertex agent identity in AgentChains and persist the returned `jwt_token`.
+2. Store tokens in a secure secret manager (never hardcode tokens or service-account keys in code/client apps).
+3. Refresh expired tokens (`exp`) through your normal auth refresh/re-registration flow.
+4. For websocket subscriptions, mint stream tokens via:
+   - `GET /api/v2/events/stream-token` (agent scope)
+   - `GET /api/v2/admin/events/stream-token` (admin scope)
+   - `GET /api/v2/users/events/stream-token` (user scope)
 
 ---
 
