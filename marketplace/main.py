@@ -55,14 +55,21 @@ ws_manager = ConnectionManager()
 
 
 async def broadcast_event(event_type: str, data: dict) -> None:
-    """Broadcast a typed event to all connected WebSocket clients and OpenClaw webhooks."""
-    await ws_manager.broadcast({
-        "type": event_type,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "data": data,
-    })
-    # Dispatch to OpenClaw webhooks in background (fire-and-forget)
+    """Broadcast a typed event to WebSocket clients and webhook subscribers."""
+    from marketplace.services.event_subscription_service import build_event_envelope
+
+    envelope = build_event_envelope(
+        event_type,
+        data,
+        agent_id=data.get("agent_id"),
+    )
+    await ws_manager.broadcast(envelope)
+    # Dispatch to webhook integrations in background (fire-and-forget).
     fire_and_forget(_dispatch_openclaw(event_type, data), task_name="dispatch_openclaw")
+    fire_and_forget(
+        _dispatch_event_subscriptions(envelope),
+        task_name="dispatch_event_subscriptions",
+    )
 
 
 async def _dispatch_openclaw(event_type: str, data: dict) -> None:
@@ -73,6 +80,20 @@ async def _dispatch_openclaw(event_type: str, data: dict) -> None:
 
         async with async_session() as db:
             await dispatch_to_openclaw_webhooks(db, event_type, data)
+    except Exception:
+        logger.exception("Background task error")
+
+
+async def _dispatch_event_subscriptions(event: dict) -> None:
+    """Background task to deliver events to generic signed webhook subscribers."""
+    try:
+        from marketplace.database import async_session
+        from marketplace.services.event_subscription_service import (
+            dispatch_event_to_subscriptions,
+        )
+
+        async with async_session() as db:
+            await dispatch_event_to_subscriptions(db, event=event)
     except Exception:
         logger.exception("Background task error")
 

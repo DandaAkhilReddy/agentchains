@@ -27,16 +27,16 @@ def _is_running(pid: int) -> bool:
 def _read_pid(path: Path) -> int | None:
     if not path.exists():
         return None
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except Exception:
+        return None
 
 
 def _port_in_use(host: str, port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(0.5)
         return sock.connect_ex((host, port)) == 0
-    try:
-        return int(path.read_text(encoding="utf-8").strip())
-    except Exception:
-        return None
 
 
 def _start_backend() -> None:

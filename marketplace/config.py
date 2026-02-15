@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     openclaw_webhook_max_retries: int = 3
     openclaw_webhook_timeout_seconds: int = 10
     openclaw_webhook_max_failures: int = 5
+    trust_webhook_max_retries: int = 3
+    trust_webhook_timeout_seconds: int = 10
+    trust_webhook_max_failures: int = 5
+    event_signing_secret: str = ""
+    stream_token_expire_minutes: int = 30
 
     # Creator Economy
     creator_royalty_pct: float = 1.0  # 100% — creator gets all agent earnings

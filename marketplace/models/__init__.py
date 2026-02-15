@@ -21,6 +21,18 @@ from marketplace.models.trust_verification import (
     VerificationJob,
     VerificationResult,
 )
+from marketplace.models.agent_trust import (
+    AgentIdentityAttestation,
+    AgentRuntimeAttestation,
+    AgentKnowledgeChallenge,
+    AgentKnowledgeChallengeRun,
+    AgentTrustProfile,
+    MemorySnapshot,
+    MemorySnapshotChunk,
+    MemoryVerificationRun,
+    EventSubscription,
+    WebhookDelivery,
+)
 
 __all__ = [
     "RegisteredAgent",
@@ -48,4 +60,14 @@ __all__ = [
     "ArtifactManifest",
     "VerificationJob",
     "VerificationResult",
+    "AgentIdentityAttestation",
+    "AgentRuntimeAttestation",
+    "AgentKnowledgeChallenge",
+    "AgentKnowledgeChallengeRun",
+    "AgentTrustProfile",
+    "MemorySnapshot",
+    "MemorySnapshotChunk",
+    "MemoryVerificationRun",
+    "EventSubscription",
+    "WebhookDelivery",
 ]

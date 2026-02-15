@@ -34,6 +34,41 @@ class Base(DeclarativeBase):
     pass
 
 
+_SQLITE_COLUMN_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
+    "data_listings": [
+        ("trust_status", "TEXT NOT NULL DEFAULT 'pending_verification'"),
+        ("trust_score", "INTEGER NOT NULL DEFAULT 0"),
+        ("verification_summary_json", "TEXT DEFAULT '{}'"),
+        ("provenance_json", "TEXT DEFAULT '{}'"),
+        ("verification_updated_at", "DATETIME"),
+    ],
+}
+
+
+def _sqlite_table_exists(sync_conn, table: str) -> bool:
+    row = sync_conn.exec_driver_sql(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+        (table,),
+    ).fetchone()
+    return bool(row)
+
+
+def _sqlite_has_column(sync_conn, table: str, column: str) -> bool:
+    rows = sync_conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+    return any(row[1] == column for row in rows)
+
+
+def _apply_sqlite_compat_migrations(sync_conn) -> None:
+    """Apply lightweight additive SQLite migrations for local developer DBs."""
+    for table, migrations in _SQLITE_COLUMN_MIGRATIONS.items():
+        if not _sqlite_table_exists(sync_conn, table):
+            continue
+        for column, ddl in migrations:
+            if _sqlite_has_column(sync_conn, table, column):
+                continue
+            sync_conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
 async def get_db() -> AsyncSession:
     """FastAPI dependency that yields a database session."""
     async with async_session() as session:
@@ -44,6 +79,8 @@ async def init_db():
     """Create all tables."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if _is_sqlite:
+            await conn.run_sync(_apply_sqlite_compat_migrations)
 
 
 async def drop_db():

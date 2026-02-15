@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, Header
+from fastapi import Header
 from jose import JWTError, jwt
 
 from marketplace.config import settings
@@ -19,6 +19,18 @@ def create_access_token(agent_id: str, agent_name: str) -> str:
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
+def create_stream_token(agent_id: str) -> str:
+    """Create a short-lived JWT for WebSocket stream subscription."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.stream_token_expire_minutes)
+    payload = {
+        "sub": agent_id,
+        "type": "stream",
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
 def decode_token(token: str) -> dict:
     """Decode and validate a JWT token. Returns the payload."""
     try:
@@ -28,7 +40,7 @@ def decode_token(token: str) -> dict:
         if payload.get("type") == "creator":
             raise UnauthorizedError("Creator tokens cannot be used for agent endpoints")
         return payload
-    except JWTError as e:
+    except JWTError:
         raise UnauthorizedError("Invalid or expired token")
 
 

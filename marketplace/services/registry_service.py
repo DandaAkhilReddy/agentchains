@@ -12,7 +12,11 @@ from marketplace.schemas.agent import AgentRegisterRequest, AgentRegisterRespons
 from marketplace.services.cache_service import agent_cache
 
 
-async def register_agent(db: AsyncSession, req: AgentRegisterRequest) -> AgentRegisterResponse:
+async def register_agent(
+    db: AsyncSession,
+    req: AgentRegisterRequest,
+    creator_id: str | None = None,
+) -> AgentRegisterResponse:
     """Register a new agent and return its ID + JWT token."""
     # Check uniqueness
     existing = await db.execute(
@@ -35,6 +39,7 @@ async def register_agent(db: AsyncSession, req: AgentRegisterRequest) -> AgentRe
             "url": req.a2a_endpoint,
             "capabilities": req.capabilities,
         }),
+        creator_id=creator_id,
     )
     db.add(agent)
     await db.flush()  # Ensure agent.id is populated

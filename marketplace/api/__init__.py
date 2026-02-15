@@ -26,6 +26,10 @@ from . import (
     transactions,
     verification,
     v2_billing,
+    v2_events,
+    v2_integrations,
+    v2_agents,
+    v2_memory,
     v2_payouts,
     v2_sellers,
     v2_verification,
@@ -60,7 +64,11 @@ API_ROUTERS: tuple[APIRouter, ...] = (
 )
 
 API_V2_ROUTERS: tuple[APIRouter, ...] = (
+    v2_agents.router,
     v2_billing.router,
+    v2_memory.router,
+    v2_integrations.router,
+    v2_events.router,
     v2_payouts.router,
     v2_sellers.router,
     v2_verification.router,

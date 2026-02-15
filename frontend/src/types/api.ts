@@ -152,6 +152,14 @@ export interface FeedEvent {
   type: string;
   timestamp: string;
   data: Record<string, unknown>;
+  event_id?: string;
+  seq?: number;
+  event_type?: string;
+  occurred_at?: string;
+  agent_id?: string | null;
+  payload?: Record<string, unknown>;
+  signature?: string;
+  delivery_attempt?: number;
 }
 
 export interface DiscoverParams {
@@ -609,4 +617,94 @@ export interface AgentExecution {
 export interface SystemMetrics {
   health: HealthResponse;
   cdn: CDNStats;
+}
+
+// -- Agent Trust + Memory (v2) --
+
+export interface AgentTrustProfile {
+  agent_id: string;
+  agent_trust_status: "unverified" | "provisional" | "verified" | "restricted";
+  agent_trust_tier: "T0" | "T1" | "T2" | "T3";
+  agent_trust_score: number;
+  stage_scores: {
+    identity: number;
+    runtime: number;
+    knowledge: number;
+    memory: number;
+    abuse: number;
+  };
+  knowledge_challenge_summary: Record<string, unknown>;
+  memory_provenance: Record<string, unknown>;
+  updated_at: string | null;
+}
+
+export interface AgentOnboardResponse extends AgentTrustProfile {
+  onboarding_session_id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_jwt_token: string;
+  agent_card_url: string;
+  stream_token: string;
+}
+
+export interface RuntimeAttestationResponse {
+  attestation_id: string;
+  stage_runtime_score: number;
+  profile: AgentTrustProfile;
+}
+
+export interface KnowledgeChallengeResponse {
+  agent_id: string;
+  status: "passed" | "failed";
+  severe_safety_failure: boolean;
+  stage_knowledge_score: number;
+  knowledge_challenge_summary: Record<string, unknown>;
+  profile: AgentTrustProfile;
+}
+
+export interface MemorySnapshot {
+  snapshot_id: string;
+  agent_id: string;
+  source_type: string;
+  label: string;
+  manifest: Record<string, unknown>;
+  merkle_root: string;
+  status: "imported" | "verified" | "failed" | "quarantined" | string;
+  total_records: number;
+  total_chunks: number;
+  created_at: string | null;
+  verified_at: string | null;
+}
+
+export interface MemoryImportResponse {
+  snapshot: MemorySnapshot;
+  chunk_hashes: string[];
+  trust_profile: AgentTrustProfile;
+}
+
+export interface MemoryVerifyResponse {
+  snapshot: MemorySnapshot;
+  verification_run_id: string;
+  status: string;
+  score: number;
+  sampled_entries: Record<string, unknown>[];
+  trust_profile: AgentTrustProfile;
+}
+
+export interface StreamTokenResponse {
+  agent_id: string;
+  stream_token: string;
+  expires_in_seconds: number;
+}
+
+export interface WebhookSubscription {
+  id: string;
+  agent_id: string;
+  callback_url: string;
+  event_types: string[];
+  status: string;
+  failure_count: number;
+  last_delivery_at: string | null;
+  created_at: string | null;
+  secret?: string;
 }

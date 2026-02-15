@@ -330,8 +330,10 @@ class TestBroadcastFiltering:
              patch("marketplace.main.fire_and_forget", side_effect=_capture_and_close) as mock_schedule:
             await broadcast_event("opportunity_created", {"id": "opp-1"})
 
-        # fire_and_forget should have been called with the dispatch coroutine
-        mock_schedule.assert_called_once()
+        # fire_and_forget should include OpenClaw and generic webhook dispatch.
+        assert mock_schedule.call_count >= 1
+        task_names = [call.kwargs.get("task_name") for call in mock_schedule.call_args_list]
+        assert "dispatch_openclaw" in task_names
 
     # 14
     @pytest.mark.asyncio
