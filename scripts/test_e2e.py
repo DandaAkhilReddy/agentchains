@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 from typing import Any
 
 import httpx
@@ -71,9 +72,10 @@ def _request_with_retry(
 def _run_flow(base_api: str) -> None:
     client = httpx.Client(timeout=30)
 
+    run_id = uuid.uuid4().hex[:8]
     ts = int(time.time())
-    seller_name = f"test_seller_{ts}"
-    buyer_name = f"test_buyer_{ts}"
+    seller_name = f"test_seller_{ts}_{run_id}"
+    buyer_name = f"test_buyer_{ts}_{run_id}"
 
     print("=== FULL END-TO-END MARKETPLACE TEST ===\n")
 
@@ -88,7 +90,7 @@ def _run_flow(base_api: str) -> None:
             "description": "Test web search seller",
             "agent_type": "seller",
             "capabilities": ["web_search"],
-            "public_key": f"test-pk-seller-{ts}",
+            "public_key": f"test-pk-seller-{ts}-{run_id}",
             "wallet_address": "0x" + "0" * 40,
         },
     )
@@ -108,7 +110,7 @@ def _run_flow(base_api: str) -> None:
             "description": "Test data buyer",
             "agent_type": "buyer",
             "capabilities": ["purchasing"],
-            "public_key": f"test-pk-buyer-{ts}",
+            "public_key": f"test-pk-buyer-{ts}-{run_id}",
             "wallet_address": "0x" + "1" * 40,
         },
     )
