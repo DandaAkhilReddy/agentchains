@@ -1,5 +1,4 @@
 """Withdrawal service -- convert USD balance to API credits, gift cards, or cash."""
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -8,7 +7,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marketplace.config import settings
+from marketplace.core.async_tasks import fire_and_forget
 from marketplace.models.redemption import ApiCreditBalance, RedemptionRequest
 from marketplace.models.token_account import TokenAccount, TokenLedger
 
@@ -21,6 +20,19 @@ _MIN_THRESHOLDS: dict[str, float] = {
     "upi": 5.00,               # $5.00
     "bank_withdrawal": 10.00,  # $10.00
 }
+
+
+def _emit_admin_event(event_type: str, payload: dict) -> None:
+    try:
+        from marketplace.main import broadcast_event
+
+        fire_and_forget(
+            broadcast_event(event_type, payload),
+            task_name=f"redemption_{event_type}",
+        )
+    except Exception:
+        # Never block payout flow due to notification transport failure.
+        return
 
 
 async def create_redemption(
@@ -97,6 +109,16 @@ async def create_redemption(
     logger.info(
         "Withdrawal created: %s $%.2f -> %s (creator=%s)",
         redemption.id, amount_usd, redemption_type, creator_id,
+    )
+    _emit_admin_event(
+        "admin.payout.pending",
+        {
+            "creator_id": creator_id,
+            "request_id": redemption.id,
+            "redemption_type": redemption.redemption_type,
+            "amount_usd": float(redemption.amount_usd),
+            "status": redemption.status,
+        },
     )
 
     # Auto-process API credits (instant)
@@ -271,15 +293,25 @@ async def admin_approve_redemption(db: AsyncSession, redemption_id: str, admin_n
 
     # Route to the appropriate processor
     if redemption.redemption_type == "api_credits":
-        return await process_api_credit_redemption(db, redemption_id)
+        result = await process_api_credit_redemption(db, redemption_id)
     elif redemption.redemption_type == "gift_card":
-        return await process_gift_card_redemption(db, redemption_id)
+        result = await process_gift_card_redemption(db, redemption_id)
     elif redemption.redemption_type == "bank_withdrawal":
-        return await process_bank_withdrawal(db, redemption_id)
+        result = await process_bank_withdrawal(db, redemption_id)
     elif redemption.redemption_type == "upi":
-        return await process_upi_transfer(db, redemption_id)
+        result = await process_upi_transfer(db, redemption_id)
     else:
         raise ValueError(f"Unknown redemption type: {redemption.redemption_type}")
+
+    _emit_admin_event(
+        "admin.dashboard.updated",
+        {
+            "creator_id": redemption.creator_id,
+            "request_id": redemption.id,
+            "status": result.get("status", redemption.status),
+        },
+    )
+    return result
 
 
 async def admin_reject_redemption(db: AsyncSession, redemption_id: str, reason: str) -> dict:
@@ -321,6 +353,14 @@ async def admin_reject_redemption(db: AsyncSession, redemption_id: str, reason: 
     await db.refresh(redemption)
 
     logger.info("Redemption rejected: %s -- %s", redemption.id, reason)
+    _emit_admin_event(
+        "admin.dashboard.updated",
+        {
+            "creator_id": redemption.creator_id,
+            "request_id": redemption.id,
+            "status": redemption.status,
+        },
+    )
     return _redemption_to_dict(redemption)
 
 

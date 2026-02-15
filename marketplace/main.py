@@ -4,7 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -60,14 +60,18 @@ class ScopedConnectionManager:
     MAX_CONNECTIONS = 2000
 
     def __init__(self):
-        self.active: dict[WebSocket, str] = {}
+        self.active: dict[WebSocket, dict[str, Any]] = {}
 
-    async def connect(self, ws: WebSocket, *, agent_id: str) -> bool:
+    async def connect(self, ws: WebSocket, *, stream_payload: dict[str, Any]) -> bool:
         if len(self.active) >= self.MAX_CONNECTIONS:
             await ws.close(code=4029, reason="Too many connections")
             return False
         await ws.accept()
-        self.active[ws] = agent_id
+        self.active[ws] = {
+            "sub": stream_payload.get("sub"),
+            "sub_type": stream_payload.get("sub_type", "agent"),
+            "allowed_topics": set(stream_payload.get("allowed_topics", [])),
+        }
         return True
 
     def disconnect(self, ws: WebSocket) -> None:
@@ -76,7 +80,10 @@ class ScopedConnectionManager:
     async def broadcast_public(self, message: dict) -> None:
         data = json.dumps(message)
         dead: list[WebSocket] = []
-        for ws in self.active:
+        for ws, meta in self.active.items():
+            topics = meta.get("allowed_topics", set())
+            if topics and "public.market" not in topics:
+                continue
             try:
                 await ws.send_text(data)
             except Exception:
@@ -84,14 +91,38 @@ class ScopedConnectionManager:
         for ws in dead:
             self.disconnect(ws)
 
-    async def broadcast_private(self, message: dict, *, target_agent_ids: list[str]) -> None:
+    async def broadcast_private_agent(self, message: dict, *, target_agent_ids: list[str]) -> None:
         if not target_agent_ids:
             return
         data = json.dumps(message)
         targets = set(target_agent_ids)
         dead: list[WebSocket] = []
-        for ws, agent_id in self.active.items():
-            if agent_id not in targets:
+        for ws, meta in self.active.items():
+            if meta.get("sub_type") != "agent":
+                continue
+            topics = meta.get("allowed_topics", set())
+            if topics and "private.agent" not in topics:
+                continue
+            if meta.get("sub") not in targets:
+                continue
+            try:
+                await ws.send_text(data)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
+    async def broadcast_private_admin(self, message: dict, *, target_creator_ids: list[str]) -> None:
+        data = json.dumps(message)
+        targets = set(target_creator_ids or [])
+        dead: list[WebSocket] = []
+        for ws, meta in self.active.items():
+            if meta.get("sub_type") != "admin":
+                continue
+            topics = meta.get("allowed_topics", set())
+            if topics and "private.admin" not in topics:
+                continue
+            if targets and meta.get("sub") not in targets:
                 continue
             try:
                 await ws.send_text(data)
@@ -129,10 +160,17 @@ async def broadcast_event(event_type: str, data: dict) -> None:
             task_name="dispatch_openclaw",
         )
     else:
-        await ws_scoped_manager.broadcast_private(
-            envelope,
-            target_agent_ids=envelope.get("target_agent_ids", []),
-        )
+        topic = envelope.get("topic", "private.agent")
+        if topic == "private.admin":
+            await ws_scoped_manager.broadcast_private_admin(
+                envelope,
+                target_creator_ids=envelope.get("target_creator_ids", []),
+            )
+        else:
+            await ws_scoped_manager.broadcast_private_agent(
+                envelope,
+                target_agent_ids=envelope.get("target_agent_ids", []),
+            )
 
     # Dispatch to webhook integrations in background (fire-and-forget).
     fire_and_forget(
@@ -383,7 +421,7 @@ def create_app() -> FastAPI:
             await ws.close(code=4003, reason="Invalid or expired stream token")
             return
 
-        connected = await ws_scoped_manager.connect(ws, agent_id=payload["sub"])
+        connected = await ws_scoped_manager.connect(ws, stream_payload=payload)
         if not connected:
             return
         try:

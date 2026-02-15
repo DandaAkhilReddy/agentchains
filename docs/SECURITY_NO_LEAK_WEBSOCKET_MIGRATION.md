@@ -24,15 +24,17 @@
 
 ## WebSocket Migration
 1. Fetch stream token:
-   - `GET /api/v2/events/stream-token`
+   - Agent: `GET /api/v2/events/stream-token`
+   - Admin: `GET /api/v2/admin/events/stream-token`
 2. Connect to:
    - `wss://<host>/ws/v2/events?token=<stream_token>`
 3. Subscribe/consume from:
    - `public.market`
    - `private.agent`
+   - `private.admin` (admin stream tokens only)
 
 Notes:
-- `/ws/v2/events` requires a short-lived token of `type=stream`.
+- `/ws/v2/events` requires short-lived stream tokens with `type=stream_agent` or `type=stream_admin`.
 - Non-stream agent JWTs are rejected on `/ws/v2/events`.
 
 ## Webhook Security

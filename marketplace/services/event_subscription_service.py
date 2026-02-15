@@ -27,6 +27,7 @@ _SCHEMA_VERSION = "2026-02-15"
 _PROD_ENVS = {"production", "prod"}
 _PUBLIC_TOPIC = "public.market"
 _PRIVATE_TOPIC = "private.agent"
+_PRIVATE_ADMIN_TOPIC = "private.admin"
 _PRIVATE_NETWORKS = (
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
@@ -147,6 +148,24 @@ _EVENT_POLICY: dict[str, dict[str, Any]] = {
         "public_fields": [],
         "target_keys": ["agent_id"],
     },
+    "admin.payout.pending": {
+        "visibility": "private",
+        "topic": _PRIVATE_ADMIN_TOPIC,
+        "public_fields": [],
+        "target_keys": ["creator_id"],
+    },
+    "admin.security.alert": {
+        "visibility": "private",
+        "topic": _PRIVATE_ADMIN_TOPIC,
+        "public_fields": [],
+        "target_keys": ["creator_id"],
+    },
+    "admin.dashboard.updated": {
+        "visibility": "private",
+        "topic": _PRIVATE_ADMIN_TOPIC,
+        "public_fields": [],
+        "target_keys": ["creator_id"],
+    },
 }
 
 
@@ -249,6 +268,27 @@ def _extract_target_agent_ids(
     return sorted(values)
 
 
+def _extract_target_creator_ids(
+    payload: dict[str, Any], policy: dict[str, Any], explicit_targets: list[str] | None = None
+) -> list[str]:
+    values: set[str] = set()
+    for item in explicit_targets or []:
+        if isinstance(item, str) and item.strip():
+            values.add(item.strip())
+
+    keys = set(policy.get("target_keys", []))
+    keys.update({"creator_id", "target_creator_id"})
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            values.add(value.strip())
+        if isinstance(value, list):
+            for nested in value:
+                if isinstance(nested, str) and nested.strip():
+                    values.add(nested.strip())
+    return sorted(values)
+
+
 def _sanitize_payload(
     payload: dict[str, Any], policy: dict[str, Any], visibility: str
 ) -> dict[str, Any]:
@@ -272,6 +312,7 @@ def _base_event_payload(event: dict[str, Any]) -> dict[str, Any]:
         "visibility": event.get("visibility", "private"),
         "topic": event.get("topic", _PRIVATE_TOPIC),
         "target_agent_ids": event.get("target_agent_ids", []),
+        "target_creator_ids": event.get("target_creator_ids", []),
         "schema_version": event.get("schema_version", _SCHEMA_VERSION),
         "delivery_attempt": event.get("delivery_attempt", 1),
     }
@@ -284,14 +325,16 @@ def build_event_envelope(
     agent_id: str | None = None,
     delivery_attempt: int = 1,
     target_agent_ids: list[str] | None = None,
+    target_creator_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build a signed event envelope shared by WebSocket and webhook delivery."""
     policy = _event_policy(event_type)
     visibility = policy["visibility"]
     topic = policy["topic"]
     targets = _extract_target_agent_ids(payload, policy, target_agent_ids)
+    creator_targets = _extract_target_creator_ids(payload, policy, target_creator_ids)
     sanitized_payload = _sanitize_payload(payload, policy, visibility)
-    blocked = visibility == "private" and not targets
+    blocked = visibility == "private" and topic == _PRIVATE_TOPIC and not targets
     resolved_agent_id = agent_id or (targets[0] if targets else None)
 
     event = {
@@ -304,6 +347,7 @@ def build_event_envelope(
         "visibility": visibility,
         "topic": topic,
         "target_agent_ids": targets,
+        "target_creator_ids": creator_targets,
         "schema_version": _SCHEMA_VERSION,
         "delivery_attempt": delivery_attempt,
         "blocked": blocked,

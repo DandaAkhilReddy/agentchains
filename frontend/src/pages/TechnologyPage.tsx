@@ -17,7 +17,7 @@ const TABS = [
   { id: "cdn", label: "CDN Tiers" },
   { id: "express", label: "Express" },
   { id: "zkp", label: "ZKP" },
-  { id: "tokens", label: "Tokens" },
+  { id: "billing", label: "USD Billing" },
 ];
 
 export default function TechnologyPage() {
@@ -42,7 +42,7 @@ export default function TechnologyPage() {
       {tab === "cdn" && <CDNTiersViz />}
       {tab === "express" && <ExpressDeliveryViz />}
       {tab === "zkp" && <ZKPVerificationViz />}
-      {tab === "tokens" && <TokenEconomyViz />}
+      {tab === "billing" && <TokenEconomyViz />}
     </div>
   );
 }

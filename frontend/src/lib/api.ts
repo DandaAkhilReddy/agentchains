@@ -41,10 +41,20 @@ import type {
   KnowledgeChallengeResponse,
   AgentTrustProfile,
   AgentTrustPublicSummary,
+  AgentDashboardV2,
+  CreatorDashboardV2,
+  AgentPublicDashboardV2,
+  AdminOverviewV2,
+  AdminFinanceV2,
+  AdminUsageV2,
+  AdminAgentsV2,
+  AdminSecurityEventsV2,
+  OpenMarketAnalyticsV2,
   MemoryImportResponse,
   MemoryVerifyResponse,
   MemorySnapshot,
   StreamTokenResponse,
+  AdminStreamTokenResponse,
   WebhookSubscription,
 } from "../types/api";
 
@@ -509,6 +519,18 @@ export const fetchAgentTrustV2 = (agentId: string, agentToken: string) =>
 export const fetchAgentTrustPublicV2 = (agentId: string) =>
   getV2<AgentTrustPublicSummary>(`/agents/${agentId}/trust/public`);
 
+export const fetchDashboardAgentMeV2 = (agentToken: string) =>
+  authGetV2<AgentDashboardV2>("/dashboards/agent/me", agentToken);
+
+export const fetchDashboardCreatorMeV2 = (creatorToken: string) =>
+  authGetV2<CreatorDashboardV2>("/dashboards/creator/me", creatorToken);
+
+export const fetchDashboardAgentPublicV2 = (agentId: string) =>
+  getV2<AgentPublicDashboardV2>(`/dashboards/agent/${agentId}/public`);
+
+export const fetchOpenMarketAnalyticsV2 = (limit = 10) =>
+  getV2<OpenMarketAnalyticsV2>("/analytics/market/open", { limit });
+
 export const importMemorySnapshotV2 = (
   agentToken: string,
   body: {
@@ -537,6 +559,45 @@ export const fetchMemorySnapshotV2 = (agentToken: string, snapshotId: string) =>
 
 export const fetchStreamTokenV2 = (agentToken: string) =>
   authGetV2<StreamTokenResponse>("/events/stream-token", agentToken);
+
+export const fetchAdminOverviewV2 = (creatorToken: string) =>
+  authGetV2<AdminOverviewV2>("/admin/overview", creatorToken);
+
+export const fetchAdminFinanceV2 = (creatorToken: string) =>
+  authGetV2<AdminFinanceV2>("/admin/finance", creatorToken);
+
+export const fetchAdminUsageV2 = (creatorToken: string) =>
+  authGetV2<AdminUsageV2>("/admin/usage", creatorToken);
+
+export const fetchAdminAgentsV2 = (
+  creatorToken: string,
+  params?: { page?: number; page_size?: number; status?: string },
+) => authGetV2<AdminAgentsV2>("/admin/agents", creatorToken, params as Record<string, string | number | undefined>);
+
+export const fetchAdminSecurityEventsV2 = (
+  creatorToken: string,
+  params?: { page?: number; page_size?: number; severity?: string; event_type?: string },
+) => authGetV2<AdminSecurityEventsV2>("/admin/security/events", creatorToken, params as Record<string, string | number | undefined>);
+
+export const fetchAdminPendingPayoutsV2 = (
+  creatorToken: string,
+  limit = 100,
+) => authGetV2<{ count: number; total_pending_usd: number; requests: unknown[] }>("/admin/payouts/pending", creatorToken, { limit });
+
+export const approveAdminPayoutV2 = (
+  creatorToken: string,
+  requestId: string,
+  adminNotes = "",
+) => authPostV2(`/admin/payouts/${requestId}/approve`, creatorToken, { admin_notes: adminNotes });
+
+export const rejectAdminPayoutV2 = (
+  creatorToken: string,
+  requestId: string,
+  reason: string,
+) => authPostV2(`/admin/payouts/${requestId}/reject`, creatorToken, { reason });
+
+export const fetchAdminStreamTokenV2 = (creatorToken: string) =>
+  authGetV2<AdminStreamTokenResponse>("/admin/events/stream-token", creatorToken);
 
 export const createWebhookSubscriptionV2 = (
   agentToken: string,

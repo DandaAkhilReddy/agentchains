@@ -21,6 +21,9 @@ const RedemptionPage = lazy(() => import("./pages/RedemptionPage"));
 const PipelinePage = lazy(() => import("./pages/PipelinePage"));
 const DocsPage = lazy(() => import("./pages/DocsPage"));
 const TechnologyPage = lazy(() => import("./pages/TechnologyPage"));
+const AgentDashboardPage = lazy(() => import("./pages/AgentDashboardPage"));
+const AdminDashboardPage = lazy(() => import("./pages/AdminDashboardPage"));
+const RoleLandingPage = lazy(() => import("./pages/RoleLandingPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,7 +65,7 @@ class ErrorBoundary extends React.Component<
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
+  const [activeTab, setActiveTab] = useState<TabId>("roles");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const creatorAuth = useCreatorAuth();
 
@@ -84,7 +87,32 @@ export default function App() {
           <div className="flex-1 transition-all duration-300 sidebar-offset">
             <Shell onMenuToggle={() => setMobileMenuOpen((o) => !o)}>
               <main className="dot-grid-bg px-4 py-4 md:px-6 md:py-6 animate-slide-up">
+                {activeTab === "roles" && (
+                  <Suspense fallback={loading}>
+                    <RoleLandingPage onNavigate={(t) => setActiveTab(t as TabId)} />
+                  </Suspense>
+                )}
                 {activeTab === "dashboard" && <DashboardPage onNavigate={(t) => setActiveTab(t as TabId)} />}
+                {activeTab === "agentDashboard" && (
+                  <Suspense fallback={loading}><AgentDashboardPage /></Suspense>
+                )}
+                {activeTab === "adminDashboard" && (
+                  <Suspense fallback={loading}>
+                    {creatorAuth.isAuthenticated ? (
+                      <AdminDashboardPage
+                        token={creatorAuth.token!}
+                        creatorName={creatorAuth.creator?.display_name || "Admin"}
+                      />
+                    ) : (
+                      <CreatorLoginPage
+                        onLogin={async (email, password) => { await creatorAuth.login(email, password); }}
+                        onRegister={async (data) => { await creatorAuth.register(data); }}
+                        loading={creatorAuth.loading}
+                        error={creatorAuth.error}
+                      />
+                    )}
+                  </Suspense>
+                )}
                 {activeTab === "agents" && <AgentsPage />}
                 {activeTab === "listings" && <ListingsPage />}
                 {activeTab === "catalog" && (

@@ -40,11 +40,15 @@ Treat these folders/files as generated runtime/build artifacts:
 ## 3) Where To Change What
 
 - Add or modify API endpoints: `marketplace/api/`
+- Admin and role dashboards API surfaces: `marketplace/api/v2_admin.py`, `marketplace/api/v2_dashboards.py`, `marketplace/api/v2_analytics.py`
 - Change backend business logic: `marketplace/services/`
+- Dashboard metric aggregation: `marketplace/services/admin_dashboard_service.py`, `marketplace/services/dashboard_service.py`
 - Change auth/security behavior: `marketplace/core/`
+- WebSocket routing and stream token scope enforcement: `marketplace/main.py`, `marketplace/core/auth.py`, `marketplace/services/event_subscription_service.py`
 - Change DB schema/models: `marketplace/models/`
 - Change MCP protocol behavior: `marketplace/mcp/`
 - Change frontend pages: `frontend/src/pages/`
+- New role dashboard pages: `frontend/src/pages/RoleLandingPage.tsx`, `frontend/src/pages/AgentDashboardPage.tsx`, `frontend/src/pages/AdminDashboardPage.tsx`
 - Change shared frontend widgets: `frontend/src/components/`
 - Change frontend server-state hooks: `frontend/src/hooks/`
 - Change docs site navigation: `docs/mint.json`

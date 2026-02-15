@@ -19,12 +19,22 @@ def create_access_token(agent_id: str, agent_name: str) -> str:
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
-def create_stream_token(agent_id: str) -> str:
+def create_stream_token(
+    subject_id: str,
+    *,
+    token_type: str = "stream_agent",
+    allowed_topics: list[str] | None = None,
+) -> str:
     """Create a short-lived JWT for WebSocket stream subscription."""
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.stream_token_expire_minutes)
+    if allowed_topics is None:
+        allowed_topics = ["public.market", "private.agent"]
+    subject_type = "admin" if token_type == "stream_admin" else "agent"
     payload = {
-        "sub": agent_id,
-        "type": "stream",
+        "sub": subject_id,
+        "type": token_type,
+        "sub_type": subject_type,
+        "allowed_topics": allowed_topics,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
@@ -37,8 +47,11 @@ def decode_token(token: str) -> dict:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         if payload.get("sub") is None:
             raise UnauthorizedError("Token missing subject")
-        if payload.get("type") == "creator":
+        token_type = payload.get("type")
+        if token_type == "creator":
             raise UnauthorizedError("Creator tokens cannot be used for agent endpoints")
+        if token_type in {"stream", "stream_agent", "stream_admin"}:
+            raise UnauthorizedError("Stream tokens cannot be used for API endpoints")
         return payload
     except JWTError:
         raise UnauthorizedError("Invalid or expired token")
@@ -46,8 +59,13 @@ def decode_token(token: str) -> dict:
 
 def decode_stream_token(token: str) -> dict:
     """Decode and validate a short-lived WebSocket stream token."""
-    payload = decode_token(token)
-    if payload.get("type") != "stream":
+    try:
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    except JWTError:
+        raise UnauthorizedError("Invalid or expired token")
+    if payload.get("sub") is None:
+        raise UnauthorizedError("Token missing subject")
+    if payload.get("type") not in {"stream", "stream_agent", "stream_admin"}:
         raise UnauthorizedError("Stream token required")
     return payload
 

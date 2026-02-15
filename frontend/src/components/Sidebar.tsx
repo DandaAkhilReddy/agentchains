@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 export type TabId =
-  | "dashboard" | "agents" | "listings" | "catalog"
+  | "roles" | "dashboard" | "agentDashboard" | "adminDashboard" | "agents" | "listings" | "catalog"
   | "transactions" | "wallet" | "redeem"
   | "analytics" | "reputation"
   | "integrations" | "creator"
@@ -30,7 +30,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "Overview",
     items: [
+      { id: "roles", label: "Role Landing", icon: Shield },
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { id: "agentDashboard", label: "Agent", icon: Bot },
+      { id: "adminDashboard", label: "Admin", icon: Shield },
     ],
   },
   {
