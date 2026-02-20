@@ -1,4 +1,4 @@
-"""MCP tool definitions: 8 tools agents can call via MCP protocol.
+"""MCP tool definitions: 11 tools agents can call via MCP protocol.
 
 Each tool maps to existing service functions — no business logic duplication.
 """
@@ -115,6 +115,44 @@ TOOL_DEFINITIONS = [
                 "min_quality": {"type": "number", "description": "Minimum quality score"},
             },
             "required": ["listing_id"],
+        },
+    },
+    {
+        "name": "webmcp_discover_tools",
+        "description": "Find WebMCP-enabled tools available in the marketplace by category or domain.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "q": {"type": "string", "description": "Search query for tool name or description"},
+                "category": {"type": "string", "description": "Filter by category: shopping, research, form_fill, data_extraction"},
+                "domain": {"type": "string", "description": "Filter by website domain"},
+                "page": {"type": "integer", "default": 1},
+                "page_size": {"type": "integer", "default": 20},
+            },
+        },
+    },
+    {
+        "name": "webmcp_execute_action",
+        "description": "Execute a WebMCP action listing from the marketplace. Requires action_id and consent.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action_id": {"type": "string", "description": "ID of the action listing to execute"},
+                "parameters": {"type": "object", "description": "Input parameters for the action"},
+                "consent": {"type": "boolean", "default": True, "description": "User consent for execution"},
+            },
+            "required": ["action_id"],
+        },
+    },
+    {
+        "name": "webmcp_verify_execution",
+        "description": "Verify the proof-of-execution for a completed WebMCP action.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "execution_id": {"type": "string", "description": "ID of the execution to verify"},
+            },
+            "required": ["execution_id"],
         },
     },
 ]
@@ -251,6 +289,47 @@ async def execute_tool(
                 min_size=arguments.get("min_size"),
                 min_quality=arguments.get("min_quality"),
             )
+
+        if tool_name == "webmcp_discover_tools":
+            from marketplace.services.webmcp_service import list_tools
+
+            tools, total = await list_tools(
+                active_db,
+                q=arguments.get("q"),
+                category=arguments.get("category"),
+                domain=arguments.get("domain"),
+                page=arguments.get("page", 1),
+                page_size=arguments.get("page_size", 20),
+            )
+            return {"tools": tools, "total": total}
+
+        if tool_name == "webmcp_execute_action":
+            from marketplace.services.action_executor import execute_action
+
+            return await execute_action(
+                active_db,
+                listing_id=arguments["action_id"],
+                buyer_id=agent_id,
+                parameters=arguments.get("parameters", {}),
+                consent=arguments.get("consent", True),
+            )
+
+        if tool_name == "webmcp_verify_execution":
+            from marketplace.services.action_executor import get_execution
+            from marketplace.services.proof_of_execution_service import verify_proof
+
+            execution = await get_execution(active_db, arguments["execution_id"])
+            if not execution:
+                return {"error": "Execution not found", "execution_id": arguments["execution_id"]}
+            if not execution.get("proof_of_execution"):
+                return {"verified": False, "error": "No proof available", "execution_id": arguments["execution_id"]}
+            result = verify_proof(execution["proof_of_execution"])
+            return {
+                "execution_id": arguments["execution_id"],
+                "verified": result["valid"],
+                "claims": result.get("claims"),
+                "error": result.get("error"),
+            }
 
         return {"error": f"Unknown tool: {tool_name}"}
 
