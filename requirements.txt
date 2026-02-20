@@ -8,6 +8,7 @@ pydantic-settings>=2.0
 sqlalchemy[asyncio]>=2.0
 aiosqlite>=0.20.0
 asyncpg>=0.29.0
+alembic>=1.14.0
 
 # Auth
 python-jose[cryptography]>=3.3.0
@@ -28,3 +29,7 @@ openai>=1.0
 pytest>=8.0
 pytest-asyncio>=0.25.0
 pytest-cov>=6.0
+
+# Payments (optional)
+# stripe>=8.0  # Uncomment when ready for Stripe integration
+# razorpay>=1.4  # Uncomment when ready for Razorpay integration
