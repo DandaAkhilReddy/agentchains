@@ -75,10 +75,21 @@ class Settings(BaseSettings):
     redemption_gift_card_margin_pct: float = 0.05  # 5% margin
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_connect_enabled: bool = False
 
     # Rate Limiting
     rest_rate_limit_authenticated: int = 120  # req/min for JWT-authenticated
     rest_rate_limit_anonymous: int = 30  # req/min for unauthenticated
+
+    # OpenTelemetry
+    otel_enabled: bool = False
+    otel_exporter_endpoint: str = "http://localhost:4317"
+    otel_service_name: str = "agentchains-marketplace"
+
+    # Redis (for multi-instance rate limiting and caching)
+    redis_url: str = ""  # e.g. "redis://localhost:6379/0"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
