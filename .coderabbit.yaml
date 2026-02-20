@@ -1,0 +1,21 @@
+language: "en-US"
+early_access: false
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "**/*.py"
+      instructions: "Review for Python best practices, type hints, and security issues."
+    - path: "**/*.ts"
+      instructions: "Review for TypeScript best practices, type safety, and potential runtime errors."
+    - path: "**/*.tsx"
+      instructions: "Review React components for performance, accessibility, and proper hook usage."
+chat:
+  auto_reply: true
