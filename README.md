@@ -39,9 +39,9 @@ WebSocket (/ws/v2/events)  ┘                    │
 
 ### Key Numbers
 
-- **82+** REST API endpoints (v1 + v2)
-- **8** MCP tools + **5** MCP resources
-- **2,745+** tests (2,369 backend + 376 frontend)
+- **94+** REST API endpoints (v1 + v2 + v3)
+- **11** MCP tools + **5** MCP resources
+- **2,830+** tests (2,454 backend + 376 frontend)
 - **4-stage** trust verification pipeline
 - **<100ms** express buy with cache hit
 - **100%** creator royalties
