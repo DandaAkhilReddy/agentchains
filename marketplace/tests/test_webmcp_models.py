@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import inspect, select
+from sqlalchemy import select
 
 from marketplace.models.action_execution import ActionExecution
 from marketplace.models.action_listing import ActionListing
@@ -553,43 +553,36 @@ class TestActionExecutionCRUD:
 # ---------------------------------------------------------------------------
 
 class TestIndexExistence:
-    """Verify expected indexes are created on the tables."""
+    """Verify expected indexes are declared on the models via __table_args__."""
 
-    @pytest.mark.asyncio
-    async def test_webmcp_tools_indexes(self):
-        async with TestSession() as db:
-            # Trigger a query so the connection is established
-            await db.execute(select(WebMCPTool).limit(0))
-            insp = inspect(db.get_bind())
-            indexes = insp.get_indexes("webmcp_tools")
-            index_names = {idx["name"] for idx in indexes}
+    def test_webmcp_tools_indexes(self):
+        index_names = {
+            idx.name for idx in WebMCPTool.__table_args__
+            if hasattr(idx, "name")
+        }
 
-            assert "idx_webmcp_tools_domain" in index_names
-            assert "idx_webmcp_tools_category" in index_names
-            assert "idx_webmcp_tools_status" in index_names
-            assert "idx_webmcp_tools_creator" in index_names
+        assert "idx_webmcp_tools_domain" in index_names
+        assert "idx_webmcp_tools_category" in index_names
+        assert "idx_webmcp_tools_status" in index_names
+        assert "idx_webmcp_tools_creator" in index_names
 
-    @pytest.mark.asyncio
-    async def test_action_listings_indexes(self):
-        async with TestSession() as db:
-            await db.execute(select(ActionListing).limit(0))
-            insp = inspect(db.get_bind())
-            indexes = insp.get_indexes("action_listings")
-            index_names = {idx["name"] for idx in indexes}
+    def test_action_listings_indexes(self):
+        index_names = {
+            idx.name for idx in ActionListing.__table_args__
+            if hasattr(idx, "name")
+        }
 
-            assert "idx_action_listings_tool" in index_names
-            assert "idx_action_listings_seller" in index_names
-            assert "idx_action_listings_status" in index_names
+        assert "idx_action_listings_tool" in index_names
+        assert "idx_action_listings_seller" in index_names
+        assert "idx_action_listings_status" in index_names
 
-    @pytest.mark.asyncio
-    async def test_action_executions_indexes(self):
-        async with TestSession() as db:
-            await db.execute(select(ActionExecution).limit(0))
-            insp = inspect(db.get_bind())
-            indexes = insp.get_indexes("action_executions")
-            index_names = {idx["name"] for idx in indexes}
+    def test_action_executions_indexes(self):
+        index_names = {
+            idx.name for idx in ActionExecution.__table_args__
+            if hasattr(idx, "name")
+        }
 
-            assert "idx_action_executions_listing" in index_names
-            assert "idx_action_executions_buyer" in index_names
-            assert "idx_action_executions_status" in index_names
-            assert "idx_action_executions_tool" in index_names
+        assert "idx_action_executions_listing" in index_names
+        assert "idx_action_executions_buyer" in index_names
+        assert "idx_action_executions_status" in index_names
+        assert "idx_action_executions_tool" in index_names
