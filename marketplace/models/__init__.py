@@ -40,6 +40,9 @@ from marketplace.models.dual_layer import (
     EndUser,
     PlatformFee,
 )
+from marketplace.models.webmcp_tool import WebMCPTool
+from marketplace.models.action_listing import ActionListing
+from marketplace.models.action_execution import ActionExecution
 
 __all__ = [
     "RegisteredAgent",
@@ -82,4 +85,7 @@ __all__ = [
     "DeveloperProfile",
     "BuilderProject",
     "PlatformFee",
+    "WebMCPTool",
+    "ActionListing",
+    "ActionExecution",
 ]
