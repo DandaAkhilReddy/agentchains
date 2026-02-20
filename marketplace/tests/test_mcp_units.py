@@ -393,8 +393,8 @@ class TestToolResourceDefinitions:
     """Static validation of MCP tool and resource registries."""
 
     def test_tool_definitions_expected_count(self):
-        """TOOL_DEFINITIONS has exactly 8 tools (per tools.py header comment)."""
-        assert len(TOOL_DEFINITIONS) == 8
+        """TOOL_DEFINITIONS has exactly 11 tools (8 core + 3 WebMCP)."""
+        assert len(TOOL_DEFINITIONS) == 11
 
     def test_all_tools_have_required_fields(self):
         """Every tool has name, description, and inputSchema."""

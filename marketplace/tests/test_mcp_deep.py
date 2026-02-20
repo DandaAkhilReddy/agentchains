@@ -187,8 +187,8 @@ class TestToolOperations:
     """tools/list, tools/call for known and unknown tools."""
 
     @pytest.mark.asyncio
-    async def test_tools_list_returns_all_8_tools(self):
-        """tools/list returns exactly 8 tool definitions with correct structure."""
+    async def test_tools_list_returns_all_11_tools(self):
+        """tools/list returns exactly 11 tool definitions with correct structure."""
         _, sid, _ = await _init_via_auth()
 
         resp = await handle_message(
@@ -197,7 +197,7 @@ class TestToolOperations:
 
         assert "result" in resp
         tools = resp["result"]["tools"]
-        assert len(tools) == 8
+        assert len(tools) == 11
         assert tools == TOOL_DEFINITIONS
         for tool in tools:
             assert "name" in tool

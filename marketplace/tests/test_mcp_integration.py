@@ -127,12 +127,12 @@ async def test_mcp_tools_list(client):
 
 
 # =============================================================================
-# 4. test_mcp_tools_list_has_8_tools
+# 4. test_mcp_tools_list_has_11_tools
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_mcp_tools_list_has_8_tools(client):
-    """tools/list returns exactly 8 tool definitions."""
+async def test_mcp_tools_list_has_11_tools(client):
+    """tools/list returns exactly 11 tool definitions."""
     _, session_id = await _initialize(client)
 
     body = _jsonrpc_request("tools/list", {"_session_id": session_id}, msg_id=2)
@@ -140,7 +140,7 @@ async def test_mcp_tools_list_has_8_tools(client):
 
     data = resp.json()
     tools = data["result"]["tools"]
-    assert len(tools) == 8
+    assert len(tools) == 11
 
 
 # =============================================================================
