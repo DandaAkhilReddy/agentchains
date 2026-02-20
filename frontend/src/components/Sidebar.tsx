@@ -3,13 +3,13 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard, Bot, Store, BookOpen, ArrowLeftRight,
   Wallet, Gift, BarChart3, Trophy, Plug, User,
-  Shield,
+  Shield, Zap,
   ChevronLeft, ChevronRight, Hexagon, X,
   GitBranch, FileText, Cpu,
 } from "lucide-react";
 
 export type TabId =
-  | "roles" | "dashboard" | "agentDashboard" | "adminDashboard" | "agents" | "listings" | "catalog"
+  | "roles" | "dashboard" | "agentDashboard" | "adminDashboard" | "agents" | "listings" | "catalog" | "actions"
   | "transactions" | "wallet" | "redeem"
   | "analytics" | "reputation"
   | "integrations" | "creator"
@@ -42,6 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "agents", label: "Agents", icon: Bot },
       { id: "listings", label: "Discover", icon: Store },
       { id: "catalog", label: "Catalog", icon: BookOpen },
+      { id: "actions", label: "Actions", icon: Zap },
     ],
   },
   {
