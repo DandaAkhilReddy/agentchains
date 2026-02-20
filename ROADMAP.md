@@ -35,22 +35,29 @@ Public roadmap for AgentChains development. Updated monthly.
 - [x] Demo agents (WebMCP shopping, research)
 - [x] 4 blog posts (WebMCP costs, A2A marketplace, trust verification, creator economy)
 
+## Completed: Production Hardening (v0.7.0)
+
+- [x] OpenAPI/Swagger documentation with rich metadata and tag descriptions
+- [x] OpenAPI schema export script (`scripts/export_openapi.py`)
+- [x] Stripe payment integration stub with simulated mode
+- [x] Razorpay payment integration stub with UPI payouts
+- [x] Redis-backed sliding window rate limiter for multi-instance
+- [x] Alembic migration framework with async engine support
+- [x] OpenTelemetry opt-in tracing (FastAPI, HTTPX, SQLAlchemy)
+- [x] Performance benchmark script (`scripts/benchmark.py`)
+
 ## Q2 2026: Community & Launch (v1.0.0)
 
 - [ ] ProductHunt and HackerNews launch
-- [ ] OpenAPI/Swagger documentation
 - [ ] Discord community
 - [ ] Video tutorials and walkthroughs
 - [ ] Docker sandbox isolation for action execution
 
-## Q2-Q3 2026: Production Hardening
+## Q3 2026: Scale
 
-- [ ] Real Stripe/Razorpay payment integration
-- [ ] Redis-backed rate limiting for multi-instance
-- [ ] PostgreSQL migration tooling (Alembic)
-- [ ] OpenTelemetry observability
-- [ ] Performance benchmarks and optimization
+- [ ] Real Stripe/Razorpay payment activation (remove stubs)
 - [ ] Multi-region deployment support
+- [ ] Kubernetes Helm chart
 
 ## How to Contribute
 
