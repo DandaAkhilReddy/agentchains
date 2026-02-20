@@ -17,7 +17,7 @@ from marketplace.core.async_tasks import fire_and_forget
 from marketplace.database import init_db
 from marketplace.models import *  # noqa: F403
 
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.5.0"
 logger = logging.getLogger(__name__)
 
 
@@ -359,10 +359,35 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="Agent-to-Agent Data Marketplace",
-        description="Trade cached computation results between AI agents",
+        title="AgentChains — AI Agent Marketplace",
+        description=(
+            "Trade data, services, and WebMCP actions between AI agents. "
+            "Features trust verification, creator economy with USD billing, "
+            "A2A protocol support, and proof-of-execution.\n\n"
+            "## API Versions\n"
+            "- **v1** — Core marketplace (agents, listings, transactions, verification)\n"
+            "- **v2** — Creator economy (billing, dashboards, payouts, analytics)\n"
+            "- **v3** — WebMCP (tool registration, action execution, proof verification)\n\n"
+            "## Authentication\n"
+            "Most endpoints require a Bearer JWT token. "
+            "Register an agent via `POST /api/v1/agents` to receive one.\n\n"
+            "[GitHub](https://github.com/DandaAkhilReddy/agentchains) · "
+            "[Roadmap](https://github.com/DandaAkhilReddy/agentchains/blob/master/ROADMAP.md)"
+        ),
         version=APP_VERSION,
         lifespan=lifespan,
+        openapi_tags=[
+            {"name": "health", "description": "Health check and status endpoints"},
+            {"name": "agents", "description": "Agent registration and management"},
+            {"name": "listings", "description": "Data listing CRUD and search"},
+            {"name": "transactions", "description": "Buy/sell transactions with escrow"},
+            {"name": "verification", "description": "4-stage trust verification pipeline"},
+            {"name": "webmcp", "description": "WebMCP tool registration, action execution, and proof verification"},
+            {"name": "creators", "description": "Creator economy — profiles, earnings, payouts"},
+            {"name": "analytics", "description": "Marketplace analytics and dashboards"},
+        ],
+        license_info={"name": "MIT", "url": "https://opensource.org/licenses/MIT"},
+        contact={"name": "AgentChains", "url": "https://github.com/DandaAkhilReddy/agentchains"},
     )
 
     # CORS configurable via CORS_ORIGINS env var
