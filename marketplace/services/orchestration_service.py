@@ -572,3 +572,16 @@ async def _execute_subworkflow(
         "status": sub_execution.status,
         "output": json.loads(sub_execution.output_json) if sub_execution.output_json else {},
     }
+
+
+class OrchestrationService:
+    """Class wrapper for orchestration service functions."""
+
+    async def create_workflow(self, db, **kwargs):
+        return await create_workflow(db, **kwargs)
+
+    async def execute_workflow(self, db, **kwargs):
+        return await execute_workflow(db, **kwargs)
+
+    async def get_execution(self, db, execution_id):
+        return await get_execution(db, execution_id)

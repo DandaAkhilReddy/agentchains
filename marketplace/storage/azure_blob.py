@@ -10,6 +10,11 @@ import hashlib
 import logging
 from typing import Optional
 
+try:
+    from azure.storage.blob import BlobServiceClient
+except ImportError:
+    BlobServiceClient = None  # type: ignore[assignment,misc]
+
 logger = logging.getLogger(__name__)
 
 
@@ -120,4 +125,43 @@ class AzureBlobStore:
         """Get the URL for a blob (without SAS token — internal use only)."""
         blob_name = f"sha256/{content_hash[:2]}/{content_hash[2:4]}/{content_hash}"
         blob_client = self._blob_client(blob_name)
+        return blob_client.url
+
+
+class AzureBlobStorage:
+    """Key-value blob storage interface backed by Azure Blob Storage."""
+
+    def __init__(self, connection_string: str = "", container_name: str = "content-store"):
+        self._container_client = None
+        if connection_string:
+            try:
+                from azure.storage.blob import BlobServiceClient
+                client = BlobServiceClient.from_connection_string(connection_string)
+                self._container_client = client.get_container_client(container_name)
+            except ImportError:
+                logger.warning("azure-storage-blob not installed")
+
+    def put(self, key: str, data: bytes) -> None:
+        blob_client = self._container_client.get_blob_client(key)
+        blob_client.upload_blob(data, overwrite=True)
+
+    def get(self, key: str) -> Optional[bytes]:
+        blob_client = self._container_client.get_blob_client(key)
+        download = blob_client.download_blob()
+        return download.readall()
+
+    def exists(self, key: str) -> bool:
+        blob_client = self._container_client.get_blob_client(key)
+        try:
+            blob_client.get_blob_properties()
+            return True
+        except Exception:
+            return False
+
+    def delete(self, key: str) -> None:
+        blob_client = self._container_client.get_blob_client(key)
+        blob_client.delete_blob()
+
+    def get_url(self, key: str) -> str:
+        blob_client = self._container_client.get_blob_client(key)
         return blob_client.url

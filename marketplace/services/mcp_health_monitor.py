@@ -102,3 +102,10 @@ async def _check_server(
         raise Exception(f"Timeout after {latency_ms:.0f}ms")
     except httpx.ConnectError as e:
         raise Exception(f"Connection failed: {e}")
+
+
+class MCPHealthMonitor:
+    """Class wrapper for MCP health monitor functions."""
+
+    async def run_loop(self, db, **kwargs):
+        return await health_check_loop(db, **kwargs)

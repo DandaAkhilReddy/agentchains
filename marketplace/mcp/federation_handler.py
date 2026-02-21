@@ -64,3 +64,13 @@ async def handle_federated_tool_call(
         agent_id,
     )
     return await execute_tool(tool_name, arguments, agent_id, db=db)
+
+
+class FederationHandler:
+    """Class wrapper for federation handler functions."""
+
+    async def get_tools(self, db, **kwargs):
+        return await get_federated_tools(db, **kwargs)
+
+    async def handle_call(self, db, **kwargs):
+        return await handle_federated_tool_call(db, **kwargs)

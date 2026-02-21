@@ -340,3 +340,16 @@ async def retry_dead_letter(db: AsyncSession, entry_id: str) -> dict:
         "re_enqueued": sent,
         "retry_count": entry.retry_count,
     }
+
+
+class WebhookV2Service:
+    """Class wrapper for webhook v2 delivery functions."""
+
+    async def enqueue(self, db, **kwargs):
+        return await enqueue_webhook_delivery(db, **kwargs)
+
+    async def process_queue(self, db, **kwargs):
+        return await process_webhook_queue(db, **kwargs)
+
+    async def retry(self, db, entry_id):
+        return await retry_dead_letter(db, entry_id)

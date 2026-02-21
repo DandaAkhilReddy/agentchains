@@ -264,3 +264,16 @@ async def get_invoices(
     stmt = stmt.order_by(Invoice.created_at.desc())
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+class BillingV2Service:
+    """Class wrapper for billing v2 functions."""
+
+    async def create_plan(self, db, **kwargs):
+        return await create_plan(db, **kwargs)
+
+    async def subscribe(self, db, **kwargs):
+        return await subscribe(db, **kwargs)
+
+    async def record_usage(self, db, **kwargs):
+        return await record_usage(db, **kwargs)

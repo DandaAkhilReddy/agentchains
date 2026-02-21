@@ -138,3 +138,10 @@ async def handle_a2ui_message(
         return _jsonrpc_response(msg_id, {})
 
     return _jsonrpc_error(msg_id, -32601, f"Method not found: {method}")
+
+
+class A2UIMessageHandler:
+    """Class wrapper for A2UI message handler functions."""
+
+    async def handle(self, message, **kwargs):
+        return await handle_a2ui_message(message, **kwargs)

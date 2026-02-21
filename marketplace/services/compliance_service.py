@@ -204,3 +204,13 @@ async def get_data_processing_record(
         ],
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+class ComplianceService:
+    """Class wrapper for compliance functions."""
+
+    async def export_data(self, db, agent_id):
+        return await export_agent_data(db, agent_id)
+
+    async def delete_data(self, db, agent_id):
+        return await delete_agent_data(db, agent_id)

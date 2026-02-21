@@ -258,3 +258,16 @@ async def update_health_score(db: AsyncSession, server_id: str, score: int) -> N
         server.status = "active"
 
     await db.commit()
+
+
+class MCPFederationService:
+    """Class wrapper for MCP federation service functions."""
+
+    async def register_server(self, db, **kwargs):
+        return await register_server(db, **kwargs)
+
+    async def discover_tools(self, db, **kwargs):
+        return await discover_tools(db, **kwargs)
+
+    async def route_tool_call(self, db, **kwargs):
+        return await route_tool_call(db, **kwargs)

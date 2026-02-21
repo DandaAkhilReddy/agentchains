@@ -203,3 +203,16 @@ async def get_invoice_pdf_url(db: AsyncSession, invoice_id: str) -> str | None:
     if not invoice:
         return None
     return invoice.pdf_url if invoice.pdf_url else None
+
+
+class InvoiceService:
+    """Class wrapper for invoice service functions."""
+
+    async def generate(self, db, **kwargs):
+        return await generate_invoice(db, **kwargs)
+
+    async def mark_paid(self, db, invoice_id):
+        return await mark_invoice_paid(db, invoice_id)
+
+    async def void(self, db, invoice_id):
+        return await void_invoice(db, invoice_id)

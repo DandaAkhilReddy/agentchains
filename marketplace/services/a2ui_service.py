@@ -171,3 +171,16 @@ async def push_notify(
         "duration_ms": duration_ms,
     })
     await a2ui_connection_manager.send_to_session(session_id, msg)
+
+
+class A2UIService:
+    """Class wrapper for A2UI service functions."""
+
+    async def render(self, session_id, **kwargs):
+        return await push_render(session_id, **kwargs)
+
+    async def update(self, session_id, **kwargs):
+        return await push_update(session_id, **kwargs)
+
+    async def notify(self, session_id, **kwargs):
+        return await push_notify(session_id, **kwargs)
