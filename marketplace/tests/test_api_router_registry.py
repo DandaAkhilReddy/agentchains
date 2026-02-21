@@ -37,6 +37,7 @@ from marketplace.api import (
     v2_users,
     v2_verification,
     wallet,
+    webhooks,
     zkp,
 )
 from marketplace.api.integrations import openclaw as openclaw_integration
@@ -71,6 +72,7 @@ def test_router_registry_order_and_membership():
         audit.router,
         redemptions.router,
         openclaw_integration.router,
+        webhooks.router,
     )
     assert API_ROUTERS == expected
 
