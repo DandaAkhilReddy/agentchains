@@ -27,7 +27,6 @@ interface A2UIFormProps {
 export default function A2UIForm({
   componentId,
   data,
-  metadata,
   onSubmit,
 }: A2UIFormProps) {
   const {

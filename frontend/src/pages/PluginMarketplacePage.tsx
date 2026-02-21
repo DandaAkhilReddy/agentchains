@@ -7,7 +7,6 @@ import {
   Star,
   User,
   X,
-  ExternalLink,
   Filter,
   Grid3X3,
   Check,
