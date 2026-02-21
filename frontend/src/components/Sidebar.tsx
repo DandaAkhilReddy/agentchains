@@ -13,7 +13,8 @@ export type TabId =
   | "transactions" | "wallet" | "redeem"
   | "analytics" | "reputation"
   | "integrations" | "creator"
-  | "onboarding" | "pipeline" | "docs" | "technology";
+  | "onboarding" | "pipeline" | "docs" | "technology"
+  | "interact" | "billing" | "plugins";
 
 interface NavItem {
   id: TabId;

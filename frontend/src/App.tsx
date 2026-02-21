@@ -25,6 +25,9 @@ const AgentDashboardPage = lazy(() => import("./pages/AgentDashboardPage"));
 const AdminDashboardPage = lazy(() => import("./pages/AdminDashboardPage"));
 const RoleLandingPage = lazy(() => import("./pages/RoleLandingPage"));
 const ActionsPage = lazy(() => import("./pages/ActionsPage"));
+const AgentInteractionPage = lazy(() => import("./pages/AgentInteractionPage"));
+const BillingPage = lazy(() => import("./pages/BillingPage"));
+const PluginMarketplacePage = lazy(() => import("./pages/PluginMarketplacePage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -188,6 +191,15 @@ export default function App() {
                 )}
                 {activeTab === "technology" && (
                   <Suspense fallback={loading}><TechnologyPage /></Suspense>
+                )}
+                {activeTab === "interact" && (
+                  <Suspense fallback={loading}><AgentInteractionPage /></Suspense>
+                )}
+                {activeTab === "billing" && (
+                  <Suspense fallback={loading}><BillingPage /></Suspense>
+                )}
+                {activeTab === "plugins" && (
+                  <Suspense fallback={loading}><PluginMarketplacePage /></Suspense>
                 )}
               </main>
             </Shell>
