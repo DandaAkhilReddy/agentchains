@@ -1,0 +1,15 @@
+{
+  "name": "@agentchains/sdk",
+  "version": "1.0.0",
+  "description": "JavaScript SDK for the AgentChains marketplace API",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node --test src/**/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DandaAkhilReddy/agentchains"
+  },
+  "license": "MIT"
+}
