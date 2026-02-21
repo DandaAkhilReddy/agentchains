@@ -271,3 +271,336 @@ class TestOAuth2Routes:
     def test_models_module_imports(self):
         from marketplace.oauth2 import models
         assert models is not None
+
+
+
+class TestOAuth2PKCEVerification:
+    """Extended PKCE verification tests."""
+
+    def test_s256_verify_correct_verifier(self):
+        from marketplace.oauth2.server import _verify_pkce
+        import base64
+        verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+        digest = hashlib.sha256(verifier.encode("ascii")).digest()
+        challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+        assert _verify_pkce(challenge, "S256", verifier) is True
+
+    def test_s256_verify_wrong_verifier(self):
+        from marketplace.oauth2.server import _verify_pkce
+        import base64
+        verifier = "correct_verifier"
+        digest = hashlib.sha256(verifier.encode("ascii")).digest()
+        challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+        assert _verify_pkce(challenge, "S256", "wrong_verifier") is False
+
+    def test_plain_verify_correct(self):
+        from marketplace.oauth2.server import _verify_pkce
+        assert _verify_pkce("my_verifier", "plain", "my_verifier") is True
+
+    def test_plain_verify_wrong(self):
+        from marketplace.oauth2.server import _verify_pkce
+        assert _verify_pkce("my_verifier", "plain", "other") is False
+
+    def test_unknown_method_returns_false(self):
+        from marketplace.oauth2.server import _verify_pkce
+        assert _verify_pkce("ch", "unknown_method", "v") is False
+
+    def test_s256_empty_verifier(self):
+        from marketplace.oauth2.server import _verify_pkce
+        import base64
+        verifier = ""
+        digest = hashlib.sha256(verifier.encode("ascii")).digest()
+        challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+        assert _verify_pkce(challenge, "S256", "") is True
+
+    def test_plain_empty_strings(self):
+        from marketplace.oauth2.server import _verify_pkce
+        assert _verify_pkce("", "plain", "") is True
+
+
+class TestOAuth2TokenValidation:
+    """Tests for validate_access_token and get_userinfo."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = AsyncMock()
+        db.commit = AsyncMock()
+        return db
+
+    @pytest.mark.asyncio
+    async def test_validate_nonexistent_token(self, mock_db):
+        from marketplace.oauth2.server import validate_access_token
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        assert await validate_access_token(mock_db, "bad_token") is None
+
+    @pytest.mark.asyncio
+    async def test_validate_revoked_token(self, mock_db):
+        from marketplace.oauth2.server import validate_access_token
+        mock_token = MagicMock()
+        mock_token.revoked = True
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_token
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        assert await validate_access_token(mock_db, "revoked_tok") is None
+
+    @pytest.mark.asyncio
+    async def test_validate_expired_token(self, mock_db):
+        from marketplace.oauth2.server import validate_access_token
+        mock_token = MagicMock()
+        mock_token.revoked = False
+        mock_token.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_token
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        assert await validate_access_token(mock_db, "expired_tok") is None
+
+    @pytest.mark.asyncio
+    async def test_validate_valid_token(self, mock_db):
+        from marketplace.oauth2.server import validate_access_token
+        mock_token = MagicMock()
+        mock_token.revoked = False
+        mock_token.expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        mock_token.user_id = "user-1"
+        mock_token.client_id = "client-1"
+        mock_token.scope = "read write"
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_token
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        result = await validate_access_token(mock_db, "valid_tok")
+        assert result is not None
+        assert result["user_id"] == "user-1"
+        assert result["client_id"] == "client-1"
+        assert result["scope"] == "read write"
+
+    @pytest.mark.asyncio
+    async def test_get_userinfo_invalid_token(self, mock_db):
+        from marketplace.oauth2.server import get_userinfo
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        with pytest.raises(ValueError, match="Invalid or expired"):
+            await get_userinfo(mock_db, "bad_tok")
+
+
+class TestOAuth2Revocation:
+    """Tests for token revocation."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = AsyncMock()
+        db.commit = AsyncMock()
+        return db
+
+    @pytest.mark.asyncio
+    async def test_revoke_access_token(self, mock_db):
+        from marketplace.oauth2.server import revoke_token
+        mock_token = MagicMock()
+        mock_token.revoked = False
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_token
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        result = await revoke_token(mock_db, "some_token")
+        assert result is True
+        assert mock_token.revoked is True
+
+    @pytest.mark.asyncio
+    async def test_revoke_nonexistent_token(self, mock_db):
+        from marketplace.oauth2.server import revoke_token
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        result = await revoke_token(mock_db, "nonexistent")
+        assert result is False
+
+
+class TestOAuth2ExchangeEdgeCases:
+    """Edge case tests for token exchange."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = AsyncMock()
+        db.commit = AsyncMock()
+        db.add = MagicMock()
+        return db
+
+    @pytest.mark.asyncio
+    async def test_exchange_missing_code(self, mock_db):
+        from marketplace.oauth2.server import exchange_token
+        with pytest.raises(ValueError, match="required"):
+            await exchange_token(mock_db, "authorization_code", "", "c1", "s1", "http://x")
+
+    @pytest.mark.asyncio
+    async def test_exchange_missing_client_id(self, mock_db):
+        from marketplace.oauth2.server import exchange_token
+        with pytest.raises(ValueError, match="required"):
+            await exchange_token(mock_db, "authorization_code", "code123", "", "s1", "http://x")
+
+    @pytest.mark.asyncio
+    async def test_exchange_invalid_code(self, mock_db):
+        from marketplace.oauth2.server import exchange_token
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        with pytest.raises(ValueError, match="Invalid authorization code"):
+            await exchange_token(mock_db, "authorization_code", "bad", "c1", "s1", "http://x")
+
+    @pytest.mark.asyncio
+    async def test_exchange_used_code(self, mock_db):
+        from marketplace.oauth2.server import exchange_token
+        mock_code = MagicMock()
+        mock_code.used = True
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_code
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        with pytest.raises(ValueError, match="already been used"):
+            await exchange_token(mock_db, "authorization_code", "used", "c1", "s1", "http://x")
+
+    @pytest.mark.asyncio
+    async def test_exchange_expired_code(self, mock_db):
+        from marketplace.oauth2.server import exchange_token
+        mock_code = MagicMock()
+        mock_code.used = False
+        mock_code.expires_at = datetime.now(timezone.utc) - timedelta(minutes=15)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_code
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        with pytest.raises(ValueError, match="expired"):
+            await exchange_token(mock_db, "authorization_code", "exp", "c1", "s1", "http://x")
+
+    @pytest.mark.asyncio
+    async def test_exchange_client_id_mismatch(self, mock_db):
+        from marketplace.oauth2.server import exchange_token
+        mock_code = MagicMock()
+        mock_code.used = False
+        mock_code.expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+        mock_code.client_id = "correct_client"
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_code
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        with pytest.raises(ValueError, match="mismatch"):
+            await exchange_token(mock_db, "authorization_code", "code", "wrong_client", "s1", "http://x")
+
+
+class TestOAuth2RefreshEdgeCases:
+    """Tests for refresh token edge cases."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = AsyncMock()
+        db.commit = AsyncMock()
+        db.add = MagicMock()
+        return db
+
+    @pytest.mark.asyncio
+    async def test_refresh_missing_token(self, mock_db):
+        from marketplace.oauth2.server import exchange_token
+        with pytest.raises(ValueError, match="required"):
+            await exchange_token(mock_db, "refresh_token", "", "c1", "s1", "")
+
+    @pytest.mark.asyncio
+    async def test_refresh_invalid_token(self, mock_db):
+        from marketplace.oauth2.server import exchange_token
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        with pytest.raises(ValueError, match="Invalid refresh token"):
+            await exchange_token(mock_db, "refresh_token", "bad_rt", "c1", "s1", "")
+
+    @pytest.mark.asyncio
+    async def test_refresh_revoked_token(self, mock_db):
+        from marketplace.oauth2.server import exchange_token
+        mock_rt = MagicMock()
+        mock_rt.revoked = True
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_rt
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        with pytest.raises(ValueError, match="revoked"):
+            await exchange_token(mock_db, "refresh_token", "revoked_rt", "c1", "s1", "")
+
+    @pytest.mark.asyncio
+    async def test_refresh_expired_token(self, mock_db):
+        from marketplace.oauth2.server import exchange_token
+        mock_rt = MagicMock()
+        mock_rt.revoked = False
+        mock_rt.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_rt
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        with pytest.raises(ValueError, match="expired"):
+            await exchange_token(mock_db, "refresh_token", "expired_rt", "c1", "s1", "")
+
+
+class TestOAuth2OpenIDConfig:
+    """Tests for OpenID Connect discovery."""
+
+    @pytest.mark.asyncio
+    async def test_openid_config_endpoint(self):
+        from marketplace.oauth2.routes import openid_configuration
+        config = await openid_configuration()
+        assert config["issuer"] == "https://agentchains.io"
+        assert "authorization_endpoint" in config
+        assert "token_endpoint" in config
+
+    @pytest.mark.asyncio
+    async def test_openid_config_supported_grant_types(self):
+        from marketplace.oauth2.routes import openid_configuration
+        config = await openid_configuration()
+        assert "authorization_code" in config["grant_types_supported"]
+        assert "refresh_token" in config["grant_types_supported"]
+
+    @pytest.mark.asyncio
+    async def test_openid_config_scopes(self):
+        from marketplace.oauth2.routes import openid_configuration
+        config = await openid_configuration()
+        assert "read" in config["scopes_supported"]
+        assert "write" in config["scopes_supported"]
+
+    @pytest.mark.asyncio
+    async def test_openid_config_pkce_methods(self):
+        from marketplace.oauth2.routes import openid_configuration
+        config = await openid_configuration()
+        assert "S256" in config["code_challenge_methods_supported"]
+        assert "plain" in config["code_challenge_methods_supported"]
+
+    @pytest.mark.asyncio
+    async def test_openid_config_response_types(self):
+        from marketplace.oauth2.routes import openid_configuration
+        config = await openid_configuration()
+        assert config["response_types_supported"] == ["code"]
+
+
+class TestOAuth2RequestModels:
+    """Tests for Pydantic request/response models."""
+
+    def test_token_request_model(self):
+        from marketplace.oauth2.routes import TokenRequest
+        req = TokenRequest(grant_type="authorization_code", code="abc")
+        assert req.grant_type == "authorization_code"
+        assert req.code == "abc"
+
+    def test_token_request_defaults(self):
+        from marketplace.oauth2.routes import TokenRequest
+        req = TokenRequest(grant_type="refresh_token")
+        assert req.code is None
+        assert req.client_secret is None
+        assert req.redirect_uri is None
+
+    def test_revoke_request_model(self):
+        from marketplace.oauth2.routes import RevokeRequest
+        req = RevokeRequest(token="tok_123")
+        assert req.token == "tok_123"
+        assert req.client_id is None
+
+    def test_client_create_request_model(self):
+        from marketplace.oauth2.routes import ClientCreateRequest
+        req = ClientCreateRequest(name="App", redirect_uris=["http://x"], owner_id="u1")
+        assert req.name == "App"
+        assert req.scopes == "read"
+
+    def test_token_response_model(self):
+        from marketplace.oauth2.routes import TokenResponse
+        resp = TokenResponse(access_token="at", token_type="Bearer", expires_in=3600, scope="read")
+        assert resp.token_type == "Bearer"
+        assert resp.expires_in == 3600
