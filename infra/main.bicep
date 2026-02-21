@@ -70,7 +70,7 @@ var tags = {
 }
 
 // Resource naming (Azure naming conventions)
-var postgresServerName = '${projectName}-pg-${environment}'
+var postgresServerName = '${projectName}-pgdb-${environment}'
 var redisName = '${projectName}-redis-${environment}'
 var storageAccountName = replace('${projectName}st${environment}', '-', '')
 var keyVaultName = '${projectName}-kv-${environment}'
