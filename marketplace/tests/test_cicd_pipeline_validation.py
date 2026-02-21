@@ -191,14 +191,15 @@ class TestDeployWorkflow:
 class TestCICDSecurity:
     """Verify security best practices across CI/CD workflows."""
 
-    def test_deployment_uses_incremental_mode(self, deploy_content):
-        """Infrastructure deployment must use Incremental mode (not
-        Complete) to avoid accidentally deleting existing resources."""
-        assert "--mode Incremental" in deploy_content, (
-            "Deployment must use '--mode Incremental' (not Complete)"
+    def test_deployment_uses_subscription_scope(self, deploy_content):
+        """Infrastructure deployment must use subscription-scoped
+        deployment (az deployment sub create) since main.bicep has
+        targetScope = 'subscription'."""
+        assert "az deployment sub create" in deploy_content, (
+            "Deployment must use 'az deployment sub create' for subscription-scoped Bicep"
         )
         assert "--mode Complete" not in deploy_content, (
-            "Deployment must NOT use '--mode Complete'; use Incremental instead"
+            "Deployment must NOT use '--mode Complete'"
         )
 
     def test_images_tagged_with_sha(self, deploy_content):

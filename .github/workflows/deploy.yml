@@ -24,11 +24,10 @@ jobs:
 
       - name: Deploy Bicep infrastructure
         run: |
-          az deployment group create \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
+          az deployment sub create \
+            --location eastus \
             --template-file infra/main.bicep \
-            --parameters infra/parameters.prod.json \
-            --mode Incremental
+            --parameters infra/parameters.prod.json
 
   build-and-deploy:
     needs: deploy-infrastructure
