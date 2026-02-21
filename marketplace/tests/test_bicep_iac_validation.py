@@ -12,8 +12,6 @@ import json
 import pathlib
 import re
 
-import pytest
-
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 INFRA_DIR = PROJECT_ROOT / "infra"
 MODULES_DIR = INFRA_DIR / "modules"
