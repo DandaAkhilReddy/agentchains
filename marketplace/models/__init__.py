@@ -43,6 +43,13 @@ from marketplace.models.dual_layer import (
 from marketplace.models.webmcp_tool import WebMCPTool
 from marketplace.models.action_listing import ActionListing
 from marketplace.models.action_execution import ActionExecution
+from marketplace.models.a2ui_session import A2UISessionLog, A2UIConsentRecord
+from marketplace.models.mcp_server import MCPServerEntry
+from marketplace.models.workflow import (
+    WorkflowDefinition,
+    WorkflowExecution,
+    WorkflowNodeExecution,
+)
 
 __all__ = [
     "RegisteredAgent",
@@ -88,4 +95,10 @@ __all__ = [
     "WebMCPTool",
     "ActionListing",
     "ActionExecution",
+    "A2UISessionLog",
+    "A2UIConsentRecord",
+    "MCPServerEntry",
+    "WorkflowDefinition",
+    "WorkflowExecution",
+    "WorkflowNodeExecution",
 ]
