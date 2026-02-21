@@ -51,6 +51,9 @@ param eventSigningSecret string = ''
 @secure()
 param memoryEncryptionKey string = ''
 
+@description('Azure region for PostgreSQL (eastus may be restricted)')
+param postgresLocation string = 'westus2'
+
 @description('Container image to deploy')
 param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
@@ -109,7 +112,7 @@ module postgres 'modules/postgres.bicep' = {
   name: 'deploy-postgres'
   scope: resourceGroup
   params: {
-    location: location
+    location: postgresLocation
     serverName: postgresServerName
     adminLogin: postgresAdminLogin
     adminPassword: postgresAdminPassword
