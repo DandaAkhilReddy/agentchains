@@ -2,38 +2,52 @@
 
 Public roadmap for AgentChains development. Updated monthly.
 
-## Current: v0.5.0 (WebMCP Integration)
+## Current: v1.0.0 (Azure-Native Platform)
 
-- 94+ REST API endpoints (v1 + v2 + v3)
-- MCP protocol server (11 tools, 5 resources)
-- 4-stage trust verification pipeline
-- Creator economy with USD-first billing
-- Dual-layer marketplace (builders + buyers)
-- Real-time WebSocket event streaming
-- WebMCP tool registration, discovery, and execution
-- Proof-of-execution with JWT signatures
-- A2A protocol server + client SDK + pipeline composition
-- 2,454+ backend tests, 376+ frontend tests
-- Azure Container Apps deployment
+- 160+ REST API endpoints (v1 + v2 + v3 + v4)
+- 7 protocols: MCP, A2A, WebMCP, A2UI, MCP Federation, gRPC, GraphQL
+- MCP protocol server (15 tools, 5 resources) with federation
+- A2UI protocol for agent-driven UI over WebSocket
+- DAG-based orchestration engine with circuit breakers
+- Real Stripe and Razorpay payment integration
+- Billing V2 with subscriptions, usage meters, and invoicing
+- OAuth2 provider with authorization code + PKCE
+- ML-based reputation scoring
+- Azure-native infrastructure (PostgreSQL, Redis, Blob, Key Vault, AI Search, Service Bus, Application Insights)
+- Plugin system for extensibility
+- Admin console with moderation, audit, and system config
+- 4,000+ backend tests, 500+ frontend tests
+- Azure Container Apps deployment with Bicep IaC
 
-## Completed: WebMCP Integration (v0.5.0)
+## Completed: v1.0.0 (Azure-Native Platform)
 
-- [x] WebMCP tool registration and discovery
-- [x] ActionListing model (executable actions as marketplace items)
-- [x] Proof-of-execution with JWT signatures
-- [x] v3 API namespace for WebMCP endpoints (12 endpoints)
-- [x] 3 new MCP tools for WebMCP operations
-- [x] Frontend Actions tab with dynamic execution forms
-- [x] Domain Lock and Tool Lock security
-- [x] 85 new WebMCP tests
-
-## Completed: A2A Protocol (v0.6.0)
-
-- [x] A2A server implementation (`.well-known/agent.json`)
-- [x] A2A client SDK for agent-to-agent communication
-- [x] Agent composition (chain multiple agents into pipelines)
-- [x] Demo agents (WebMCP shopping, research)
-- [x] 4 blog posts (WebMCP costs, A2A marketplace, trust verification, creator economy)
+- [x] A2UI protocol (11 message types, WebSocket transport, React components)
+- [x] MCP federation registry with health monitoring and load balancing
+- [x] DAG orchestration engine with parallel fan-out, conditions, loops
+- [x] Circuit breaker pattern for fault tolerance
+- [x] Real Stripe SDK integration with webhook handlers
+- [x] Real Razorpay SDK integration with signature verification
+- [x] Billing V2 (plans, subscriptions, usage meters, invoices)
+- [x] GraphQL API with Strawberry
+- [x] OAuth2 provider (authorization code + PKCE)
+- [x] ML reputation model with feature extraction
+- [x] Azure Bicep IaC (11 modules)
+- [x] Azure Key Vault secret resolution
+- [x] Azure AI Search for full-text search
+- [x] Azure Service Bus for reliable webhook delivery
+- [x] Azure Application Insights + OpenTelemetry
+- [x] Azure Blob Storage re-enabled
+- [x] Azure Redis TLS support
+- [x] gRPC inter-agent communication
+- [x] Docker sandbox for WebMCP execution
+- [x] Payment reconciliation service
+- [x] Memory federation for cross-agent sharing
+- [x] Abuse detection and fraud prevention
+- [x] GDPR compliance (data export, deletion, processing records)
+- [x] Plugin system with loader, registry, and examples
+- [x] Admin console (moderation, agent management, audit, system config)
+- [x] CI/CD with parallel stages, SAST (Bandit + Semgrep)
+- [x] Comprehensive documentation (A2UI spec, federation, Azure setup, guides)
 
 ## Completed: Production Hardening (v0.7.0)
 
@@ -46,17 +60,29 @@ Public roadmap for AgentChains development. Updated monthly.
 - [x] OpenTelemetry opt-in tracing (FastAPI, HTTPX, SQLAlchemy)
 - [x] Performance benchmark script (`scripts/benchmark.py`)
 
-## Q2 2026: Community & Launch (v1.0.0)
+## Completed: A2A Protocol (v0.6.0)
 
+- [x] A2A server implementation (`.well-known/agent.json`)
+- [x] A2A client SDK for agent-to-agent communication
+- [x] Agent composition (chain multiple agents into pipelines)
+- [x] Demo agents (WebMCP shopping, research)
+
+## Completed: WebMCP Integration (v0.5.0)
+
+- [x] WebMCP tool registration and discovery
+- [x] ActionListing model (executable actions as marketplace items)
+- [x] Proof-of-execution with JWT signatures
+- [x] v3 API namespace for WebMCP endpoints (12 endpoints)
+- [x] 3 new MCP tools for WebMCP operations
+- [x] Frontend Actions tab with dynamic execution forms
+
+## Q2 2026: Scale & Community
+
+- [ ] Multi-region deployment (West US + East US with Azure Front Door)
+- [ ] Python, JavaScript, and Go client SDKs
 - [ ] ProductHunt and HackerNews launch
 - [ ] Discord community
 - [ ] Video tutorials and walkthroughs
-- [ ] Docker sandbox isolation for action execution
-
-## Q3 2026: Scale
-
-- [ ] Real Stripe/Razorpay payment activation (remove stubs)
-- [ ] Multi-region deployment support
 - [ ] Kubernetes Helm chart
 
 ## How to Contribute
