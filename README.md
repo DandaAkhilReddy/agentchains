@@ -1,6 +1,7 @@
 # AgentChains
 
 [![CI](https://github.com/DandaAkhilReddy/agentchains/actions/workflows/ci.yml/badge.svg)](https://github.com/DandaAkhilReddy/agentchains/actions/workflows/ci.yml)
+[![Deploy](https://github.com/DandaAkhilReddy/agentchains/actions/workflows/deploy.yml/badge.svg)](https://github.com/DandaAkhilReddy/agentchains/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev/)
@@ -24,23 +25,39 @@ You can run the full stack locally, validate core flows, and ship to Azure with 
 ### Architecture
 
 ```
-AI Agents (HTTP/MCP/A2A) ──┐
-Creator UI (React SPA)     ├──> CORS ──> Rate Limiter ──> Security Headers
-WebSocket (/ws/v2/events)  ┘                    │
-                                         Route Handlers (82+ endpoints)
-                                                │
-                                         Service Layer (26 modules)
-                                                │
-                            ┌───────────────────┼──────────────────┐
-                            │                   │                  │
-                    SQLAlchemy Async    HashFS Content Store   3-Tier CDN
-                  (SQLite / PostgreSQL)    (SHA-256)        (Hot/Warm/Cold)
+AI Agents (HTTP/MCP/A2A/A2UI/gRPC/GraphQL) ──┐
+Creator UI (React SPA)                        ├──> CORS ──> Rate Limiter ──> Security Headers
+WebSocket (/ws/v2/events)                     ┘                    │
+                                                           Route Handlers (160+ endpoints)
+                                                                   │
+                                                           Service Layer (30+ modules)
+                                                                   │
+                            ┌──────────────────────────────────────┼──────────────────┐
+                            │                   │                  │                  │
+                    SQLAlchemy Async    HashFS Content Store   3-Tier CDN     Azure Infrastructure
+                  (SQLite / PostgreSQL)    (SHA-256)        (Hot/Warm/Cold)  (Container Apps, PG,
+                                                                             Redis, Blob, Key Vault)
 ```
+
+### Azure Stack
+
+Production infrastructure deployed via Bicep:
+
+- **Container Apps** — app hosting with auto-scaling
+- **PostgreSQL Flexible Server** — primary database
+- **Redis Cache** — session and query caching
+- **Blob Storage** — content store and CDN origin
+- **Key Vault** — secrets and certificate management
+- **AI Search** — agent and listing discovery
+- **Service Bus** — async event processing
+- **Application Insights** — observability and tracing
 
 ### Key Numbers
 
-- **94+** REST API endpoints (v1 + v2 + v3)
-- **11** MCP tools + **5** MCP resources
+- **160+** REST API endpoints (v1 + v2 + v3)
+- **15** MCP tools + **5** MCP resources
+- **7** protocols (MCP, A2A, WebMCP, A2UI, gRPC, GraphQL, OAuth2)
+- **11** Azure Bicep infrastructure modules
 - **2,830+** tests (2,454 backend + 376 frontend)
 - **4-stage** trust verification pipeline
 - **<100ms** express buy with cache hit
@@ -392,39 +409,5 @@ v2 buyer layer:
 - [Roadmap](ROADMAP.md) — What's coming next
 - [Open Issues](https://github.com/DandaAkhilReddy/agentchains/issues) — Report bugs or request features
 
-## Internal Documentation Quality Workflow (20 Agents + 3 Recheck Agents)
 
-This README rewrite used a structured internal QA model.
-
-20 workstreams:
-- A01 Problem clarity
-- A02 Solution clarity
-- A03 Audience framing
-- A04 Value narrative
-- A05 Prerequisites accuracy
-- A06 Setup command quality
-- A07 Local run lifecycle
-- A08 First-success examples
-- A09 Validation matrix
-- A10 Role mapping
-- A11 Auth boundary clarity
-- A12 Vertex integration bridge
-- A13 Realtime model clarity
-- A14 Security guidance
-- A15 Troubleshooting quality
-- A16 Deployment quick path
-- A17 Docs map curation
-- A18 Terminology consistency
-- A19 Readability polish
-- A20 Final convergence
-
-3 independent rechecks:
-- R1 Technical recheck: command validity and run-path correctness
-- R2 Security/auth recheck: token boundaries and secret safety guidance
-- R3 UX/clarity recheck: scanability and first-time builder comprehension
-
-Gate rules:
-- Any contradictory instruction fails.
-- Any non-runnable repo-root command fails.
-- Any ambiguous token guidance fails.
 
