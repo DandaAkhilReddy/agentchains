@@ -5,9 +5,7 @@ PKCE S256-only, HTML sanitization, and Redis TLS settings.
 import hashlib
 import hmac
 import json
-import re
-import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -349,7 +347,7 @@ class TestRedisTLSConfig:
 
     async def test_redis_tls_connect_kwargs(self):
         """Verify that the connect_kwargs include ssl_cert_reqs='required'."""
-        from unittest.mock import patch, AsyncMock, MagicMock
+        from unittest.mock import patch, AsyncMock
 
         mock_redis = AsyncMock()
         mock_redis.ping = AsyncMock()
@@ -375,8 +373,6 @@ class TestConfigSecurityWarnings:
 
     def test_insecure_jwt_secret_logged_critical(self):
         """Default JWT secret should trigger a critical log in non-prod."""
-        import logging
-
         with patch.object(settings, "environment", "development"):
             with patch.object(
                 settings, "jwt_secret_key", "dev-secret-change-in-production"

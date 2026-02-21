@@ -3,12 +3,10 @@ SSRF protection, ZKP error leakage, error detail sanitization, pickle removal,
 and webhook replay protection.
 """
 
-import hashlib
-import hmac
 import json
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -297,7 +295,7 @@ class TestErrorDetailSanitization:
         """Health readiness probe should not leak database error details."""
         with patch(
             "marketplace.api.health.get_db",
-        ) as mock_get_db:
+        ):
             # Make the DB session raise an exception with internal details
             mock_session = AsyncMock()
             mock_session.execute.side_effect = Exception(
@@ -382,7 +380,6 @@ class TestModelSerialization:
 
     def test_no_pickle_import_in_reputation_model(self):
         """The reputation_model module should not import pickle."""
-        import importlib
         import marketplace.ml.reputation_model as mod
 
         source = Path(mod.__file__).read_text()

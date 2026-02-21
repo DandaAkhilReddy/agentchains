@@ -7,9 +7,7 @@ lightgbm when available.  Falls back gracefully when neither is installed.
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 

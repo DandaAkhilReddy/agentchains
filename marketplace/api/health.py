@@ -6,13 +6,13 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from marketplace.database import get_db
-
-logger = logging.getLogger(__name__)
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.listing import DataListing
 from marketplace.models.transaction import Transaction
 from marketplace.schemas.common import CacheStats, HealthResponse
 from marketplace.services.cache_service import agent_cache, content_cache, listing_cache
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 

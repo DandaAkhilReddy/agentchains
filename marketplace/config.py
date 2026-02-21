@@ -1,5 +1,4 @@
 import logging
-import warnings
 
 from pydantic_settings import BaseSettings
 
