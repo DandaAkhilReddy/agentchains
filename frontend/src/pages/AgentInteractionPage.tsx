@@ -215,16 +215,13 @@ export default function AgentInteractionPage() {
   return (
     <div className="flex h-full flex-col gap-4 animate-fade-in">
       {/* Notifications overlay */}
-      {notifications.map((n, i) => (
-        <A2UINotification key={`notif-${i}`} notification={n} />
-      ))}
+      <A2UINotification notifications={notifications} />
 
       {/* Input dialog overlay */}
       {activeInput && (
         <A2UIInputDialog
-          input={activeInput}
-          onSubmit={(value) => respond(activeInput.request_id, value)}
-          onCancel={() => respond(activeInput.request_id, null)}
+          request={activeInput}
+          onRespond={(requestId, value) => respond(requestId, value)}
         />
       )}
 
@@ -232,8 +229,7 @@ export default function AgentInteractionPage() {
       {activeConfirm && (
         <A2UIConfirmDialog
           confirm={activeConfirm}
-          onApprove={() => approve(activeConfirm.request_id, true)}
-          onReject={(reason) => approve(activeConfirm.request_id, false, reason)}
+          onApprove={(requestId, approved, reason) => approve(requestId, approved, reason)}
         />
       )}
 
