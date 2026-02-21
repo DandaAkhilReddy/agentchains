@@ -10,32 +10,6 @@
     },
     "projectName": {
       "value": "agentchains"
-    },
-    "tenantId": {
-      "value": "<YOUR_AZURE_AD_TENANT_ID>"
-    },
-    "postgresAdminLogin": {
-      "value": "agentchainsadmin"
-    },
-    "postgresAdminPassword": {
-      "reference": {
-        "keyVault": {
-          "id": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RG>/providers/Microsoft.KeyVault/vaults/<KV_NAME>"
-        },
-        "secretName": "postgres-admin-password"
-      }
-    },
-    "containerRegistryLoginServer": {
-      "value": ""
-    },
-    "containerRegistryUsername": {
-      "value": ""
-    },
-    "containerRegistryPassword": {
-      "value": ""
-    },
-    "containerImage": {
-      "value": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
     }
   }
 }
