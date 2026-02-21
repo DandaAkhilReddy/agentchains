@@ -40,6 +40,8 @@ from . import (
     v2_sellers,
     v2_users,
     v2_verification,
+    v3_mcp_federation,
+    v3_orchestration,
     v3_webmcp,
     v4_a2ui,
     wallet,
@@ -96,6 +98,8 @@ API_V3_PREFIX = "/api/v3"
 
 API_V3_ROUTERS: tuple[APIRouter, ...] = (
     v3_webmcp.router,
+    v3_orchestration.router,
+    v3_mcp_federation.router,
 )
 
 API_V4_PREFIX = "/api/v4"
