@@ -1,0 +1,7 @@
+FROM mcr.microsoft.com/playwright/python:v1.41.0-jammy
+RUN pip install playwright httpx
+RUN useradd -m -s /bin/bash sandbox
+USER sandbox
+WORKDIR /sandbox
+COPY sandbox_runner.py .
+CMD ["python", "sandbox_runner.py"]
