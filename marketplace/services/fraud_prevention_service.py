@@ -158,3 +158,20 @@ async def get_fraud_report(db: AsyncSession) -> dict[str, Any]:
         "total_burst_agents": sum(b["count"] for b in reg_bursts),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+class FraudPreventionService:
+    """Service wrapper for fraud prevention operations."""
+
+    def __init__(self, db: AsyncSession | None = None):
+        self.db = db
+
+    async def detect_sybil_clusters(self, min_cluster_size: int = 3):
+        if self.db is None:
+            raise ValueError("Database session required")
+        return await detect_sybil_clusters(self.db, min_cluster_size)
+
+    async def get_fraud_report(self):
+        if self.db is None:
+            raise ValueError("Database session required")
+        return await get_fraud_report(self.db)
