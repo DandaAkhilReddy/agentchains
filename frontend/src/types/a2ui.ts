@@ -29,23 +29,23 @@ export type A2UISeverity = "info" | "warning" | "critical";
 export interface A2UIComponent {
   component_id: string;
   component_type: A2UIComponentType;
-  data: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  data: Record<string, any>;
+  metadata?: Record<string, any>;
 }
 
 /** Message to render a new component in the UI */
 export interface A2UIRenderMessage {
   component_id: string;
   component_type: A2UIComponentType;
-  data: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  data: Record<string, any>;
+  metadata?: Record<string, any>;
 }
 
 /** Message to update an existing component */
 export interface A2UIUpdateMessage {
   component_id: string;
   operation: "replace" | "merge" | "append";
-  data: Record<string, unknown>;
+  data: Record<string, any>;
 }
 
 /** Agent requests user input (internal wire format) */
@@ -54,7 +54,7 @@ export interface A2UIRequestInputMessage {
   input_type: A2UIInputType;
   prompt: string;
   options?: string[];
-  validation?: Record<string, unknown>;
+  validation?: Record<string, any>;
 }
 
 /** Agent requests user input (public alias) */
@@ -105,7 +105,7 @@ export type A2UINotification = A2UINotifyMessage;
 export interface A2UISession {
   session_id: string;
   agent_id: string;
-  capabilities: Record<string, unknown>;
+  capabilities: Record<string, any>;
   status: "connecting" | "connected" | "disconnected" | "error";
 }
 
