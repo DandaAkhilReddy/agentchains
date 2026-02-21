@@ -415,6 +415,7 @@ def create_app() -> FastAPI:
         API_PREFIX, API_ROUTERS,
         API_V2_PREFIX, API_V2_ROUTERS,
         API_V3_PREFIX, API_V3_ROUTERS,
+        API_V4_PREFIX, API_V4_ROUTERS,
     )
 
     for router in API_ROUTERS:
@@ -425,6 +426,9 @@ def create_app() -> FastAPI:
 
     for router in API_V3_ROUTERS:
         app.include_router(router, prefix=API_V3_PREFIX)
+
+    for router in API_V4_ROUTERS:
+        app.include_router(router, prefix=API_V4_PREFIX)
 
     # MCP server routes
     if settings.mcp_enabled:
@@ -490,6 +494,52 @@ def create_app() -> FastAPI:
                 await ws.receive_text()
         except WebSocketDisconnect:
             ws_scoped_manager.disconnect(ws)
+
+    # A2UI WebSocket endpoint
+    @app.websocket("/ws/v4/a2ui")
+    async def a2ui_ws(ws: WebSocket, token: str | None = Query(default=None)) -> None:
+        from marketplace.a2ui.connection_manager import a2ui_connection_manager
+        from marketplace.a2ui.message_handler import handle_a2ui_message
+        from marketplace.core.auth import decode_stream_token
+
+        if not token:
+            await ws.close(code=4001, reason="Missing token query parameter")
+            return
+        try:
+            payload = decode_stream_token(token)
+        except Exception:
+            await ws.close(code=4003, reason="Invalid or expired stream token")
+            return
+
+        agent_id = payload.get("sub", "")
+        # Use a temporary session_id until a2ui.init assigns a real one
+        temp_session_id = f"ws-{agent_id}"
+        connected = await a2ui_connection_manager.connect(ws, temp_session_id, agent_id)
+        if not connected:
+            return
+        try:
+            while True:
+                raw = await ws.receive_text()
+                try:
+                    body = json.loads(raw)
+                except json.JSONDecodeError:
+                    await ws.send_text(json.dumps({
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {"code": -32700, "message": "Parse error"},
+                    }))
+                    continue
+                response = await handle_a2ui_message(body, session_id=temp_session_id)
+                # If a2ui.init returned a session_id, re-map the WebSocket
+                result = response.get("result", {})
+                if isinstance(result, dict) and "session_id" in result:
+                    new_sid = result["session_id"]
+                    a2ui_connection_manager.disconnect(ws)
+                    await a2ui_connection_manager.connect(ws, new_sid, agent_id)
+                    temp_session_id = new_sid
+                await ws.send_text(json.dumps(response))
+        except WebSocketDisconnect:
+            a2ui_connection_manager.disconnect(ws)
 
     # CDN stats endpoint
     @app.get(f"{API_PREFIX}/health/cdn")
