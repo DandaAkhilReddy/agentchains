@@ -146,10 +146,21 @@ def validate_security_posture(cfg: Settings) -> None:
                 "FATAL: JWT_SECRET_KEY is set to an insecure default. "
                 "Set a strong random secret via the JWT_SECRET_KEY environment variable before deploying to production."
             )
-        warnings.warn(
-            "JWT_SECRET_KEY is set to the default insecure value. "
-            "Set a strong random secret via the JWT_SECRET_KEY environment variable for production.",
-            stacklevel=1,
+        _logger.critical(
+            "SECURITY: JWT_SECRET_KEY is set to the default insecure value. "
+            "Set a strong random secret via the JWT_SECRET_KEY environment variable before deploying to production."
+        )
+
+    if cfg.event_signing_secret in _INSECURE_SECRETS and not is_prod:
+        _logger.critical(
+            "SECURITY: EVENT_SIGNING_SECRET is set to the default insecure value. "
+            "Set a strong random secret via the EVENT_SIGNING_SECRET environment variable before deploying to production."
+        )
+
+    if cfg.memory_encryption_key in _INSECURE_SECRETS and not is_prod:
+        _logger.critical(
+            "SECURITY: MEMORY_ENCRYPTION_KEY is set to the default insecure value. "
+            "Set a strong random secret via the MEMORY_ENCRYPTION_KEY environment variable before deploying to production."
         )
 
     if cfg.cors_origins == "*":
@@ -158,8 +169,8 @@ def validate_security_posture(cfg: Settings) -> None:
                 "FATAL: CORS_ORIGINS cannot be '*' in production. "
                 "Set explicit trusted origins via the CORS_ORIGINS environment variable."
             )
-        _logger.warning(
-            "CORS_ORIGINS is set to '*' (allow all). "
+        _logger.critical(
+            "SECURITY: CORS_ORIGINS is set to '*' (allow all). "
             "Configure specific origins for production via the CORS_ORIGINS environment variable."
         )
 
