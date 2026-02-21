@@ -40,6 +40,9 @@ param logAnalyticsSharedKey string = ''
 @description('Environment variables for the container')
 param envVars array = []
 
+@description('CORS allowed origins')
+param corsOrigins array = ['*']
+
 // Scaling configuration based on environment
 var minReplicas = environment == 'prod' ? 2 : 0
 var maxReplicas = environment == 'prod' ? 10 : 2
@@ -94,11 +97,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           }
         ]
         corsPolicy: {
-          allowedOrigins: environment == 'prod' ? [
-            'https://agentchains.com'
-          ] : [
-            '*'
-          ]
+          allowedOrigins: corsOrigins
           allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
           allowedHeaders: ['*']
           maxAge: 3600
