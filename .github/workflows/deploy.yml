@@ -27,7 +27,15 @@ jobs:
           az deployment sub create \
             --location eastus \
             --template-file infra/main.bicep \
-            --parameters infra/parameters.prod.json
+            --parameters infra/parameters.prod.json \
+            --parameters \
+              tenantId='${{ secrets.AZURE_TENANT_ID }}' \
+              postgresAdminLogin='${{ secrets.POSTGRES_ADMIN_LOGIN }}' \
+              postgresAdminPassword='${{ secrets.POSTGRES_ADMIN_PASSWORD }}' \
+              containerRegistryLoginServer='${{ secrets.ACR_LOGIN_SERVER }}' \
+              containerRegistryUsername='${{ secrets.ACR_USERNAME }}' \
+              containerRegistryPassword='${{ secrets.ACR_PASSWORD }}' \
+              containerImage='${{ env.ACR_IMAGE }}:${{ github.sha }}'
 
   build-and-deploy:
     needs: deploy-infrastructure
