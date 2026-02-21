@@ -46,7 +46,7 @@ output endpoint string = 'https://${searchService.name}.search.windows.net'
 output adminKey string = searchService.listAdminKeys().primaryKey
 
 @description('The Azure AI Search query key')
-output queryKey string = searchService.listQueryKeys()[0].key
+output queryKey string = searchService.listQueryKeys().value[0].key
 
 @description('The Azure AI Search resource ID')
 output resourceId string = searchService.id
