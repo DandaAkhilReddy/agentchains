@@ -1,14 +1,17 @@
-"""Memory federation service — cross-agent memory sharing with ACL.
+"""Cross-agent memory federation service.
 
-Allows agents to share memory namespaces with other agents under
-controlled access policies and rate limiting.
+Enables agents to share memory namespaces with other agents under
+controlled access policies. Supports ACL-based permissions, read
+limits, and expiration.
 """
 
-import json
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
-from sqlalchemy import select, and_
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.models.memory_share import MemoryAccessLog, MemorySharePolicy
@@ -21,26 +24,31 @@ async def create_share_policy(
     owner_agent_id: str,
     memory_namespace: str,
     *,
+    target_agent_id: str | None = None,
     access_level: str = "read",
-    allowed_agent_ids: list[str] | None = None,
-    max_reads_per_hour: int = 100,
+    allow_derivative: bool = False,
+    max_reads_per_day: int | None = None,
     expires_at: datetime | None = None,
 ) -> MemorySharePolicy:
-    """Create a memory sharing policy for a namespace."""
+    """Create a memory sharing policy."""
+    import uuid
+
     policy = MemorySharePolicy(
+        id=str(uuid.uuid4()),
         owner_agent_id=owner_agent_id,
+        target_agent_id=target_agent_id,
         memory_namespace=memory_namespace,
         access_level=access_level,
-        allowed_agent_ids=json.dumps(allowed_agent_ids or ["*"]),
-        max_reads_per_hour=max_reads_per_hour,
+        allow_derivative=allow_derivative,
+        max_reads_per_day=max_reads_per_day,
         expires_at=expires_at,
     )
     db.add(policy)
     await db.commit()
     await db.refresh(policy)
     logger.info(
-        "Memory share policy created: owner=%s namespace=%s level=%s",
-        owner_agent_id, memory_namespace, access_level,
+        "Memory share policy created: %s -> %s (ns=%s, level=%s)",
+        owner_agent_id, target_agent_id or "public", memory_namespace, access_level,
     )
     return policy
 
@@ -53,131 +61,139 @@ async def revoke_share_policy(db: AsyncSession, policy_id: str) -> bool:
     policy = result.scalar_one_or_none()
     if not policy:
         return False
+
     policy.status = "revoked"
     await db.commit()
     return True
 
 
-async def list_shared_namespaces(
-    db: AsyncSession, requester_agent_id: str
-) -> list[dict]:
-    """List all memory namespaces shared with the requester."""
+async def list_shared_with_me(
+    db: AsyncSession,
+    agent_id: str,
+) -> list[MemorySharePolicy]:
+    """List all memory namespaces shared with a specific agent."""
     result = await db.execute(
         select(MemorySharePolicy).where(
-            MemorySharePolicy.status == "active"
+            and_(
+                MemorySharePolicy.status == "active",
+                (
+                    (MemorySharePolicy.target_agent_id == agent_id)
+                    | (MemorySharePolicy.target_agent_id.is_(None))
+                ),
+            )
         )
     )
-    policies = result.scalars().all()
+    return list(result.scalars().all())
 
-    accessible = []
-    now = datetime.now(timezone.utc)
-    for p in policies:
-        if p.expires_at and p.expires_at < now:
-            continue
-        allowed = json.loads(p.allowed_agent_ids or "[]")
-        if "*" in allowed or requester_agent_id in allowed:
-            accessible.append({
-                "policy_id": p.id,
-                "owner_agent_id": p.owner_agent_id,
-                "memory_namespace": p.memory_namespace,
-                "access_level": p.access_level,
-                "max_reads_per_hour": p.max_reads_per_hour,
-            })
-    return accessible
+
+async def list_my_shares(
+    db: AsyncSession,
+    owner_agent_id: str,
+) -> list[MemorySharePolicy]:
+    """List all sharing policies created by an agent."""
+    result = await db.execute(
+        select(MemorySharePolicy).where(
+            MemorySharePolicy.owner_agent_id == owner_agent_id
+        )
+    )
+    return list(result.scalars().all())
 
 
 async def check_access(
     db: AsyncSession,
-    requester_agent_id: str,
+    accessor_agent_id: str,
     owner_agent_id: str,
     memory_namespace: str,
-    operation: str = "read",
-) -> tuple[bool, str]:
-    """Check if requester has access to a memory namespace.
+    action: str = "read",
+) -> MemorySharePolicy | None:
+    """Check if an agent has access to a memory namespace.
 
-    Returns (allowed, reason).
+    Returns the applicable policy if access is granted, None otherwise.
     """
+    now = datetime.now(timezone.utc)
+
     result = await db.execute(
         select(MemorySharePolicy).where(
             and_(
                 MemorySharePolicy.owner_agent_id == owner_agent_id,
                 MemorySharePolicy.memory_namespace == memory_namespace,
                 MemorySharePolicy.status == "active",
+                (
+                    (MemorySharePolicy.target_agent_id == accessor_agent_id)
+                    | (MemorySharePolicy.target_agent_id.is_(None))
+                ),
             )
         )
     )
-    policy = result.scalar_one_or_none()
+    policies = result.scalars().all()
 
-    if not policy:
-        return False, "No sharing policy found"
+    for policy in policies:
+        # Check expiration
+        if policy.expires_at and policy.expires_at < now:
+            policy.status = "expired"
+            await db.commit()
+            continue
 
-    now = datetime.now(timezone.utc)
-    if policy.expires_at and policy.expires_at < now:
-        return False, "Policy expired"
-
-    allowed = json.loads(policy.allowed_agent_ids or "[]")
-    if "*" not in allowed and requester_agent_id not in allowed:
-        return False, "Agent not in allowed list"
-
-    if operation == "write" and policy.access_level == "read":
-        return False, "Write access not granted"
-
-    # Check rate limit
-    if policy.max_reads_per_hour > 0:
-        from datetime import timedelta
-
-        one_hour_ago = now - timedelta(hours=1)
-        count_result = await db.execute(
-            select(MemoryAccessLog).where(
-                and_(
-                    MemoryAccessLog.requester_agent_id == requester_agent_id,
-                    MemoryAccessLog.policy_id == policy.id,
-                    MemoryAccessLog.accessed_at > one_hour_ago,
-                    MemoryAccessLog.success == True,  # noqa: E712
+        # Check access level
+        if action == "read" and policy.access_level in ("read", "write", "admin"):
+            # Check daily read limit
+            if policy.max_reads_per_day is not None:
+                today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                count_result = await db.execute(
+                    select(func.count(MemoryAccessLog.id)).where(
+                        and_(
+                            MemoryAccessLog.policy_id == policy.id,
+                            MemoryAccessLog.accessor_agent_id == accessor_agent_id,
+                            MemoryAccessLog.accessed_at >= today_start,
+                        )
+                    )
                 )
-            )
-        )
-        recent_count = len(count_result.scalars().all())
-        if recent_count >= policy.max_reads_per_hour:
-            return False, "Rate limit exceeded"
+                today_reads = count_result.scalar() or 0
+                if today_reads >= policy.max_reads_per_day:
+                    continue
+            return policy
 
-    return True, ""
+        if action == "write" and policy.access_level in ("write", "admin"):
+            return policy
+
+        if action == "delete" and policy.access_level == "admin":
+            return policy
+
+    return None
 
 
 async def log_access(
     db: AsyncSession,
     policy_id: str,
-    requester_agent_id: str,
-    owner_agent_id: str,
+    accessor_agent_id: str,
     memory_namespace: str,
-    operation: str,
-    success: bool,
-    denial_reason: str = "",
+    action: str,
+    resource_key: str | None = None,
 ) -> None:
     """Log a memory access event for auditing."""
+    import uuid
+
     log_entry = MemoryAccessLog(
+        id=str(uuid.uuid4()),
         policy_id=policy_id,
-        requester_agent_id=requester_agent_id,
-        owner_agent_id=owner_agent_id,
+        accessor_agent_id=accessor_agent_id,
         memory_namespace=memory_namespace,
-        operation=operation,
-        success=success,
-        denial_reason=denial_reason,
+        action=action,
+        resource_key=resource_key,
     )
     db.add(log_entry)
     await db.commit()
 
 
-async def get_access_logs(
+async def get_access_audit(
     db: AsyncSession,
-    owner_agent_id: str,
-    limit: int = 50,
+    owner_agent_id: str | None = None,
+    accessor_agent_id: str | None = None,
+    limit: int = 100,
 ) -> list[MemoryAccessLog]:
-    """Get recent memory access logs for an agent's shared namespaces."""
-    result = await db.execute(
-        select(MemoryAccessLog)
-        .where(MemoryAccessLog.owner_agent_id == owner_agent_id)
-        .order_by(MemoryAccessLog.accessed_at.desc())
-        .limit(limit)
-    )
+    """Get memory access audit log entries."""
+    query = select(MemoryAccessLog).order_by(MemoryAccessLog.accessed_at.desc()).limit(limit)
+    if accessor_agent_id:
+        query = query.where(MemoryAccessLog.accessor_agent_id == accessor_agent_id)
+    result = await db.execute(query)
     return list(result.scalars().all())
