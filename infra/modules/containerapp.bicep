@@ -44,10 +44,11 @@ param envVars array = []
 param corsOrigins array = ['*']
 
 // Scaling configuration based on environment
-var minReplicas = environment == 'prod' ? 2 : 0
-var maxReplicas = environment == 'prod' ? 10 : 2
-var cpuCores = environment == 'prod' ? '1.0' : '0.25'
-var memorySize = environment == 'prod' ? '2Gi' : '0.5Gi'
+// Scaled down — no users yet, upgrade later
+var minReplicas = 0
+var maxReplicas = 2
+var cpuCores = '0.25'
+var memorySize = '0.5Gi'
 
 // Container Apps Environment
 resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
@@ -55,7 +56,7 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   location: location
   tags: tags
   properties: {
-    zoneRedundant: environment == 'prod'
+    zoneRedundant: false
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: !empty(logAnalyticsWorkspaceId) ? {
