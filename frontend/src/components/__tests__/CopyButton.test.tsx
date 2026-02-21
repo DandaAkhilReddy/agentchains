@@ -61,16 +61,16 @@ describe("CopyButton", () => {
 
   it("handles clipboard API failure gracefully", async () => {
     writeTextMock.mockRejectedValueOnce(new Error("Clipboard failed"));
-    // Suppress the unhandled rejection from the component's async handler
-    const handler = (e: PromiseRejectionEvent) => e.preventDefault();
-    window.addEventListener("unhandledrejection", handler);
+
     render(<CopyButton value="fail-text" />);
-    fireEvent.click(screen.getByTitle("Copy to clipboard"));
-    await waitFor(() => {
-      expect(writeTextMock).toHaveBeenCalledWith("fail-text");
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("Copy to clipboard"));
     });
+
+    expect(writeTextMock).toHaveBeenCalledWith("fail-text");
+    // Button should still be present and not show the success state
     expect(screen.getByTitle("Copy to clipboard")).toBeInTheDocument();
-    window.removeEventListener("unhandledrejection", handler);
   });
 
   it("accepts custom text to copy via value prop", async () => {
