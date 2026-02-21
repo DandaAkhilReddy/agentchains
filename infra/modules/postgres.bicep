@@ -24,12 +24,12 @@ param environment string
 @description('Resource tags')
 param tags object = {}
 
-// SKU configuration based on environment
-var skuName = environment == 'prod' ? 'Standard_D2ds_v4' : 'Standard_B1ms'
-var skuTier = environment == 'prod' ? 'GeneralPurpose' : 'Burstable'
-var storageSizeGB = environment == 'prod' ? 128 : 32
-var backupRetentionDays = environment == 'prod' ? 35 : 7
-var highAvailabilityMode = environment == 'prod' ? 'ZoneRedundant' : 'Disabled'
+// SKU configuration — Burstable tier for now (no users yet, upgrade later)
+var skuName = 'Standard_B1ms'
+var skuTier = 'Burstable'
+var storageSizeGB = 32
+var backupRetentionDays = environment == 'prod' ? 14 : 7
+var highAvailabilityMode = 'Disabled'
 
 resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-preview' = {
   name: serverName
@@ -49,7 +49,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-pr
     }
     backup: {
       backupRetentionDays: backupRetentionDays
-      geoRedundantBackup: environment == 'prod' ? 'Enabled' : 'Disabled'
+      geoRedundantBackup: 'Disabled'
     }
     highAvailability: {
       mode: highAvailabilityMode
