@@ -10,13 +10,18 @@ RUN npm run build
 FROM python:3.11-slim
 
 LABEL maintainer="AgentChains Team"
-LABEL description="Agent-to-Agent Data Marketplace"
+LABEL description="Agent-to-Agent Data Marketplace — v1.0"
 
 WORKDIR /app
 
 # Create non-root user
 RUN addgroup --system appgroup && \
     adduser --system --ingroup appgroup appuser
+
+# Install system dependencies for grpcio and azure SDKs
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libffi-dev && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
