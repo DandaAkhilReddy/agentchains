@@ -10,6 +10,30 @@
     },
     "projectName": {
       "value": "agentchains"
+    },
+    "postgresAdminPassword": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/{subscription-id}/resourceGroups/rg-agentchains-prod/providers/Microsoft.KeyVault/vaults/kv-agentchains-prod"
+        },
+        "secretName": "postgres-admin-password"
+      }
+    },
+    "containerRegistryUsername": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/{subscription-id}/resourceGroups/rg-agentchains-prod/providers/Microsoft.KeyVault/vaults/kv-agentchains-prod"
+        },
+        "secretName": "acr-admin-username"
+      }
+    },
+    "containerRegistryPassword": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/{subscription-id}/resourceGroups/rg-agentchains-prod/providers/Microsoft.KeyVault/vaults/kv-agentchains-prod"
+        },
+        "secretName": "acr-admin-password"
+      }
     }
   }
 }

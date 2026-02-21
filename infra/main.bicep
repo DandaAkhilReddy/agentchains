@@ -105,19 +105,18 @@ module insights 'modules/insights.bicep' = {
 }
 
 // --- Data Layer ---
-// TODO: Re-enable once PostgreSQL Flexible Server quota is approved
-// module postgres 'modules/postgres.bicep' = {
-//   name: 'deploy-postgres'
-//   scope: resourceGroup
-//   params: {
-//     location: location
-//     serverName: postgresServerName
-//     adminLogin: postgresAdminLogin
-//     adminPassword: postgresAdminPassword
-//     environment: environment
-//     tags: tags
-//   }
-// }
+module postgres 'modules/postgres.bicep' = {
+  name: 'deploy-postgres'
+  scope: resourceGroup
+  params: {
+    location: location
+    serverName: postgresServerName
+    adminLogin: postgresAdminLogin
+    adminPassword: postgresAdminPassword
+    environment: environment
+    tags: tags
+  }
+}
 
 module redis 'modules/redis.bicep' = {
   name: 'deploy-redis'
@@ -201,10 +200,20 @@ module acr 'modules/acr.bicep' = {
   }
 }
 
-// --- Compute (dependencies inferred from module output references) ---
+// --- Compute (explicit dependsOn to ensure all infrastructure is ready) ---
 module containerapp 'modules/containerapp.bicep' = {
   name: 'deploy-containerapp'
   scope: resourceGroup
+  dependsOn: [
+    insights
+    postgres
+    redis
+    keyvault
+    search
+    openai
+    servicebus
+    storage
+  ]
   params: {
     location: location
     name: containerAppName

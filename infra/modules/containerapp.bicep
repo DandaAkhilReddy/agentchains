@@ -44,9 +44,8 @@ param envVars array = []
 param corsOrigins array = ['*']
 
 // Scaling configuration based on environment
-// Scaled down — no users yet, upgrade later
-var minReplicas = 0
-var maxReplicas = 2
+var minReplicas = environment == 'prod' ? 2 : 0
+var maxReplicas = environment == 'prod' ? 10 : 2
 var cpuCores = '0.25'
 var memorySize = '0.5Gi'
 
