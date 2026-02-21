@@ -1,7 +1,7 @@
 """ZKP endpoints: pre-purchase verification without revealing content."""
 
 import json
-import traceback
+import logging
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.database import get_db
 from marketplace.services import zkp_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/zkp", tags=["zero-knowledge-proofs"])
 
@@ -79,11 +81,11 @@ async def bloom_check(
     """
     try:
         return await zkp_service.bloom_check_word(db, listing_id, word)
-    except Exception as e:
-        traceback.print_exc()
+    except Exception:
+        logger.exception("Bloom check failed for listing=%s word=%s", listing_id, word)
         return {
             "listing_id": listing_id,
             "word": word,
-            "error": f"{type(e).__name__}: {e}",
+            "error": "Internal server error",
             "probably_present": False,
         }
