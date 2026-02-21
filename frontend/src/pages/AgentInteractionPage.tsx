@@ -12,7 +12,10 @@ import {
   Power,
   Loader2,
   History,
+  Layers,
+  Info,
 } from "lucide-react";
+import PageHeader from "../components/PageHeader";
 import { useA2UI } from "../hooks/useA2UI";
 import A2UIContainer from "../components/a2ui/A2UIContainer";
 import A2UINotification from "../components/a2ui/A2UINotification";
@@ -22,19 +25,13 @@ import A2UIConfirmDialog from "../components/a2ui/A2UIConfirmDialog";
 /**
  * Full A2UI Agent Interaction Page.
  *
- * URL: /agents/:agentId/interact
- *
- * Layout:
- *   - Left panel: agent info + capabilities
- *   - Center: A2UIContainer rendering agent components
- *   - Right panel: session history, connection status
- *   - Chat input at bottom
+ * Renders the A2UIContainer connected via the useA2UI hook, showing:
+ * - Session info panel (session ID, status, component count)
+ * - Left sidebar with agent info and capabilities list
+ * - Center A2UI component renderer with progress overlays
+ * - Right sidebar with session history
+ * - Chat input bar and input/confirm dialog overlays
  */
-
-interface AgentInteractionPageProps {
-  agentId: string;
-  token?: string;
-}
 
 interface ChatMessage {
   id: string;
@@ -43,10 +40,13 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-export default function AgentInteractionPage({
-  agentId,
-  token = "",
-}: AgentInteractionPageProps) {
+export default function AgentInteractionPage() {
+  const [agentId, setAgentId] = useState("");
+  const [token, setToken] = useState("");
+  const [started, setStarted] = useState(false);
+
+  const a2ui = useA2UI(agentId || "__placeholder__", token || "__placeholder__");
+
   const {
     session,
     components,
@@ -58,7 +58,7 @@ export default function AgentInteractionPage({
     disconnect,
     respond,
     approve,
-  } = useA2UI(agentId, token);
+  } = a2ui;
 
   const [chatInput, setChatInput] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -97,6 +97,8 @@ export default function AgentInteractionPage({
   }, []);
 
   const handleConnect = useCallback(async () => {
+    if (!agentId.trim() || !token.trim()) return;
+    setStarted(true);
     setIsConnecting(true);
     try {
       await connect();
@@ -105,17 +107,17 @@ export default function AgentInteractionPage({
     } finally {
       setIsConnecting(false);
     }
-  }, [connect, addSystemMessage]);
+  }, [connect, addSystemMessage, agentId, token]);
 
   const handleDisconnect = useCallback(() => {
     disconnect();
+    setStarted(false);
   }, [disconnect]);
 
   const handleSendMessage = useCallback(() => {
     const trimmed = chatInput.trim();
     if (!trimmed || !isConnected) return;
 
-    // Add user message to history
     setChatHistory((prev) => [
       ...prev,
       {
@@ -126,7 +128,6 @@ export default function AgentInteractionPage({
       },
     ]);
 
-    // If there is an active input request, respond to it
     if (activeInput) {
       respond(activeInput.request_id, trimmed);
     }
@@ -149,13 +150,70 @@ export default function AgentInteractionPage({
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
-  // Derive capabilities from session
   const capabilities = session?.capabilities
     ? Object.keys(session.capabilities)
     : [];
 
+  // ── Connection form (not yet started) ──
+  if (!started) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <PageHeader
+          title="Agent Interaction"
+          subtitle="Real-time Agent-to-UI communication via A2UI protocol"
+          icon={Bot}
+        />
+
+        <div className="rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#141928] p-6">
+          <div className="mx-auto max-w-md space-y-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgba(96,165,250,0.1)]">
+                <Bot className="h-5 w-5 text-[#60a5fa]" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-[#e2e8f0]">Start A2UI Session</h3>
+                <p className="text-xs text-[#64748b]">Enter the agent ID and auth token to connect</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-[#94a3b8]">Agent ID</label>
+              <input
+                type="text"
+                value={agentId}
+                onChange={(e) => setAgentId(e.target.value)}
+                placeholder="e.g. agent-abc-123"
+                className="w-full rounded-lg border border-[rgba(255,255,255,0.1)] bg-[#0d1220] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#475569] outline-none transition-colors focus:border-[#60a5fa]"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-[#94a3b8]">Auth Token</label>
+              <input
+                type="password"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="Bearer token"
+                className="w-full rounded-lg border border-[rgba(255,255,255,0.1)] bg-[#0d1220] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#475569] outline-none transition-colors focus:border-[#60a5fa]"
+              />
+            </div>
+
+            <button
+              onClick={handleConnect}
+              disabled={!agentId.trim() || !token.trim()}
+              className="w-full rounded-lg bg-[#60a5fa] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#3b82f6] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Connect to Agent
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main interaction layout ──
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex h-full flex-col gap-4 animate-fade-in">
       {/* Notifications overlay */}
       {notifications.map((n, i) => (
         <A2UINotification key={`notif-${i}`} notification={n} />
@@ -164,18 +222,18 @@ export default function AgentInteractionPage({
       {/* Input dialog overlay */}
       {activeInput && (
         <A2UIInputDialog
-          request={activeInput}
+          input={activeInput}
           onSubmit={(value) => respond(activeInput.request_id, value)}
+          onCancel={() => respond(activeInput.request_id, null)}
         />
       )}
 
       {/* Confirm dialog overlay */}
       {activeConfirm && (
         <A2UIConfirmDialog
-          request={activeConfirm}
-          onApprove={(approved, reason) =>
-            approve(activeConfirm.request_id, approved, reason)
-          }
+          confirm={activeConfirm}
+          onApprove={() => approve(activeConfirm.request_id, true)}
+          onReject={(reason) => approve(activeConfirm.request_id, false, reason)}
         />
       )}
 
@@ -195,7 +253,6 @@ export default function AgentInteractionPage({
           </div>
         </div>
 
-        {/* Connection toggle */}
         <button
           onClick={isConnected ? handleDisconnect : handleConnect}
           disabled={isConnecting}
@@ -220,11 +277,65 @@ export default function AgentInteractionPage({
         </button>
       </div>
 
+      {/* Session info bar */}
+      {session && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[#141928] p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Info className="h-3.5 w-3.5 text-[#60a5fa]" />
+              <p className="text-[10px] font-medium uppercase tracking-wider text-[#64748b]">Session</p>
+            </div>
+            <p className="text-xs font-mono text-[#e2e8f0] truncate">
+              {session.session_id?.slice(0, 16) ?? "N/A"}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[#141928] p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Layers className="h-3.5 w-3.5 text-[#a78bfa]" />
+              <p className="text-[10px] font-medium uppercase tracking-wider text-[#64748b]">Components</p>
+            </div>
+            <p className="text-lg font-bold text-[#e2e8f0]">{components.length}</p>
+          </div>
+
+          <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[#141928] p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Loader2 className="h-3.5 w-3.5 text-[#fbbf24]" />
+              <p className="text-[10px] font-medium uppercase tracking-wider text-[#64748b]">Active Tasks</p>
+            </div>
+            <p className="text-lg font-bold text-[#e2e8f0]">{progress.size}</p>
+          </div>
+
+          <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[#141928] p-4">
+            <div className="flex items-center gap-2 mb-1">
+              {isConnected ? (
+                <Wifi className="h-3.5 w-3.5 text-[#34d399]" />
+              ) : (
+                <WifiOff className="h-3.5 w-3.5 text-[#64748b]" />
+              )}
+              <p className="text-[10px] font-medium uppercase tracking-wider text-[#64748b]">Status</p>
+            </div>
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
+              style={{
+                backgroundColor: isConnected ? "rgba(52,211,153,0.15)" : "rgba(100,116,139,0.15)",
+                color: isConnected ? "#34d399" : "#64748b",
+              }}
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: isConnected ? "#34d399" : "#64748b" }}
+              />
+              {session.status}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Three-panel layout */}
-      <div className="grid flex-1 grid-cols-[280px_1fr_280px] gap-4 overflow-hidden">
-        {/* ── Left Panel: Agent Info + Capabilities ── */}
-        <div className="flex flex-col gap-4 overflow-y-auto">
-          {/* Agent info card */}
+      <div className="grid flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[280px_1fr_280px]">
+        {/* Left Panel: Agent Info + Capabilities */}
+        <div className="hidden flex-col gap-4 overflow-y-auto lg:flex">
           <div className="rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#141928] p-5">
             <div className="flex items-center gap-3 mb-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#60a5fa] to-[#a78bfa] text-lg font-bold text-white">
@@ -238,66 +349,24 @@ export default function AgentInteractionPage({
                   {isConnected ? (
                     <>
                       <Wifi className="h-3 w-3 text-[#34d399]" />
-                      <span className="text-[10px] text-[#34d399]">
-                        Online
-                      </span>
+                      <span className="text-[10px] text-[#34d399]">Online</span>
                     </>
                   ) : (
                     <>
                       <WifiOff className="h-3 w-3 text-[#64748b]" />
-                      <span className="text-[10px] text-[#64748b]">
-                        Offline
-                      </span>
+                      <span className="text-[10px] text-[#64748b]">Offline</span>
                     </>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Session info */}
             {session && (
               <div className="space-y-2 border-t border-[rgba(255,255,255,0.06)] pt-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase tracking-wider text-[#64748b]">
-                    Session
-                  </span>
+                  <span className="text-[10px] uppercase tracking-wider text-[#64748b]">Session</span>
                   <span className="text-[10px] font-mono text-[#94a3b8]">
-                    {session.session_id.slice(0, 12)}...
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase tracking-wider text-[#64748b]">
-                    Status
-                  </span>
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase"
-                    style={{
-                      backgroundColor:
-                        session.status === "connected"
-                          ? "rgba(52,211,153,0.15)"
-                          : session.status === "error"
-                            ? "rgba(248,113,113,0.15)"
-                            : "rgba(100,116,139,0.15)",
-                      color:
-                        session.status === "connected"
-                          ? "#34d399"
-                          : session.status === "error"
-                            ? "#f87171"
-                            : "#64748b",
-                    }}
-                  >
-                    <span
-                      className="h-1.5 w-1.5 rounded-full"
-                      style={{
-                        backgroundColor:
-                          session.status === "connected"
-                            ? "#34d399"
-                            : session.status === "error"
-                              ? "#f87171"
-                              : "#64748b",
-                      }}
-                    />
-                    {session.status}
+                    {session.session_id?.slice(0, 12)}...
                   </span>
                 </div>
               </div>
@@ -314,9 +383,7 @@ export default function AgentInteractionPage({
             </div>
             {capabilities.length === 0 ? (
               <p className="text-xs text-[#475569] italic">
-                {isConnected
-                  ? "No capabilities reported"
-                  : "Connect to view capabilities"}
+                {isConnected ? "No capabilities reported" : "Connect to view capabilities"}
               </p>
             ) : (
               <div className="flex flex-col gap-1.5">
@@ -332,21 +399,10 @@ export default function AgentInteractionPage({
               </div>
             )}
           </div>
-
-          {/* Components count */}
-          <div className="rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#141928] p-5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b] mb-2">
-              Active Components
-            </p>
-            <p className="text-2xl font-bold text-[#60a5fa]">
-              {components.length}
-            </p>
-          </div>
         </div>
 
-        {/* ── Center Panel: A2UI Container ── */}
+        {/* Center Panel: A2UI Container */}
         <div className="flex flex-col overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#0d1220]">
-          {/* Container header */}
           <div className="flex items-center gap-2 border-b border-[rgba(255,255,255,0.06)] bg-[#141928] px-5 py-3">
             <MessageSquare className="h-3.5 w-3.5 text-[#60a5fa]" />
             <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider">
@@ -360,7 +416,6 @@ export default function AgentInteractionPage({
             )}
           </div>
 
-          {/* Scrollable content area */}
           <div className="flex-1 overflow-y-auto p-5">
             {!isConnected ? (
               <div className="flex flex-col items-center justify-center h-full gap-4">
@@ -417,54 +472,8 @@ export default function AgentInteractionPage({
           </div>
         </div>
 
-        {/* ── Right Panel: Session History + Connection Status ── */}
-        <div className="flex flex-col gap-4 overflow-y-auto">
-          {/* Connection status card */}
-          <div className="rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#141928] p-5">
-            <div className="flex items-center gap-2 mb-3">
-              {isConnected ? (
-                <Wifi className="h-3.5 w-3.5 text-[#34d399]" />
-              ) : (
-                <WifiOff className="h-3.5 w-3.5 text-[#64748b]" />
-              )}
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#94a3b8]">
-                Connection
-              </p>
-            </div>
-            <div
-              className="rounded-xl p-3"
-              style={{
-                backgroundColor: isConnected
-                  ? "rgba(52,211,153,0.06)"
-                  : "rgba(100,116,139,0.06)",
-                border: `1px solid ${
-                  isConnected
-                    ? "rgba(52,211,153,0.15)"
-                    : "rgba(100,116,139,0.15)"
-                }`,
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{
-                    backgroundColor: isConnected ? "#34d399" : "#64748b",
-                    boxShadow: isConnected
-                      ? "0 0 8px rgba(52,211,153,0.5)"
-                      : "none",
-                  }}
-                />
-                <span
-                  className="text-xs font-semibold"
-                  style={{ color: isConnected ? "#34d399" : "#64748b" }}
-                >
-                  {isConnected ? "Connected" : "Disconnected"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Chat / session history */}
+        {/* Right Panel: Session History */}
+        <div className="hidden flex-col gap-4 overflow-y-auto lg:flex">
           <div className="flex flex-1 flex-col rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#141928] overflow-hidden">
             <div className="flex items-center gap-2 border-b border-[rgba(255,255,255,0.06)] px-5 py-3">
               <History className="h-3.5 w-3.5 text-[#fbbf24]" />
