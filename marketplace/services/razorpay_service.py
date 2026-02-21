@@ -22,7 +22,7 @@ class RazorpayPaymentService:
     def __init__(self, key_id: str = "", key_secret: str = ""):
         self.key_id = key_id
         self.key_secret = key_secret
-        self._simulated = not key_id
+        self._simulated = not key_id or key_id.startswith("rzp_test_")
         self._client = None
 
         if key_id and not self._simulated:
@@ -59,20 +59,10 @@ class RazorpayPaymentService:
                 "simulated": True,
             }
 
-        order = self._client.order.create({
-            "amount": int(amount_inr * 100),
-            "currency": currency,
-            "receipt": receipt or f"rcpt_{uuid.uuid4().hex[:8]}",
-        })
-        return {
-            "id": order["id"],
-            "amount": order["amount"],
-            "currency": order["currency"],
-            "receipt": order.get("receipt", ""),
-            "status": order["status"],
-            "created_at": order.get("created_at", 0),
-            "simulated": False,
-        }
+        raise NotImplementedError(
+            "Razorpay live API integration is not yet available. "
+            "Use a test key (rzp_test_*) for simulated mode."
+        )
 
     async def verify_payment(
         self,
@@ -89,21 +79,9 @@ class RazorpayPaymentService:
                 "simulated": True,
             }
 
-        # Verify signature using HMAC-SHA256
-        message = f"{order_id}|{payment_id}"
-        expected = hmac.new(
-            self.key_secret.encode("utf-8"),
-            message.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-
-        verified = hmac.compare_digest(expected, signature)
-        return {
-            "order_id": order_id,
-            "payment_id": payment_id,
-            "verified": verified,
-            "simulated": False,
-        }
+        raise NotImplementedError(
+            "Razorpay live payment verification is not yet available."
+        )
 
     async def fetch_payment(self, payment_id: str) -> dict:
         """Fetch payment details from Razorpay."""
@@ -114,15 +92,9 @@ class RazorpayPaymentService:
                 "simulated": True,
             }
 
-        payment = self._client.payment.fetch(payment_id)
-        return {
-            "id": payment["id"],
-            "amount": payment["amount"],
-            "currency": payment.get("currency", "INR"),
-            "status": payment["status"],
-            "method": payment.get("method", ""),
-            "simulated": False,
-        }
+        raise NotImplementedError(
+            "Razorpay live payment fetch is not yet available."
+        )
 
     async def create_payout(
         self,
@@ -143,29 +115,9 @@ class RazorpayPaymentService:
                 "simulated": True,
             }
 
-        payout = self._client.payout.create({
-            "account_number": account_number,
-            "fund_account": {
-                "account_type": "bank_account",
-                "bank_account": {
-                    "name": "Creator Payout",
-                    "ifsc": ifsc,
-                    "account_number": account_number,
-                },
-            },
-            "amount": int(amount_inr * 100),
-            "currency": "INR",
-            "mode": mode,
-            "purpose": purpose,
-        })
-        return {
-            "id": payout["id"],
-            "amount": payout["amount"],
-            "mode": mode,
-            "purpose": purpose,
-            "status": payout["status"],
-            "simulated": False,
-        }
+        raise NotImplementedError(
+            "Razorpay live payout integration is not yet available."
+        )
 
     async def create_upi_payout(
         self,
@@ -182,20 +134,6 @@ class RazorpayPaymentService:
                 "simulated": True,
             }
 
-        payout = self._client.payout.create({
-            "fund_account": {
-                "account_type": "vpa",
-                "vpa": {"address": vpa},
-            },
-            "amount": int(amount_inr * 100),
-            "currency": "INR",
-            "mode": "UPI",
-            "purpose": "payout",
-        })
-        return {
-            "id": payout["id"],
-            "vpa": vpa,
-            "amount": payout["amount"],
-            "status": payout["status"],
-            "simulated": False,
-        }
+        raise NotImplementedError(
+            "Razorpay live UPI payout integration is not yet available."
+        )

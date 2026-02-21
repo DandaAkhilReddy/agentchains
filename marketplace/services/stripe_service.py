@@ -20,7 +20,7 @@ class StripePaymentService:
     def __init__(self, secret_key: str = "", webhook_secret: str = ""):
         self.secret_key = secret_key
         self.webhook_secret = webhook_secret
-        self._simulated = not secret_key
+        self._simulated = not secret_key or secret_key.startswith("sk_test_")
         self._stripe = None
 
         if secret_key and not self._simulated:
@@ -58,21 +58,10 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        intent = self._stripe.PaymentIntent.create(
-            amount=int(amount_usd * 100),
-            currency=currency,
-            metadata=metadata or {},
+        raise NotImplementedError(
+            "Stripe live API integration is not yet available. "
+            "Use a test key (sk_test_*) for simulated mode."
         )
-        return {
-            "id": intent.id,
-            "amount": intent.amount,
-            "currency": intent.currency,
-            "status": intent.status,
-            "metadata": dict(intent.metadata) if intent.metadata else {},
-            "created": intent.created,
-            "client_secret": intent.client_secret,
-            "simulated": False,
-        }
 
     async def confirm_payment(self, payment_intent_id: str) -> dict:
         """Confirm a PaymentIntent."""
@@ -83,12 +72,9 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        intent = self._stripe.PaymentIntent.confirm(payment_intent_id)
-        return {
-            "id": intent.id,
-            "status": intent.status,
-            "simulated": False,
-        }
+        raise NotImplementedError(
+            "Stripe live API integration is not yet available."
+        )
 
     async def retrieve_payment_intent(self, payment_intent_id: str) -> dict:
         """Retrieve a PaymentIntent by ID."""
@@ -99,15 +85,9 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        intent = self._stripe.PaymentIntent.retrieve(payment_intent_id)
-        return {
-            "id": intent.id,
-            "amount": intent.amount,
-            "currency": intent.currency,
-            "status": intent.status,
-            "metadata": dict(intent.metadata) if intent.metadata else {},
-            "simulated": False,
-        }
+        raise NotImplementedError(
+            "Stripe live API integration is not yet available."
+        )
 
     async def create_refund(
         self,
@@ -124,17 +104,9 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        params = {"payment_intent": payment_intent_id}
-        if amount_usd is not None:
-            params["amount"] = int(amount_usd * 100)
-        refund = self._stripe.Refund.create(**params)
-        return {
-            "id": refund.id,
-            "payment_intent": payment_intent_id,
-            "amount": refund.amount,
-            "status": refund.status,
-            "simulated": False,
-        }
+        raise NotImplementedError(
+            "Stripe live API integration is not yet available."
+        )
 
     async def create_connected_account(self, email: str, country: str = "US") -> dict:
         """Create a Stripe Connect account for a creator."""
@@ -147,21 +119,9 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        account = self._stripe.Account.create(
-            type="express",
-            email=email,
-            country=country,
-            capabilities={
-                "transfers": {"requested": True},
-            },
+        raise NotImplementedError(
+            "Stripe live API integration is not yet available."
         )
-        return {
-            "id": account.id,
-            "email": email,
-            "country": country,
-            "payouts_enabled": account.payouts_enabled,
-            "simulated": False,
-        }
 
     async def create_payout(
         self,
@@ -180,19 +140,9 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        transfer = self._stripe.Transfer.create(
-            amount=int(amount_usd * 100),
-            currency=currency,
-            destination=account_id,
+        raise NotImplementedError(
+            "Stripe live API integration is not yet available."
         )
-        return {
-            "id": transfer.id,
-            "account": account_id,
-            "amount": transfer.amount,
-            "currency": currency,
-            "status": "paid",
-            "simulated": False,
-        }
 
     def verify_webhook_signature(self, payload: bytes, sig_header: str) -> dict | None:
         """Verify a Stripe webhook signature and return the event."""
@@ -200,15 +150,6 @@ class StripePaymentService:
             logger.warning("Webhook signature verification skipped (simulated mode)")
             return None
 
-        try:
-            event = self._stripe.Webhook.construct_event(
-                payload, sig_header, self.webhook_secret
-            )
-            return {
-                "id": event.id,
-                "type": event.type,
-                "data": event.data.object if event.data else {},
-            }
-        except self._stripe.error.SignatureVerificationError:
-            logger.warning("Invalid Stripe webhook signature")
-            return None
+        raise NotImplementedError(
+            "Stripe live webhook verification is not yet available."
+        )
