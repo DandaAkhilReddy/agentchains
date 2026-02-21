@@ -24,9 +24,14 @@ async def register_server(
     registered_by: str | None = None,
 ) -> MCPServerEntry:
     """Register a new federated MCP server."""
+    from marketplace.core.url_validation import validate_url
+
+    # SSRF protection: reject private/reserved IPs in base_url
+    validated_url = validate_url(base_url, require_https_in_prod=True)
+
     server = MCPServerEntry(
         name=name,
-        base_url=base_url.rstrip("/"),
+        base_url=validated_url.rstrip("/"),
         namespace=namespace,
         description=description,
         auth_type=auth_type,

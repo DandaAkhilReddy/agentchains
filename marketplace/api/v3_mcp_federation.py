@@ -80,16 +80,19 @@ async def register_server(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Register a new federated MCP server."""
-    server = await mcp_federation_service.register_server(
-        db,
-        name=req.name,
-        base_url=req.base_url,
-        namespace=req.namespace,
-        description=req.description,
-        auth_type=req.auth_type,
-        auth_credential_ref=req.auth_credential_ref,
-        registered_by=agent_id,
-    )
+    try:
+        server = await mcp_federation_service.register_server(
+            db,
+            name=req.name,
+            base_url=req.base_url,
+            namespace=req.namespace,
+            description=req.description,
+            auth_type=req.auth_type,
+            auth_credential_ref=req.auth_credential_ref,
+            registered_by=agent_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return _server_to_dict(server)
 
 
@@ -139,7 +142,13 @@ async def update_server(
     if req.name is not None:
         server.name = req.name
     if req.base_url is not None:
-        server.base_url = req.base_url.rstrip("/")
+        from marketplace.core.url_validation import validate_url
+
+        try:
+            validated_url = validate_url(req.base_url, require_https_in_prod=True)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        server.base_url = validated_url.rstrip("/")
     if req.namespace is not None:
         server.namespace = req.namespace
     if req.description is not None:
