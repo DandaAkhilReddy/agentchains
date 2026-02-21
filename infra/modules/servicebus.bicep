@@ -97,6 +97,7 @@ resource appAuthRule 'Microsoft.ServiceBus/namespaces/AuthorizationRules@2022-10
 output endpoint string = serviceBusNamespace.properties.serviceBusEndpoint
 
 @description('The Service Bus connection string')
+@secure()
 output connectionString string = appAuthRule.listKeys().primaryConnectionString
 
 @description('The Service Bus namespace name')

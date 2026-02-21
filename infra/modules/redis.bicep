@@ -48,9 +48,11 @@ output hostName string = redisCache.properties.hostName
 output sslPort int = redisCache.properties.sslPort
 
 @description('The primary connection string for Redis')
+@secure()
 output connectionString string = '${redisCache.properties.hostName}:${redisCache.properties.sslPort},password=${redisCache.listKeys().primaryKey},ssl=True,abortConnect=False'
 
 @description('The primary access key for Redis')
+@secure()
 output primaryKey string = redisCache.listKeys().primaryKey
 
 @description('The Redis cache resource ID')

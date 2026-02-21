@@ -43,9 +43,11 @@ resource searchService 'Microsoft.Search/searchServices@2024-03-01-preview' = {
 output endpoint string = 'https://${searchService.name}.search.windows.net'
 
 @description('The Azure AI Search admin key')
+@secure()
 output adminKey string = searchService.listAdminKeys().primaryKey
 
 @description('The Azure AI Search query key')
+@secure()
 output queryKey string = searchService.listQueryKeys().value[0].key
 
 @description('The Azure AI Search resource ID')

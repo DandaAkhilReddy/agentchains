@@ -96,6 +96,7 @@ resource pgvectorConfig 'Microsoft.DBforPostgreSQL/flexibleServers/configuration
 output fqdn string = postgresServer.properties.fullyQualifiedDomainName
 
 @description('The PostgreSQL connection string (without password)')
+@secure()
 output connectionString string = 'postgresql://${adminLogin}@${postgresServer.properties.fullyQualifiedDomainName}:5432/agentchains?sslmode=require'
 
 @description('The PostgreSQL server resource ID')

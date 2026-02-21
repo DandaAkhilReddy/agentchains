@@ -80,6 +80,7 @@ resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2
 output endpoint string = openAiAccount.properties.endpoint
 
 @description('The Azure OpenAI primary key')
+@secure()
 output primaryKey string = openAiAccount.listKeys().key1
 
 @description('The Azure OpenAI resource ID')

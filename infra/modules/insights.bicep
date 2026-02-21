@@ -74,6 +74,7 @@ output appId string = appInsights.properties.AppId
 output logAnalyticsWorkspaceId string = logAnalyticsWorkspace.properties.customerId
 
 @description('The Log Analytics workspace shared key')
+@secure()
 output logAnalyticsSharedKey string = logAnalyticsWorkspace.listKeys().primarySharedKey
 
 @description('The Log Analytics workspace resource ID')
