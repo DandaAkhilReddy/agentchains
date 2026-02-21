@@ -43,6 +43,7 @@ from . import (
     v3_webmcp,
     v4_a2ui,
     wallet,
+    webhooks,
     zkp,
 )
 from .integrations import openclaw as openclaw_integration
@@ -70,6 +71,7 @@ API_ROUTERS: tuple[APIRouter, ...] = (
     audit.router,
     redemptions.router,
     openclaw_integration.router,
+    webhooks.router,
 )
 
 API_V2_ROUTERS: tuple[APIRouter, ...] = (
