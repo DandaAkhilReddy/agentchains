@@ -29,11 +29,16 @@ class RedisRateLimiter:
             try:
                 from redis.asyncio import from_url
 
-                self._redis = from_url(
-                    self._redis_url,
-                    decode_responses=True,
-                    socket_connect_timeout=2,
-                )
+                # Azure Cache for Redis uses TLS on port 6380 (rediss:// scheme)
+                connect_kwargs = {
+                    "decode_responses": True,
+                    "socket_connect_timeout": 2,
+                }
+                # Azure Redis requires SSL; detect from URL scheme
+                if self._redis_url.startswith("rediss://"):
+                    connect_kwargs["ssl_cert_reqs"] = None  # Azure managed cert
+
+                self._redis = from_url(self._redis_url, **connect_kwargs)
                 await self._redis.ping()
                 logger.info("Redis rate limiter connected: %s", self._redis_url)
             except Exception:
