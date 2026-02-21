@@ -186,20 +186,10 @@ module servicebus 'modules/servicebus.bicep' = {
   }
 }
 
-// --- Compute (depends on monitoring + data layer for env vars) ---
+// --- Compute (dependencies inferred from module output references) ---
 module containerapp 'modules/containerapp.bicep' = {
   name: 'deploy-containerapp'
   scope: resourceGroup
-  dependsOn: [
-    insights
-    postgres
-    redis
-    keyvault
-    search
-    openai
-    servicebus
-    storage
-  ]
   params: {
     location: location
     name: containerAppName
