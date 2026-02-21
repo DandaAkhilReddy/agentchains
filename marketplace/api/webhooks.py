@@ -6,11 +6,15 @@ Validates signatures before processing to prevent spoofing.
 
 import json
 import logging
+import time
 
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 
 from marketplace.config import settings
+
+# Maximum age for webhook events (5 minutes) to prevent replay attacks
+_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
 
 router = APIRouter(tags=["webhooks"])
 logger = logging.getLogger(__name__)
@@ -31,7 +35,9 @@ async def stripe_webhook(
     )
 
     if not service._simulated:
-        # In live mode, signature verification is mandatory
+        # In live mode, signature verification is mandatory.
+        # Note: Stripe's construct_event() already validates timestamps
+        # with a default tolerance of 300 seconds, preventing replay attacks.
         if not stripe_signature:
             logger.warning("Stripe webhook rejected: missing Stripe-Signature header")
             return JSONResponse(
@@ -107,6 +113,23 @@ async def razorpay_webhook(
             status_code=400,
             content={"error": "Invalid JSON payload"},
         )
+
+    # Replay protection: reject events with stale timestamps
+    event_timestamp = event.get("created_at") or event.get("timestamp")
+    if event_timestamp is not None:
+        try:
+            ts = int(event_timestamp)
+            age = abs(time.time() - ts)
+            if age > _WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS:
+                logger.warning(
+                    "Razorpay webhook rejected: stale timestamp (age=%ds)", age,
+                )
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Webhook event timestamp too old"},
+                )
+        except (ValueError, TypeError):
+            pass  # Non-integer timestamps are not validated
 
     event_type = event.get("event", "")
     logger.info("Razorpay webhook received: %s", event_type)
