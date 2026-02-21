@@ -89,7 +89,39 @@ class Settings(BaseSettings):
     otel_service_name: str = "agentchains-marketplace"
 
     # Redis (for multi-instance rate limiting and caching)
-    redis_url: str = ""  # e.g. "redis://localhost:6379/0"
+    redis_url: str = ""  # e.g. "redis://localhost:6379/0" or Azure Redis "rediss://:password@host:6380/0"
+
+    # Azure Key Vault
+    azure_keyvault_url: str = ""  # e.g. "https://agentchains-kv.vault.azure.net/"
+
+    # Azure Service Bus
+    azure_servicebus_connection: str = ""  # Service Bus connection string
+
+    # Azure AI Search
+    azure_search_endpoint: str = ""  # e.g. "https://agentchains-search.search.windows.net"
+    azure_search_key: str = ""
+    azure_search_index_prefix: str = "agentchains"
+
+    # Azure Blob Storage
+    azure_blob_connection: str = ""  # Blob Storage connection string
+    azure_blob_container: str = "content-store"
+
+    # Azure Application Insights
+    azure_appinsights_connection: str = ""  # Application Insights connection string
+
+    # A2UI Protocol
+    a2ui_enabled: bool = True
+    a2ui_max_sessions_per_agent: int = 10
+    a2ui_rate_limit_per_minute: int = 60
+
+    # MCP Federation
+    mcp_federation_enabled: bool = True
+    mcp_federation_health_interval_seconds: int = 30
+
+    # Orchestration
+    orchestration_enabled: bool = True
+    orchestration_max_concurrent_workflows: int = 50
+    orchestration_default_budget_usd: float = 10.0
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
