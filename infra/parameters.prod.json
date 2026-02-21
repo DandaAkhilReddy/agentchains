@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "environment": {
+      "value": "prod"
+    },
+    "projectName": {
+      "value": "agentchains"
+    },
+    "tenantId": {
+      "value": "<YOUR_AZURE_AD_TENANT_ID>"
+    },
+    "postgresAdminLogin": {
+      "value": "agentchainsadmin"
+    },
+    "postgresAdminPassword": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RG>/providers/Microsoft.KeyVault/vaults/<KV_NAME>"
+        },
+        "secretName": "postgres-admin-password"
+      }
+    },
+    "containerRegistryLoginServer": {
+      "value": "<YOUR_ACR_NAME>.azurecr.io"
+    },
+    "containerRegistryUsername": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RG>/providers/Microsoft.KeyVault/vaults/<KV_NAME>"
+        },
+        "secretName": "acr-username"
+      }
+    },
+    "containerRegistryPassword": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RG>/providers/Microsoft.KeyVault/vaults/<KV_NAME>"
+        },
+        "secretName": "acr-password"
+      }
+    },
+    "containerImage": {
+      "value": "<YOUR_ACR_NAME>.azurecr.io/agentchains:latest"
+    }
+  }
+}
