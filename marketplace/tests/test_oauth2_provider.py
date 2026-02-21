@@ -293,9 +293,9 @@ class TestOAuth2PKCEVerification:
         challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
         assert _verify_pkce(challenge, "S256", "wrong_verifier") is False
 
-    def test_plain_verify_correct(self):
+    def test_plain_verify_rejected(self):
         from marketplace.oauth2.server import _verify_pkce
-        assert _verify_pkce("my_verifier", "plain", "my_verifier") is True
+        assert _verify_pkce("my_verifier", "plain", "my_verifier") is False
 
     def test_plain_verify_wrong(self):
         from marketplace.oauth2.server import _verify_pkce
@@ -313,9 +313,9 @@ class TestOAuth2PKCEVerification:
         challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
         assert _verify_pkce(challenge, "S256", "") is True
 
-    def test_plain_empty_strings(self):
+    def test_plain_empty_strings_rejected(self):
         from marketplace.oauth2.server import _verify_pkce
-        assert _verify_pkce("", "plain", "") is True
+        assert _verify_pkce("", "plain", "") is False
 
 
 class TestOAuth2TokenValidation:
@@ -561,8 +561,7 @@ class TestOAuth2OpenIDConfig:
     async def test_openid_config_pkce_methods(self):
         from marketplace.oauth2.routes import openid_configuration
         config = await openid_configuration()
-        assert "S256" in config["code_challenge_methods_supported"]
-        assert "plain" in config["code_challenge_methods_supported"]
+        assert config["code_challenge_methods_supported"] == ["S256"]
 
     @pytest.mark.asyncio
     async def test_openid_config_response_types(self):
