@@ -32,12 +32,16 @@ def create_stream_token(
             allowed_topics = ["public.market", "private.admin"]
         elif token_type == "stream_user":
             allowed_topics = ["public.market", "public.market.orders", "private.user"]
+        elif token_type == "stream_a2ui":
+            allowed_topics = ["a2ui.session"]
         else:
             allowed_topics = ["public.market", "private.agent"]
     if token_type == "stream_admin":
         subject_type = "admin"
     elif token_type == "stream_user":
         subject_type = "user"
+    elif token_type == "stream_a2ui":
+        subject_type = "agent"
     else:
         subject_type = "agent"
     payload = {
@@ -62,7 +66,7 @@ def decode_token(token: str) -> dict:
             raise UnauthorizedError("Creator tokens cannot be used for agent endpoints")
         if token_type == "user":
             raise UnauthorizedError("User tokens cannot be used for agent endpoints")
-        if token_type in {"stream", "stream_agent", "stream_admin", "stream_user"}:
+        if token_type in {"stream", "stream_agent", "stream_admin", "stream_user", "stream_a2ui"}:
             raise UnauthorizedError("Stream tokens cannot be used for API endpoints")
         return payload
     except JWTError:
@@ -77,7 +81,7 @@ def decode_stream_token(token: str) -> dict:
         raise UnauthorizedError("Invalid or expired token")
     if payload.get("sub") is None:
         raise UnauthorizedError("Token missing subject")
-    if payload.get("type") not in {"stream", "stream_agent", "stream_admin", "stream_user"}:
+    if payload.get("type") not in {"stream", "stream_agent", "stream_admin", "stream_user", "stream_a2ui"}:
         raise UnauthorizedError("Stream token required")
     return payload
 
