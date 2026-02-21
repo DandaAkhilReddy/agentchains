@@ -12,7 +12,26 @@ env:
   CONTAINER_APP: agentchains-marketplace
 
 jobs:
+  deploy-infrastructure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy Bicep infrastructure
+        run: |
+          az deployment group create \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --template-file infra/main.bicep \
+            --parameters infra/parameters.prod.json \
+            --mode Incremental
+
   build-and-deploy:
+    needs: deploy-infrastructure
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,22 +44,29 @@ jobs:
       - name: Login to ACR
         run: az acr login --name ${{ env.ACR_NAME }}
 
-      - name: Build and push Docker image
-        run: |
-          IMAGE_TAG=${{ env.ACR_IMAGE }}:${{ github.sha }}
-          IMAGE_LATEST=${{ env.ACR_IMAGE }}:latest
-          docker build -t $IMAGE_TAG -t $IMAGE_LATEST .
-          docker push $IMAGE_TAG
-          docker push $IMAGE_LATEST
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Deploy to Container Apps
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ACR_IMAGE }}:${{ github.sha }}
+            ${{ env.ACR_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to Container Apps (staging revision)
         run: |
           az containerapp update \
             --name ${{ env.CONTAINER_APP }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.ACR_IMAGE }}:${{ github.sha }}
+            --image ${{ env.ACR_IMAGE }}:${{ github.sha }} \
+            --revision-suffix staging-${{ github.run_number }}
 
-      - name: Smoke test
+      - name: Smoke test staging
         run: |
           echo "Waiting 60s for new revision to activate..."
           sleep 60
@@ -56,3 +82,10 @@ jobs:
           done
           echo "Health check failed after 5 attempts"
           exit 1
+
+      - name: Promote to production traffic
+        run: |
+          az containerapp ingress traffic set \
+            --name ${{ env.CONTAINER_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --revision-weight latest=100
