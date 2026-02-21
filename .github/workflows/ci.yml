@@ -7,8 +7,8 @@ on:
     branches: [master]
 
 jobs:
-  backend-test:
-    name: Backend Tests
+  backend-lint:
+    name: Backend Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,16 +21,15 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install ruff
+        run: pip install ruff
 
-      - name: Lint with ruff
+      - name: Lint changed files
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
         run: |
-          pip install ruff
           if [ "$EVENT_NAME" = "pull_request" ]; then
             BASE_SHA="$PR_BASE_SHA"
           else
@@ -52,8 +51,58 @@ jobs:
           printf 'Linting files:\n%s\n' "${changed_py[@]}"
           ruff check "${changed_py[@]}"
 
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
       - name: Run backend tests
-        run: pytest marketplace/tests/ -q --tb=short -x
+        run: pytest marketplace/tests/ -q --tb=short -x --junitxml=reports/backend.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: reports/backend.xml
+
+  sast:
+    name: Security Analysis (SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install security tools
+        run: pip install bandit semgrep
+
+      - name: Run Bandit
+        run: bandit -r marketplace/ -ll -ii --format json -o reports/bandit.json || true
+
+      - name: Run Semgrep
+        run: semgrep scan --config auto marketplace/ --json -o reports/semgrep.json || true
+
+      - name: Upload SAST results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-results
+          path: reports/
 
   frontend-test:
     name: Frontend Tests & Build
@@ -82,3 +131,11 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  quality-gate:
+    name: Quality Gate
+    needs: [backend-lint, backend-test, sast, frontend-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All checks passed
+        run: echo "All CI checks passed"
