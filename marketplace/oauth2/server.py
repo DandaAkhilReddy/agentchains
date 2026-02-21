@@ -28,7 +28,16 @@ AUTHORIZATION_CODE_LIFETIME = timedelta(minutes=10)
 
 
 def _hash_secret(secret: str) -> str:
-    """Hash a client secret using SHA-256."""
+    """Hash a client secret using SHA-256.
+
+    Design note: SHA-256 (not bcrypt) is intentional here. OAuth2 client
+    secrets are high-entropy, machine-generated tokens (48+ bytes from
+    secrets.token_urlsafe), not user-chosen passwords. For such secrets,
+    SHA-256 is sufficient and avoids the latency of bcrypt on every token
+    exchange. Bcrypt's password-stretching benefit is unnecessary when the
+    input already has >256 bits of entropy and is not susceptible to
+    dictionary attacks.
+    """
     return hashlib.sha256(secret.encode("utf-8")).hexdigest()
 
 
