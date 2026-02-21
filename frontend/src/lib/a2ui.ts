@@ -35,7 +35,6 @@ export class A2UIClient {
     { resolve: (v: any) => void; reject: (e: Error) => void }
   > = new Map();
   private nextId = 0;
-  private baseUrl: string;
   private token: string;
   private wsUrl: string;
 
@@ -43,7 +42,6 @@ export class A2UIClient {
     baseUrl: string,
     token: string,
   ) {
-    this.baseUrl = baseUrl;
     this.token = token;
     // Derive WebSocket URL from the base URL
     const protocol = baseUrl.startsWith("https") ? "wss:" : "ws:";
