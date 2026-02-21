@@ -10,6 +10,10 @@ vi.mock("../../lib/a2ui", () => {
     this.on = vi.fn();
     this.off = vi.fn();
     this.onMessage = vi.fn();
+    this.sendResponse = vi.fn();
+    this.sendApproval = vi.fn();
+    this.sendCancel = vi.fn();
+    this.sendInit = vi.fn().mockResolvedValue({});
     this.isConnected = false;
   });
   return { A2UIClient: MockA2UIClient };
