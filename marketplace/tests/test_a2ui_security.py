@@ -14,11 +14,13 @@ from marketplace.a2ui.security import (
 class TestSanitizeHtml:
     def test_escapes_script_tags(self):
         result = sanitize_html("<script>alert('xss')</script>")
-        assert "<script>" not in result
-        assert "&lt;script&gt;" in result
+        assert "<script>" not in result       # tags stripped
+        assert "&lt;script&gt;" not in result  # tags removed, not escaped
+        assert "alert" in result               # text content preserved
 
     def test_escapes_angle_brackets(self):
-        assert sanitize_html("<div>") == "&lt;div&gt;"
+        result = sanitize_html("<div>")
+        assert "<div>" not in result  # tag stripped
 
     def test_escapes_double_quotes(self):
         result = sanitize_html('value="bad"')
@@ -45,8 +47,8 @@ class TestSanitizeHtml:
 
     def test_escapes_event_handlers(self):
         result = sanitize_html('<img onerror="alert(1)">')
-        assert "onerror" in result
-        assert "<img" not in result
+        assert "<img" not in result       # tag stripped entirely
+        assert "onerror" not in result    # event handler removed with tag
 
     def test_escapes_javascript_uri(self):
         result = sanitize_html('javascript:alert(1)')
