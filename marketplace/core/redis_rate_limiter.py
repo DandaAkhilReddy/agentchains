@@ -36,7 +36,7 @@ class RedisRateLimiter:
                 }
                 # Azure Redis requires SSL; detect from URL scheme
                 if self._redis_url.startswith("rediss://"):
-                    connect_kwargs["ssl_cert_reqs"] = None  # Azure managed cert
+                    connect_kwargs["ssl_cert_reqs"] = "required"
 
                 self._redis = from_url(self._redis_url, **connect_kwargs)
                 await self._redis.ping()
