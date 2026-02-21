@@ -1,13 +1,4 @@
-import type {
-  A2UISession,
-  A2UIRenderMessage,
-  A2UIUpdateMessage,
-  A2UIRequestInputMessage,
-  A2UIConfirmMessage,
-  A2UIProgressMessage,
-  A2UINavigateMessage,
-  A2UINotifyMessage,
-} from "../types/a2ui";
+import type { A2UISession } from "../types/a2ui";
 
 /** JSON-RPC 2.0 message envelope */
 interface JsonRpcRequest {
@@ -44,18 +35,21 @@ export class A2UIClient {
     { resolve: (v: any) => void; reject: (e: Error) => void }
   > = new Map();
   private nextId = 0;
+  private baseUrl: string;
+  private token: string;
+  private wsUrl: string;
 
   constructor(
-    private baseUrl: string,
-    private token: string,
+    baseUrl: string,
+    token: string,
   ) {
+    this.baseUrl = baseUrl;
+    this.token = token;
     // Derive WebSocket URL from the base URL
     const protocol = baseUrl.startsWith("https") ? "wss:" : "ws:";
     const host = baseUrl.replace(/^https?:\/\//, "");
     this.wsUrl = `${protocol}//${host}/ws/v4/a2ui`;
   }
-
-  private wsUrl: string;
 
   /** Establish the WebSocket connection and wire up event handlers. */
   connect(): Promise<void> {
@@ -87,7 +81,7 @@ export class A2UIClient {
         this.reconnect();
       };
 
-      this.ws.onerror = (err) => {
+      this.ws.onerror = () => {
         reject(new Error("WebSocket connection failed"));
       };
     });
