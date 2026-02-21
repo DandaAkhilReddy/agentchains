@@ -229,3 +229,20 @@ async def scan_all_agents(
             results[agent_id] = anomalies
 
     return results
+
+
+class AbuseDetectionService:
+    """Service wrapper for abuse detection operations."""
+
+    def __init__(self, db: AsyncSession | None = None):
+        self.db = db
+
+    async def detect_anomalies(self, agent_id: str, rules: list[AnomalyRule] | None = None):
+        if self.db is None:
+            raise ValueError("Database session required")
+        return await detect_anomalies(self.db, agent_id, rules)
+
+    async def scan_all_agents(self, limit: int = 100):
+        if self.db is None:
+            raise ValueError("Database session required")
+        return await scan_all_agents(self.db, limit)
