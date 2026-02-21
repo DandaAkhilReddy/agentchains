@@ -1,166 +1,231 @@
-"""Abuse detection service — anomaly rules and rate-based detection.
+"""Abuse detection service.
 
-Monitors agent behavior for suspicious patterns and enforces
-rate-based abuse rules to protect the marketplace.
+Applies rule-based anomaly detection to identify suspicious activity
+patterns in the marketplace: rate anomalies, financial abuse, sybil
+patterns, and content manipulation.
 """
 
+from __future__ import annotations
+
 import logging
-import time
-from collections import defaultdict
-from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from typing import Any
+
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from marketplace.models.agent import RegisteredAgent
+from marketplace.models.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class AbuseEvent:
-    agent_id: str
-    event_type: str
-    severity: str  # low, medium, high, critical
-    description: str
-    timestamp: float = field(default_factory=time.time)
-    metadata: dict = field(default_factory=dict)
+# ── Anomaly rule definitions ──
+
+class AnomalyRule:
+    """Base class for anomaly detection rules."""
+
+    name: str = ""
+    severity: str = "medium"  # low | medium | high | critical
+
+    async def evaluate(self, db: AsyncSession, agent_id: str) -> list[dict[str, Any]]:
+        raise NotImplementedError
 
 
-class AbuseDetectionService:
-    """Rule-based abuse detection for marketplace agents."""
+class RapidTransactionRule(AnomalyRule):
+    """Detects unusually rapid transaction volume."""
 
-    def __init__(self):
-        self._event_windows: dict[str, list[float]] = defaultdict(list)
-        self._violation_counts: dict[str, int] = defaultdict(int)
-        self._blocked_agents: set[str] = set()
+    name = "rapid_transactions"
+    severity = "high"
 
-        # Configurable thresholds
-        self.max_transactions_per_minute = 30
-        self.max_failed_auths_per_minute = 10
-        self.max_listings_per_hour = 50
-        self.max_api_calls_per_minute = 200
-        self.violation_threshold_for_block = 10
+    def __init__(self, threshold: int = 50, window_hours: int = 1):
+        self.threshold = threshold
+        self.window_hours = window_hours
 
-    async def check_transaction_rate(self, agent_id: str) -> AbuseEvent | None:
-        """Check if agent is creating transactions too fast."""
-        key = f"tx:{agent_id}"
-        if self._is_rate_exceeded(key, self.max_transactions_per_minute, 60):
-            event = AbuseEvent(
-                agent_id=agent_id,
-                event_type="excessive_transactions",
-                severity="high",
-                description=f"Agent exceeded {self.max_transactions_per_minute} transactions/minute",
+    async def evaluate(self, db: AsyncSession, agent_id: str) -> list[dict[str, Any]]:
+        since = datetime.now(timezone.utc) - timedelta(hours=self.window_hours)
+        result = await db.execute(
+            select(func.count(Transaction.id)).where(
+                and_(
+                    (Transaction.buyer_id == agent_id) | (Transaction.seller_id == agent_id),
+                    Transaction.created_at >= since,
+                )
             )
-            await self._record_violation(agent_id, event)
-            return event
-        return None
+        )
+        count = result.scalar() or 0
+        if count >= self.threshold:
+            return [{
+                "rule": self.name,
+                "severity": self.severity,
+                "agent_id": agent_id,
+                "detail": f"{count} transactions in {self.window_hours}h (threshold: {self.threshold})",
+                "value": count,
+            }]
+        return []
 
-    async def check_auth_failures(self, agent_id: str) -> AbuseEvent | None:
-        """Check for brute-force authentication attempts."""
-        key = f"auth_fail:{agent_id}"
-        if self._is_rate_exceeded(key, self.max_failed_auths_per_minute, 60):
-            event = AbuseEvent(
-                agent_id=agent_id,
-                event_type="brute_force_auth",
-                severity="critical",
-                description=f"Agent exceeded {self.max_failed_auths_per_minute} failed auths/minute",
+
+class SelfTradingRule(AnomalyRule):
+    """Detects agents trading with themselves (wash trading)."""
+
+    name = "self_trading"
+    severity = "critical"
+
+    async def evaluate(self, db: AsyncSession, agent_id: str) -> list[dict[str, Any]]:
+        result = await db.execute(
+            select(func.count(Transaction.id)).where(
+                and_(
+                    Transaction.buyer_id == agent_id,
+                    Transaction.seller_id == agent_id,
+                )
             )
-            await self._record_violation(agent_id, event)
-            return event
-        return None
+        )
+        count = result.scalar() or 0
+        if count > 0:
+            return [{
+                "rule": self.name,
+                "severity": self.severity,
+                "agent_id": agent_id,
+                "detail": f"Agent has {count} self-trade transactions",
+                "value": count,
+            }]
+        return []
 
-    async def check_listing_spam(self, agent_id: str) -> AbuseEvent | None:
-        """Check for listing spam (too many listings created too fast)."""
-        key = f"listing:{agent_id}"
-        if self._is_rate_exceeded(key, self.max_listings_per_hour, 3600):
-            event = AbuseEvent(
-                agent_id=agent_id,
-                event_type="listing_spam",
-                severity="medium",
-                description=f"Agent exceeded {self.max_listings_per_hour} listings/hour",
+
+class LargeTransactionRule(AnomalyRule):
+    """Detects unusually large single transactions."""
+
+    name = "large_transaction"
+    severity = "medium"
+
+    def __init__(self, threshold_usd: Decimal = Decimal("1000")):
+        self.threshold_usd = threshold_usd
+
+    async def evaluate(self, db: AsyncSession, agent_id: str) -> list[dict[str, Any]]:
+        since = datetime.now(timezone.utc) - timedelta(hours=24)
+        result = await db.execute(
+            select(Transaction).where(
+                and_(
+                    (Transaction.buyer_id == agent_id) | (Transaction.seller_id == agent_id),
+                    Transaction.amount_usdc >= self.threshold_usd,
+                    Transaction.created_at >= since,
+                )
             )
-            await self._record_violation(agent_id, event)
-            return event
-        return None
+        )
+        large_txs = result.scalars().all()
+        anomalies = []
+        for tx in large_txs:
+            anomalies.append({
+                "rule": self.name,
+                "severity": self.severity,
+                "agent_id": agent_id,
+                "detail": f"Transaction {tx.id}: ${tx.amount_usdc} exceeds ${self.threshold_usd} threshold",
+                "transaction_id": tx.id,
+                "value": float(tx.amount_usdc),
+            })
+        return anomalies
 
-    async def check_api_abuse(self, agent_id: str) -> AbuseEvent | None:
-        """Check for excessive API calls."""
-        key = f"api:{agent_id}"
-        if self._is_rate_exceeded(key, self.max_api_calls_per_minute, 60):
-            event = AbuseEvent(
-                agent_id=agent_id,
-                event_type="api_abuse",
-                severity="medium",
-                description=f"Agent exceeded {self.max_api_calls_per_minute} API calls/minute",
+
+class NewAccountHighVolumeRule(AnomalyRule):
+    """Detects new accounts with unusually high transaction volume."""
+
+    name = "new_account_high_volume"
+    severity = "high"
+
+    def __init__(self, account_age_hours: int = 24, tx_threshold: int = 10):
+        self.account_age_hours = account_age_hours
+        self.tx_threshold = tx_threshold
+
+    async def evaluate(self, db: AsyncSession, agent_id: str) -> list[dict[str, Any]]:
+        result = await db.execute(
+            select(RegisteredAgent).where(RegisteredAgent.id == agent_id)
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            return []
+
+        age = datetime.now(timezone.utc) - (agent.created_at or datetime.now(timezone.utc))
+        if age.total_seconds() > self.account_age_hours * 3600:
+            return []
+
+        tx_result = await db.execute(
+            select(func.count(Transaction.id)).where(
+                (Transaction.buyer_id == agent_id) | (Transaction.seller_id == agent_id)
             )
-            await self._record_violation(agent_id, event)
-            return event
-        return None
+        )
+        tx_count = tx_result.scalar() or 0
+        if tx_count >= self.tx_threshold:
+            return [{
+                "rule": self.name,
+                "severity": self.severity,
+                "agent_id": agent_id,
+                "detail": f"New account ({age.total_seconds()/3600:.1f}h old) with {tx_count} transactions",
+                "value": tx_count,
+            }]
+        return []
 
-    def record_event(self, key: str) -> None:
-        """Record a timestamped event for rate checking."""
-        self._event_windows[key].append(time.time())
 
-    def is_blocked(self, agent_id: str) -> bool:
-        """Check if an agent is currently blocked."""
-        return agent_id in self._blocked_agents
+# ── Default rules ──
 
-    def unblock_agent(self, agent_id: str) -> bool:
-        """Manually unblock an agent."""
-        if agent_id in self._blocked_agents:
-            self._blocked_agents.discard(agent_id)
-            self._violation_counts[agent_id] = 0
-            logger.info("Agent unblocked: %s", agent_id)
-            return True
-        return False
+DEFAULT_RULES: list[AnomalyRule] = [
+    RapidTransactionRule(),
+    SelfTradingRule(),
+    LargeTransactionRule(),
+    NewAccountHighVolumeRule(),
+]
 
-    def get_violation_count(self, agent_id: str) -> int:
-        """Get the total violation count for an agent."""
-        return self._violation_counts.get(agent_id, 0)
 
-    def get_blocked_agents(self) -> list[str]:
-        """List all currently blocked agents."""
-        return list(self._blocked_agents)
+# ── Service functions ──
 
-    def _is_rate_exceeded(self, key: str, limit: int, window_seconds: int) -> bool:
-        """Check if events exceed the rate limit within the window."""
-        now = time.time()
-        cutoff = now - window_seconds
+async def detect_anomalies(
+    db: AsyncSession,
+    agent_id: str,
+    rules: list[AnomalyRule] | None = None,
+) -> list[dict[str, Any]]:
+    """Run all anomaly detection rules against an agent.
 
-        # Clean old events
-        events = self._event_windows[key]
-        self._event_windows[key] = [t for t in events if t > cutoff]
+    Returns a list of detected anomalies.
+    """
+    rules = rules or DEFAULT_RULES
+    all_anomalies = []
+    for rule in rules:
+        try:
+            anomalies = await rule.evaluate(db, agent_id)
+            all_anomalies.extend(anomalies)
+        except Exception:
+            logger.exception("Anomaly rule %s failed for agent %s", rule.name, agent_id)
 
-        # Record this event
-        self._event_windows[key].append(now)
-
-        return len(self._event_windows[key]) > limit
-
-    async def _record_violation(self, agent_id: str, event: AbuseEvent) -> None:
-        """Record a violation and potentially block the agent."""
-        self._violation_counts[agent_id] = self._violation_counts.get(agent_id, 0) + 1
-        count = self._violation_counts[agent_id]
-
+    if all_anomalies:
         logger.warning(
-            "Abuse detected: agent=%s type=%s severity=%s violations=%d",
-            agent_id, event.event_type, event.severity, count,
+            "Detected %d anomalies for agent %s: %s",
+            len(all_anomalies),
+            agent_id,
+            [a["rule"] for a in all_anomalies],
         )
 
-        if count >= self.violation_threshold_for_block:
-            self._blocked_agents.add(agent_id)
-            logger.critical(
-                "Agent auto-blocked due to %d violations: %s",
-                count, agent_id,
-            )
-
-    def cleanup_old_events(self, max_age_seconds: int = 7200) -> int:
-        """Remove events older than max_age_seconds. Returns count removed."""
-        cutoff = time.time() - max_age_seconds
-        removed = 0
-        for key in list(self._event_windows.keys()):
-            before = len(self._event_windows[key])
-            self._event_windows[key] = [t for t in self._event_windows[key] if t > cutoff]
-            removed += before - len(self._event_windows[key])
-            if not self._event_windows[key]:
-                del self._event_windows[key]
-        return removed
+    return all_anomalies
 
 
-# Singleton
-abuse_detection_service = AbuseDetectionService()
+async def scan_all_agents(
+    db: AsyncSession,
+    limit: int = 100,
+) -> dict[str, list[dict[str, Any]]]:
+    """Scan recently active agents for anomalies.
+
+    Returns a mapping of agent_id -> list of anomalies.
+    """
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    result = await db.execute(
+        select(RegisteredAgent.id).where(
+            RegisteredAgent.status == "active",
+        ).limit(limit)
+    )
+    agent_ids = [row[0] for row in result.all()]
+
+    results = {}
+    for agent_id in agent_ids:
+        anomalies = await detect_anomalies(db, agent_id)
+        if anomalies:
+            results[agent_id] = anomalies
+
+    return results
