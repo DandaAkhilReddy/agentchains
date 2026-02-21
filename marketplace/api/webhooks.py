@@ -12,6 +12,7 @@ from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 
 from marketplace.config import settings
+from marketplace.services.stripe_service import StripePaymentService
 
 # Maximum age for webhook events (5 minutes) to prevent replay attacks
 _WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
@@ -26,8 +27,6 @@ async def stripe_webhook(
     stripe_signature: str = Header(None, alias="Stripe-Signature"),
 ):
     """Handle Stripe webhook events."""
-    from marketplace.services.stripe_service import StripePaymentService
-
     payload = await request.body()
     service = StripePaymentService(
         secret_key=settings.stripe_secret_key,

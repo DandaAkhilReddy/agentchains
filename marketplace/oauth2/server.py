@@ -505,3 +505,19 @@ def _verify_pkce(
         base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
     )
     return computed_challenge == code_challenge
+
+
+class OAuth2Server:
+    """Class wrapper for OAuth2 server functions."""
+
+    async def register_client(self, db, **kwargs):
+        return await register_client(db, **kwargs)
+
+    async def authorize(self, db, **kwargs):
+        return await authorize(db, **kwargs)
+
+    async def exchange_token(self, db, **kwargs):
+        return await token_exchange(db, **kwargs)
+
+    async def validate_token(self, db, token):
+        return await validate_access_token(db, token)

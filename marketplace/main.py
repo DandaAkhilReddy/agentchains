@@ -469,6 +469,14 @@ def create_app() -> FastAPI:
     for router in API_V4_ROUTERS:
         app.include_router(router, prefix=API_V4_PREFIX)
 
+    # Webhooks at root level (for external service callbacks)
+    from marketplace.api.webhooks import router as webhooks_root_router
+    app.include_router(webhooks_root_router)
+
+    # OAuth2 routes at root level
+    from marketplace.oauth2.routes import router as oauth2_router
+    app.include_router(oauth2_router)
+
     # MCP server routes
     if settings.mcp_enabled:
         from marketplace.mcp.server import router as mcp_router

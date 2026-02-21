@@ -97,3 +97,8 @@ class OAuthRefreshToken(Base):
         Index("idx_refresh_token", "token"),
         Index("idx_refresh_token_access", "access_token_id"),
     )
+
+
+# Aliases for backwards compatibility
+AccessToken = OAuthAccessToken
+RefreshToken = OAuthRefreshToken
