@@ -41,6 +41,7 @@ from . import (
     v2_users,
     v2_verification,
     v3_webmcp,
+    v4_a2ui,
     wallet,
     zkp,
 )
@@ -95,8 +96,15 @@ API_V3_ROUTERS: tuple[APIRouter, ...] = (
     v3_webmcp.router,
 )
 
+API_V4_PREFIX = "/api/v4"
+
+API_V4_ROUTERS: tuple[APIRouter, ...] = (
+    v4_a2ui.router,
+)
+
 __all__ = [
     "API_PREFIX", "API_ROUTERS",
     "API_V2_PREFIX", "API_V2_ROUTERS",
     "API_V3_PREFIX", "API_V3_ROUTERS",
+    "API_V4_PREFIX", "API_V4_ROUTERS",
 ]
