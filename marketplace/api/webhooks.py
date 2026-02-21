@@ -30,7 +30,14 @@ async def stripe_webhook(
         webhook_secret=settings.stripe_webhook_secret,
     )
 
-    if not service._simulated and stripe_signature:
+    if not service._simulated:
+        # In live mode, signature verification is mandatory
+        if not stripe_signature:
+            logger.warning("Stripe webhook rejected: missing Stripe-Signature header")
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Missing Stripe-Signature header"},
+            )
         event = service.verify_webhook_signature(payload, stripe_signature)
         if event is None:
             return JSONResponse(
@@ -74,8 +81,14 @@ async def razorpay_webhook(
 
     payload = await request.body()
 
-    # Verify signature if configured
-    if settings.razorpay_key_secret and x_razorpay_signature:
+    # Verify signature — mandatory when secret is configured
+    if settings.razorpay_key_secret:
+        if not x_razorpay_signature:
+            logger.warning("Razorpay webhook rejected: missing X-Razorpay-Signature header")
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Missing X-Razorpay-Signature header"},
+            )
         expected = hmac.new(
             settings.razorpay_key_secret.encode("utf-8"),
             payload,
