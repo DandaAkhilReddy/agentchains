@@ -17,7 +17,7 @@ from marketplace.core.async_tasks import fire_and_forget
 from marketplace.database import init_db
 from marketplace.models import *  # noqa: F403
 
-APP_VERSION = "0.5.0"
+APP_VERSION = "1.0.0"
 logger = logging.getLogger(__name__)
 
 
@@ -323,6 +323,41 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     security_retention_task = asyncio.create_task(_security_retention_loop())
 
+    # MCP federation health monitor background task
+    mcp_health_task = None
+    if settings.mcp_federation_enabled:
+        async def _mcp_health_loop() -> None:
+            await asyncio.sleep(30)
+            while True:
+                try:
+                    from marketplace.services.mcp_health_monitor import (
+                        mcp_health_monitor,
+                    )
+
+                    await mcp_health_monitor.check_all_servers()
+                except Exception:
+                    logger.exception("MCP health monitor error")
+                await asyncio.sleep(30)
+
+        mcp_health_task = asyncio.create_task(_mcp_health_loop())
+
+    # Azure Service Bus consumer background task
+    servicebus_task = None
+    if settings.azure_servicebus_connection:
+        async def _servicebus_loop() -> None:
+            await asyncio.sleep(10)
+            try:
+                from marketplace.services.servicebus_service import (
+                    ServiceBusService,
+                )
+
+                svc = ServiceBusService(settings.azure_servicebus_connection)
+                await svc.start_consumer("webhook-delivery")
+            except Exception:
+                logger.exception("Service Bus consumer error")
+
+        servicebus_task = asyncio.create_task(_servicebus_loop())
+
     yield
 
     # Shutdown: cancel background tasks and dispose connection pool
@@ -330,6 +365,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     cdn_task.cancel()
     payout_task.cancel()
     security_retention_task.cancel()
+    if mcp_health_task:
+        mcp_health_task.cancel()
+    if servicebus_task:
+        servicebus_task.cancel()
 
     from marketplace.database import dispose_engine
 
@@ -435,6 +474,16 @@ def create_app() -> FastAPI:
         from marketplace.mcp.server import router as mcp_router
 
         app.include_router(mcp_router)
+
+    # GraphQL endpoint
+    try:
+        from marketplace.graphql.schema import schema
+        from strawberry.fastapi import GraphQLRouter
+
+        graphql_app = GraphQLRouter(schema)
+        app.include_router(graphql_app, prefix="/graphql")
+    except ImportError:
+        logger.info("strawberry-graphql not installed — GraphQL disabled")
 
     # WebSocket for live feed (JWT-authenticated)
     @app.websocket("/ws/feed")
