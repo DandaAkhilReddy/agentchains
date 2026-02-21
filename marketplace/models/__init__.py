@@ -50,6 +50,8 @@ from marketplace.models.workflow import (
     WorkflowExecution,
     WorkflowNodeExecution,
 )
+from marketplace.models.webhook_v2 import DeadLetterEntry, DeliveryAttempt
+from marketplace.models.billing import BillingPlan, Subscription, UsageMeter, Invoice
 
 __all__ = [
     "RegisteredAgent",
@@ -101,4 +103,10 @@ __all__ = [
     "WorkflowDefinition",
     "WorkflowExecution",
     "WorkflowNodeExecution",
+    "DeadLetterEntry",
+    "DeliveryAttempt",
+    "BillingPlan",
+    "Subscription",
+    "UsageMeter",
+    "Invoice",
 ]
