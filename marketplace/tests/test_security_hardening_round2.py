@@ -409,7 +409,7 @@ class TestWebhookReplayProtection:
 
         with patch.object(settings, "razorpay_key_secret", ""):
             resp = await client.post(
-                "/webhooks/razorpay",
+                "/api/v1/webhooks/razorpay",
                 content=payload,
                 headers={"Content-Type": "application/json"},
             )
@@ -427,7 +427,7 @@ class TestWebhookReplayProtection:
 
         with patch.object(settings, "razorpay_key_secret", ""):
             resp = await client.post(
-                "/webhooks/razorpay",
+                "/api/v1/webhooks/razorpay",
                 content=payload,
                 headers={"Content-Type": "application/json"},
             )
@@ -442,7 +442,7 @@ class TestWebhookReplayProtection:
 
         with patch.object(settings, "razorpay_key_secret", ""):
             resp = await client.post(
-                "/webhooks/razorpay",
+                "/api/v1/webhooks/razorpay",
                 content=payload,
                 headers={"Content-Type": "application/json"},
             )
@@ -459,7 +459,7 @@ class TestWebhookReplayProtection:
 
         with patch.object(settings, "razorpay_key_secret", ""):
             resp = await client.post(
-                "/webhooks/razorpay",
+                "/api/v1/webhooks/razorpay",
                 content=payload,
                 headers={"Content-Type": "application/json"},
             )
