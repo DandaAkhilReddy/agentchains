@@ -1,17 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
-// Mock A2UIClient
-vi.mock("../../lib/a2ui", () => ({
-  A2UIClient: vi.fn().mockImplementation(() => ({
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn(),
-    send: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    isConnected: false,
-  })),
-}));
+// Mock A2UIClient with a constructable class mock
+vi.mock("../../lib/a2ui", () => {
+  const MockA2UIClient = vi.fn().mockImplementation(function(this: any) {
+    this.connect = vi.fn().mockResolvedValue(undefined);
+    this.disconnect = vi.fn();
+    this.send = vi.fn();
+    this.on = vi.fn();
+    this.off = vi.fn();
+    this.onMessage = vi.fn();
+    this.isConnected = false;
+  });
+  return { A2UIClient: MockA2UIClient };
+});
 
 // Dynamic import to get the mocked version
 const { useA2UI } = await import("../useA2UI");

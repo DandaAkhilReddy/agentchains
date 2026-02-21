@@ -32,7 +32,7 @@ describe("A2UICard", () => {
 
   it("uses empty alt when neither image_alt nor title provided", () => {
     render(<A2UICard data={{ image: "https://example.com/img.png" }} />);
-    const img = screen.getByRole("img");
+    const img = screen.getByRole("presentation");
     expect(img).toHaveAttribute("alt", "");
   });
 
