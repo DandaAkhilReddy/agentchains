@@ -256,6 +256,6 @@ async def openid_configuration():
             "client_secret_post",
             "none",
         ],
-        "code_challenge_methods_supported": ["S256", "plain"],
+        "code_challenge_methods_supported": ["S256"],
         "subject_types_supported": ["public"],
     }

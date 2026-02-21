@@ -105,7 +105,7 @@ async def authorize(
         redirect_uri: Where to redirect after authorization.
         scope: Requested scopes.
         code_challenge: PKCE code challenge.
-        code_challenge_method: PKCE method, "S256" or "plain".
+        code_challenge_method: PKCE method, must be "S256".
         user_id: The authenticated user granting authorization.
 
     Returns:
@@ -496,14 +496,12 @@ def _verify_pkce(
     Returns:
         True if the verifier matches the challenge.
     """
-    if code_challenge_method == "S256":
-        # S256: BASE64URL(SHA256(code_verifier)) == code_challenge
-        digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
-        computed_challenge = (
-            base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
-        )
-        return computed_challenge == code_challenge
-    elif code_challenge_method == "plain":
-        return code_verifier == code_challenge
-    else:
+    if code_challenge_method != "S256":
+        # Only S256 is supported; "plain" is insecure and has been removed.
         return False
+    # S256: BASE64URL(SHA256(code_verifier)) == code_challenge
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    computed_challenge = (
+        base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    )
+    return computed_challenge == code_challenge
