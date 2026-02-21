@@ -47,6 +47,31 @@ class ReindexResult(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
+# OData keywords that must not appear in user-supplied filter values
+_ODATA_KEYWORDS = {"eq", "ne", "and", "or", "not", "gt", "lt", "ge", "le"}
+
+
+def _sanitize_odata_value(value: str) -> str:
+    """Sanitize a user-supplied value before interpolation into an OData filter.
+
+    Raises HTTPException if the value contains single quotes or OData operators.
+    """
+    if "'" in value:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filter value: single quotes are not allowed",
+        )
+    # Check for OData keyword injection (whole-word match, case-insensitive)
+    tokens = value.lower().split()
+    for token in tokens:
+        if token in _ODATA_KEYWORDS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid filter value: reserved keyword '{token}'",
+            )
+    return value
+
+
 def _admin_ids() -> set[str]:
     return {v.strip() for v in settings.admin_creator_ids.split(",") if v.strip()}
 
@@ -68,7 +93,7 @@ def _build_listing_filter(
     """Construct an OData filter expression for listings."""
     parts: list[str] = []
     if category:
-        parts.append(f"category eq '{category}'")
+        parts.append(f"category eq '{_sanitize_odata_value(category)}'")
     if min_price is not None:
         parts.append(f"price_usd ge {min_price}")
     if max_price is not None:
@@ -78,7 +103,7 @@ def _build_listing_filter(
 
 def _build_category_filter(category: str | None = None) -> str | None:
     if category:
-        return f"category eq '{category}'"
+        return f"category eq '{_sanitize_odata_value(category)}'"
     return None
 
 
@@ -144,9 +169,9 @@ async def search_agents(
     svc = get_search_service()
     parts: list[str] = []
     if agent_type:
-        parts.append(f"category eq '{agent_type}'")
+        parts.append(f"category eq '{_sanitize_odata_value(agent_type)}'")
     if status:
-        parts.append(f"status eq '{status}'")
+        parts.append(f"status eq '{_sanitize_odata_value(status)}'")
     filters = " and ".join(parts) if parts else None
     data = svc.search_agents(query=query, filters=filters, top=top, skip=skip)
     return SearchResult(**data)
