@@ -5,14 +5,8 @@ on:
     branches: [master]
   workflow_dispatch:
 
-env:
-  ACR_NAME: agentchainsacr
-  ACR_IMAGE: agentchainsacr.azurecr.io/agentchains-marketplace
-  RESOURCE_GROUP: rg-agentchains
-  CONTAINER_APP: agentchains-marketplace
-
 jobs:
-  deploy-infrastructure:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,9 +16,11 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # Step 1: Deploy all infrastructure (creates ACR, Container App, etc.)
       - name: Deploy Bicep infrastructure
         run: |
           az deployment sub create \
+            --name main \
             --location eastus \
             --template-file infra/main.bicep \
             --parameters infra/parameters.prod.json \
@@ -32,25 +28,28 @@ jobs:
               tenantId='${{ secrets.AZURE_TENANT_ID }}' \
               postgresAdminLogin='${{ secrets.POSTGRES_ADMIN_LOGIN }}' \
               postgresAdminPassword='${{ secrets.POSTGRES_ADMIN_PASSWORD }}' \
-              containerRegistryLoginServer='${{ secrets.ACR_LOGIN_SERVER }}' \
-              containerRegistryUsername='${{ secrets.ACR_USERNAME }}' \
-              containerRegistryPassword='${{ secrets.ACR_PASSWORD }}' \
-              containerImage='${{ env.ACR_IMAGE }}:${{ github.sha }}'
+              jwtSecretKey='${{ secrets.JWT_SECRET_KEY }}' \
+              eventSigningSecret='${{ secrets.EVENT_SIGNING_SECRET }}' \
+              memoryEncryptionKey='${{ secrets.MEMORY_ENCRYPTION_KEY }}'
 
-  build-and-deploy:
-    needs: deploy-infrastructure
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      # Step 2: Extract ACR login server from Bicep outputs
+      - name: Get ACR login server from deployment
+        id: acr
+        run: |
+          ACR_SERVER=$(az deployment sub show \
+            --name main \
+            --query properties.outputs.acrLoginServer.value \
+            -o tsv)
+          echo "server=$ACR_SERVER" >> "$GITHUB_OUTPUT"
+          echo "ACR login server: $ACR_SERVER"
 
-      - name: Login to Azure
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
+      # Step 3: Login to ACR (now exists after Bicep deploy)
       - name: Login to ACR
-        run: az acr login --name ${{ env.ACR_NAME }}
+        run: |
+          ACR_NAME=$(echo "${{ steps.acr.outputs.server }}" | cut -d'.' -f1)
+          az acr login --name "$ACR_NAME"
 
+      # Step 4: Build and push Docker image
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -60,26 +59,34 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ env.ACR_IMAGE }}:${{ github.sha }}
-            ${{ env.ACR_IMAGE }}:latest
+            ${{ steps.acr.outputs.server }}/agentchains:${{ github.sha }}
+            ${{ steps.acr.outputs.server }}/agentchains:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to Container Apps (staging revision)
+      # Step 5: Update Container App with the real image
+      - name: Deploy to Container Apps
         run: |
           az containerapp update \
-            --name ${{ env.CONTAINER_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.ACR_IMAGE }}:${{ github.sha }} \
-            --revision-suffix staging-${{ github.run_number }}
+            --name agentchains-app-prod \
+            --resource-group rg-agentchains-prod \
+            --image "${{ steps.acr.outputs.server }}/agentchains:${{ github.sha }}"
 
-      - name: Smoke test staging
+      # Step 6: Smoke test
+      - name: Smoke test
         run: |
+          FQDN=$(az containerapp show \
+            --name agentchains-app-prod \
+            --resource-group rg-agentchains-prod \
+            --query properties.configuration.ingress.fqdn \
+            -o tsv)
+          echo "Container App FQDN: $FQDN"
+
           echo "Waiting 60s for new revision to activate..."
           sleep 60
+
           for i in 1 2 3 4 5; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io/api/v1/health)
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$FQDN/api/v1/health")
             if [ "$STATUS" = "200" ]; then
               echo "Health check passed on attempt $i"
               exit 0
@@ -89,10 +96,3 @@ jobs:
           done
           echo "Health check failed after 5 attempts"
           exit 1
-
-      - name: Promote to production traffic
-        run: |
-          az containerapp ingress traffic set \
-            --name ${{ env.CONTAINER_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --revision-weight latest=100
