@@ -54,6 +54,8 @@ class CircuitBreaker:
 
     def record_success(self) -> None:
         """Record a successful call. Resets the breaker to CLOSED if in HALF_OPEN."""
+        # Access property to trigger OPEN -> HALF_OPEN if recovery timeout elapsed
+        _ = self.state
         with self._lock:
             if self._state == CircuitState.HALF_OPEN:
                 self._success_count += 1
