@@ -39,16 +39,17 @@ param postgresAdminLogin string
 @secure()
 param postgresAdminPassword string
 
-@description('Container registry login server')
-param containerRegistryLoginServer string = ''
-
-@description('Container registry username')
+@description('JWT secret key for authentication')
 @secure()
-param containerRegistryUsername string = ''
+param jwtSecretKey string = ''
 
-@description('Container registry password')
+@description('Event signing secret for webhook verification')
 @secure()
-param containerRegistryPassword string = ''
+param eventSigningSecret string = ''
+
+@description('Memory encryption key for secure storage')
+@secure()
+param memoryEncryptionKey string = ''
 
 @description('Container image to deploy')
 param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
@@ -75,6 +76,7 @@ var searchName = '${projectName}-search-${environment}'
 var serviceBusName = '${projectName}-sb-${environment}'
 var insightsName = '${projectName}-insights-${environment}'
 var openAiName = '${projectName}-openai-${environment}'
+var acrName = replace('${projectName}acr${environment}', '-', '')
 
 // ============================================================================
 // Resource Group
@@ -186,6 +188,18 @@ module servicebus 'modules/servicebus.bicep' = {
   }
 }
 
+// --- Container Registry ---
+module acr 'modules/acr.bicep' = {
+  name: 'deploy-acr'
+  scope: resourceGroup
+  params: {
+    location: location
+    name: acrName
+    environment: environment
+    tags: tags
+  }
+}
+
 // --- Compute (dependencies inferred from module output references) ---
 module containerapp 'modules/containerapp.bicep' = {
   name: 'deploy-containerapp'
@@ -195,16 +209,46 @@ module containerapp 'modules/containerapp.bicep' = {
     name: containerAppName
     environment: environment
     containerImage: containerImage
-    registryLoginServer: !empty(containerRegistryLoginServer) ? containerRegistryLoginServer : 'mcr.microsoft.com'
-    registryUsername: containerRegistryUsername
-    registryPassword: containerRegistryPassword
+    registryLoginServer: acr.outputs.loginServer
+    registryUsername: acr.outputs.adminUsername
+    registryPassword: acr.outputs.adminPassword
     logAnalyticsWorkspaceId: insights.outputs.logAnalyticsWorkspaceId
     logAnalyticsSharedKey: insights.outputs.logAnalyticsSharedKey
+    corsOrigins: environment == 'prod' ? [
+      'https://agentchains.ai'
+      'https://www.agentchains.ai'
+    ] : [
+      '*'
+    ]
     tags: tags
     envVars: [
       {
         name: 'ENVIRONMENT'
         value: environment
+      }
+      {
+        name: 'DATABASE_URL'
+        value: 'postgresql+asyncpg://${postgresAdminLogin}:${postgresAdminPassword}@${postgres.outputs.fqdn}:5432/agentchains?ssl=require'
+      }
+      {
+        name: 'REDIS_URL'
+        value: 'rediss://:${redis.outputs.primaryKey}@${redis.outputs.hostName}:${redis.outputs.sslPort}/0'
+      }
+      {
+        name: 'JWT_SECRET_KEY'
+        value: jwtSecretKey
+      }
+      {
+        name: 'EVENT_SIGNING_SECRET'
+        value: eventSigningSecret
+      }
+      {
+        name: 'MEMORY_ENCRYPTION_KEY'
+        value: memoryEncryptionKey
+      }
+      {
+        name: 'CORS_ORIGINS'
+        value: environment == 'prod' ? 'https://agentchains.ai,https://www.agentchains.ai' : '*'
       }
       {
         name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
@@ -235,8 +279,16 @@ module containerapp 'modules/containerapp.bicep' = {
         value: storage.outputs.primaryBlobEndpoint
       }
       {
+        name: 'AZURE_BLOB_CONNECTION'
+        value: storage.outputs.connectionString
+      }
+      {
         name: 'AZURE_SEARCH_ENDPOINT'
         value: search.outputs.endpoint
+      }
+      {
+        name: 'AZURE_SEARCH_KEY'
+        value: search.outputs.adminKey
       }
       {
         name: 'AZURE_OPENAI_ENDPOINT'
@@ -249,6 +301,10 @@ module containerapp 'modules/containerapp.bicep' = {
       {
         name: 'AZURE_OPENAI_EMBEDDING_DEPLOYMENT'
         value: openai.outputs.embeddingDeploymentName
+      }
+      {
+        name: 'AZURE_SERVICEBUS_CONNECTION'
+        value: servicebus.outputs.connectionString
       }
       {
         name: 'SERVICEBUS_NAMESPACE'
@@ -264,6 +320,9 @@ module containerapp 'modules/containerapp.bicep' = {
 
 @description('The resource group name')
 output resourceGroupName string = resourceGroup.name
+
+@description('The ACR login server')
+output acrLoginServer string = acr.outputs.loginServer
 
 @description('The Container App URL')
 output containerAppUrl string = containerapp.outputs.url
