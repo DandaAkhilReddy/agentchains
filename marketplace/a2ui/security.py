@@ -7,14 +7,24 @@ from __future__ import annotations
 
 import html
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+# Regex to match HTML/XML tags for defense-in-depth stripping
+_TAG_RE = re.compile(r"<[^>]+>")
+
 
 def sanitize_html(text: str) -> str:
-    """Strip dangerous tags/attributes using html.escape (basic XSS prevention)."""
-    return html.escape(text, quote=True)
+    """Strip HTML tags then escape remaining content (defense-in-depth XSS prevention).
+
+    Two-layer approach:
+    1. Strip all HTML/XML tags via regex (removes <script>, <img onerror=...>, etc.)
+    2. html.escape any remaining angle brackets or special chars
+    """
+    stripped = _TAG_RE.sub("", text)
+    return html.escape(stripped, quote=True)
 
 
 def validate_payload_size(data: dict[str, Any], max_bytes: int = 1_048_576) -> bool:
