@@ -1,12 +1,13 @@
-"""Razorpay payment integration stub for Indian creators.
+"""Razorpay payment integration for Indian creators.
 
 Provides UPI, bank transfer, and card payment support via Razorpay.
-Currently operates in simulated mode. Replace with real Razorpay SDK
-calls when ready for production.
+Operates in simulated mode when no key is provided, uses real SDK when configured.
 
-Requires: RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET env vars.
+Requires: RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET env vars for live mode.
 """
 
+import hashlib
+import hmac
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -16,12 +17,29 @@ logger = logging.getLogger(__name__)
 
 
 class RazorpayPaymentService:
-    """Razorpay payment operations (stubbed for development)."""
+    """Razorpay payment operations with real SDK support."""
 
     def __init__(self, key_id: str = "", key_secret: str = ""):
         self.key_id = key_id
         self.key_secret = key_secret
-        self._simulated = not key_id or key_id.startswith("rzp_test_")
+        self._simulated = not key_id
+        self._client = None
+
+        if key_id and not self._simulated:
+            try:
+                import razorpay
+
+                self._client = razorpay.Client(auth=(key_id, key_secret))
+                logger.info(
+                    "Razorpay SDK initialized (mode=%s)",
+                    "test" if key_id.startswith("rzp_test_") else "live",
+                )
+            except ImportError:
+                logger.warning(
+                    "razorpay package not installed — falling back to simulated mode. "
+                    "Install with: pip install razorpay>=1.4"
+                )
+                self._simulated = True
 
     async def create_order(
         self,
@@ -33,14 +51,28 @@ class RazorpayPaymentService:
         if self._simulated:
             return {
                 "id": f"order_sim_{uuid.uuid4().hex[:16]}",
-                "amount": int(amount_inr * 100),  # Razorpay uses paise
+                "amount": int(amount_inr * 100),
                 "currency": currency,
                 "receipt": receipt or f"rcpt_{uuid.uuid4().hex[:8]}",
                 "status": "created",
                 "created_at": int(datetime.now(timezone.utc).timestamp()),
                 "simulated": True,
             }
-        raise NotImplementedError("Real Razorpay integration not yet configured")
+
+        order = self._client.order.create({
+            "amount": int(amount_inr * 100),
+            "currency": currency,
+            "receipt": receipt or f"rcpt_{uuid.uuid4().hex[:8]}",
+        })
+        return {
+            "id": order["id"],
+            "amount": order["amount"],
+            "currency": order["currency"],
+            "receipt": order.get("receipt", ""),
+            "status": order["status"],
+            "created_at": order.get("created_at", 0),
+            "simulated": False,
+        }
 
     async def verify_payment(
         self,
@@ -56,7 +88,41 @@ class RazorpayPaymentService:
                 "verified": True,
                 "simulated": True,
             }
-        raise NotImplementedError("Real Razorpay integration not yet configured")
+
+        # Verify signature using HMAC-SHA256
+        message = f"{order_id}|{payment_id}"
+        expected = hmac.new(
+            self.key_secret.encode("utf-8"),
+            message.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        verified = hmac.compare_digest(expected, signature)
+        return {
+            "order_id": order_id,
+            "payment_id": payment_id,
+            "verified": verified,
+            "simulated": False,
+        }
+
+    async def fetch_payment(self, payment_id: str) -> dict:
+        """Fetch payment details from Razorpay."""
+        if self._simulated:
+            return {
+                "id": payment_id,
+                "status": "captured",
+                "simulated": True,
+            }
+
+        payment = self._client.payment.fetch(payment_id)
+        return {
+            "id": payment["id"],
+            "amount": payment["amount"],
+            "currency": payment.get("currency", "INR"),
+            "status": payment["status"],
+            "method": payment.get("method", ""),
+            "simulated": False,
+        }
 
     async def create_payout(
         self,
@@ -76,7 +142,30 @@ class RazorpayPaymentService:
                 "status": "processed",
                 "simulated": True,
             }
-        raise NotImplementedError("Real Razorpay integration not yet configured")
+
+        payout = self._client.payout.create({
+            "account_number": account_number,
+            "fund_account": {
+                "account_type": "bank_account",
+                "bank_account": {
+                    "name": "Creator Payout",
+                    "ifsc": ifsc,
+                    "account_number": account_number,
+                },
+            },
+            "amount": int(amount_inr * 100),
+            "currency": "INR",
+            "mode": mode,
+            "purpose": purpose,
+        })
+        return {
+            "id": payout["id"],
+            "amount": payout["amount"],
+            "mode": mode,
+            "purpose": purpose,
+            "status": payout["status"],
+            "simulated": False,
+        }
 
     async def create_upi_payout(
         self,
@@ -92,4 +181,21 @@ class RazorpayPaymentService:
                 "status": "processed",
                 "simulated": True,
             }
-        raise NotImplementedError("Real Razorpay integration not yet configured")
+
+        payout = self._client.payout.create({
+            "fund_account": {
+                "account_type": "vpa",
+                "vpa": {"address": vpa},
+            },
+            "amount": int(amount_inr * 100),
+            "currency": "INR",
+            "mode": "UPI",
+            "purpose": "payout",
+        })
+        return {
+            "id": payout["id"],
+            "vpa": vpa,
+            "amount": payout["amount"],
+            "status": payout["status"],
+            "simulated": False,
+        }
