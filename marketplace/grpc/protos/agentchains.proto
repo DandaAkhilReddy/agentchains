@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package agentchains;
+
+option python_package = "marketplace.grpc.protos";
+
+// Agent-to-Agent communication service
+service AgentService {
+  // Execute a task on a remote agent
+  rpc ExecuteTask (TaskRequest) returns (TaskResponse);
+
+  // Stream task progress updates
+  rpc StreamTaskProgress (TaskRequest) returns (stream ProgressUpdate);
+
+  // Health check
+  rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse);
+
+  // Discover agent capabilities
+  rpc GetCapabilities (CapabilitiesRequest) returns (CapabilitiesResponse);
+
+  // Send a message between agents
+  rpc SendMessage (AgentMessage) returns (AgentMessageResponse);
+
+  // Bidirectional streaming for real-time collaboration
+  rpc Collaborate (stream AgentMessage) returns (stream AgentMessage);
+}
+
+// Orchestration service for workflow management
+service OrchestrationService {
+  // Execute a workflow node
+  rpc ExecuteNode (NodeExecutionRequest) returns (NodeExecutionResponse);
+
+  // Report node completion
+  rpc ReportNodeStatus (NodeStatusReport) returns (NodeStatusResponse);
+}
+
+message TaskRequest {
+  string task_id = 1;
+  string agent_id = 2;
+  string task_type = 3;
+  string input_json = 4;
+  int32 timeout_seconds = 5;
+  map<string, string> metadata = 6;
+}
+
+message TaskResponse {
+  string task_id = 1;
+  string status = 2;  // success, error, timeout
+  string output_json = 3;
+  double cost_usd = 4;
+  int64 execution_time_ms = 5;
+  string error_message = 6;
+}
+
+message ProgressUpdate {
+  string task_id = 1;
+  double progress = 2;  // 0.0 to 1.0
+  string message = 3;
+  string status = 4;
+  int64 timestamp_ms = 5;
+}
+
+message HealthCheckRequest {
+  string service_name = 1;
+}
+
+message HealthCheckResponse {
+  string status = 1;  // ok, degraded, unavailable
+  string version = 2;
+  int32 active_tasks = 3;
+  double uptime_seconds = 4;
+}
+
+message CapabilitiesRequest {
+  string agent_id = 1;
+}
+
+message CapabilitiesResponse {
+  string agent_id = 1;
+  string agent_name = 2;
+  repeated string capabilities = 3;
+  repeated string supported_tasks = 4;
+  int32 max_concurrent_tasks = 5;
+}
+
+message AgentMessage {
+  string message_id = 1;
+  string from_agent_id = 2;
+  string to_agent_id = 3;
+  string message_type = 4;
+  string payload_json = 5;
+  int64 timestamp_ms = 6;
+}
+
+message AgentMessageResponse {
+  string message_id = 1;
+  bool acknowledged = 2;
+  string error = 3;
+}
+
+message NodeExecutionRequest {
+  string execution_id = 1;
+  string node_id = 2;
+  string node_type = 3;
+  string input_json = 4;
+  string agent_endpoint = 5;
+  int32 timeout_seconds = 6;
+}
+
+message NodeExecutionResponse {
+  string execution_id = 1;
+  string node_id = 2;
+  string status = 3;
+  string output_json = 4;
+  double cost_usd = 5;
+}
+
+message NodeStatusReport {
+  string execution_id = 1;
+  string node_id = 2;
+  string status = 3;
+  string output_json = 4;
+  double cost_usd = 5;
+  string error_message = 6;
+}
+
+message NodeStatusResponse {
+  bool acknowledged = 1;
+}
