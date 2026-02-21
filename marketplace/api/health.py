@@ -1,9 +1,13 @@
+import logging
+
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from marketplace.database import get_db
+
+logger = logging.getLogger(__name__)
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.listing import DataListing
 from marketplace.models.transaction import Transaction
@@ -41,8 +45,9 @@ async def readiness_check(db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(text("SELECT 1"))
         return {"status": "ready", "database": "connected"}
-    except Exception as e:
+    except Exception:
+        logger.exception("Readiness check failed — database unreachable")
         return JSONResponse(
             status_code=503,
-            content={"status": "not_ready", "database": str(e)},
+            content={"status": "not_ready", "database": "unavailable"},
         )
