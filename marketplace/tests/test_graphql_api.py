@@ -161,3 +161,207 @@ class TestGraphQLTypeConstructors:
         assert a1.id != a2.id
         assert a1.name != a2.name
         assert a1.agent_type != a2.agent_type
+
+
+class TestGraphQLDataLoaders:
+    """Tests for DataLoader classes preventing N+1 queries."""
+
+    @pytest.mark.asyncio
+    async def test_agent_loader_init(self):
+        from marketplace.graphql.dataloaders import AgentLoader
+        db = AsyncMock()
+        loader = AgentLoader(db)
+        assert loader.db is db
+
+    @pytest.mark.asyncio
+    async def test_listing_loader_init(self):
+        from marketplace.graphql.dataloaders import ListingLoader
+        db = AsyncMock()
+        loader = ListingLoader(db)
+        assert loader.db is db
+
+    @pytest.mark.asyncio
+    async def test_agent_loader_missing_keys(self):
+        from marketplace.graphql.dataloaders import AgentLoader
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=mock_result)
+        loader = AgentLoader(db)
+        results = await loader.load(["id1", "id2"])
+        assert results == [None, None]
+
+    @pytest.mark.asyncio
+    async def test_listing_loader_missing_keys(self):
+        from marketplace.graphql.dataloaders import ListingLoader
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=mock_result)
+        loader = ListingLoader(db)
+        results = await loader.load(["l1", "l2"])
+        assert results == [None, None]
+
+    @pytest.mark.asyncio
+    async def test_agent_loader_preserves_order(self):
+        from marketplace.graphql.dataloaders import AgentLoader
+        agent1 = MagicMock(); agent1.id = "a1"
+        agent2 = MagicMock(); agent2.id = "a2"
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [agent2, agent1]
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=mock_result)
+        loader = AgentLoader(db)
+        results = await loader.load(["a1", "a2"])
+        assert results[0].id == "a1"
+        assert results[1].id == "a2"
+
+
+class TestGraphQLQueryResolvers:
+    """Tests for query resolver module."""
+
+    def test_query_class_exists(self):
+        from marketplace.graphql.resolvers.queries import Query
+        assert Query is not None
+
+    def test_query_has_agents_field(self):
+        from marketplace.graphql.resolvers.queries import Query
+        assert hasattr(Query, "agents")
+
+    def test_query_has_listings_field(self):
+        from marketplace.graphql.resolvers.queries import Query
+        assert hasattr(Query, "listings")
+
+    def test_query_has_transactions_field(self):
+        from marketplace.graphql.resolvers.queries import Query
+        assert hasattr(Query, "transactions")
+
+    def test_query_has_agent_field(self):
+        from marketplace.graphql.resolvers.queries import Query
+        assert hasattr(Query, "agent")
+
+    def test_query_has_listing_field(self):
+        from marketplace.graphql.resolvers.queries import Query
+        assert hasattr(Query, "listing")
+
+    def test_query_has_workflows_field(self):
+        from marketplace.graphql.resolvers.queries import Query
+        assert hasattr(Query, "workflows")
+
+
+class TestGraphQLMutationResolvers:
+    """Tests for mutation resolver module."""
+
+    def test_mutation_class_exists(self):
+        from marketplace.graphql.resolvers.mutations import Mutation
+        assert Mutation is not None
+
+    def test_mutation_has_create_agent(self):
+        from marketplace.graphql.resolvers.mutations import Mutation
+        assert hasattr(Mutation, "create_agent")
+
+    def test_mutation_has_create_listing(self):
+        from marketplace.graphql.resolvers.mutations import Mutation
+        assert hasattr(Mutation, "create_listing")
+
+    def test_mutation_has_create_workflow(self):
+        from marketplace.graphql.resolvers.mutations import Mutation
+        assert hasattr(Mutation, "create_workflow")
+
+
+class TestGraphQLPagination:
+    """Tests for pagination types."""
+
+    def test_page_info_fields(self):
+        from marketplace.graphql.schema import PageInfo
+        pi = PageInfo(has_next_page=True, has_previous_page=False, total_count=100)
+        assert pi.has_next_page is True
+        assert pi.has_previous_page is False
+        assert pi.total_count == 100
+
+    def test_agent_connection_fields(self):
+        from marketplace.graphql.schema import AgentConnection, AgentType, PageInfo
+        agent = AgentType(id="1", name="A", description="", agent_type="buyer", status="active", created_at="")
+        pi = PageInfo(has_next_page=False, has_previous_page=False, total_count=1)
+        conn = AgentConnection(items=[agent], page_info=pi)
+        assert len(conn.items) == 1
+        assert conn.page_info.total_count == 1
+
+    def test_listing_connection_fields(self):
+        from marketplace.graphql.schema import ListingConnection, ListingType, PageInfo
+        listing = ListingType(id="1", title="T", category="C", price_usdc=1.0, quality_score=0.5, status="active", seller_id="s1")
+        pi = PageInfo(has_next_page=True, has_previous_page=True, total_count=50)
+        conn = ListingConnection(items=[listing], page_info=pi)
+        assert conn.page_info.has_next_page is True
+        assert conn.page_info.has_previous_page is True
+
+    def test_empty_connection(self):
+        from marketplace.graphql.schema import AgentConnection, PageInfo
+        pi = PageInfo(has_next_page=False, has_previous_page=False, total_count=0)
+        conn = AgentConnection(items=[], page_info=pi)
+        assert len(conn.items) == 0
+        assert conn.page_info.total_count == 0
+
+
+class TestGraphQLRouter:
+    """Tests for the GraphQL router setup."""
+
+    def test_graphql_router_exists(self):
+        from marketplace.graphql.schema import graphql_router
+        assert graphql_router is not None
+
+    def test_schema_str_not_empty(self):
+        from marketplace.graphql.schema import schema
+        schema_str = schema.as_str()
+        assert len(schema_str) > 100
+
+    def test_schema_has_create_listing_mutation(self):
+        from marketplace.graphql.schema import schema
+        schema_str = schema.as_str()
+        assert "createListing" in schema_str
+
+
+class TestGraphQLHelperConversions:
+    """Tests for ORM-to-GraphQL type conversion helpers."""
+
+    def test_agent_to_type_conversion(self):
+        from marketplace.graphql.schema import _agent_to_type
+        agent = MagicMock()
+        agent.id = "a1"; agent.name = "Test"; agent.description = "desc"
+        agent.agent_type = "buyer"; agent.status = "active"; agent.created_at = None
+        result = _agent_to_type(agent)
+        assert result.id == "a1" and result.name == "Test"
+
+    def test_listing_to_type_conversion(self):
+        from marketplace.graphql.schema import _listing_to_type
+        listing = MagicMock()
+        listing.id = "l1"; listing.title = "Data"; listing.category = "NLP"
+        listing.seller_id = "s1"; listing.price_usdc = 9.99
+        listing.quality_score = 0.95; listing.status = "active"
+        result = _listing_to_type(listing)
+        assert result.title == "Data" and result.price_usdc == 9.99
+
+    def test_transaction_to_type_conversion(self):
+        from marketplace.graphql.schema import _transaction_to_type
+        tx = MagicMock()
+        tx.id = "t1"; tx.listing_id = "l1"; tx.buyer_id = "b1"; tx.seller_id = "s1"
+        tx.amount_usdc = 25.0; tx.status = "completed"; tx.initiated_at = None
+        result = _transaction_to_type(tx)
+        assert result.amount_usdc == 25.0 and result.status == "completed"
+
+    def test_agent_to_type_none_description(self):
+        from marketplace.graphql.schema import _agent_to_type
+        agent = MagicMock()
+        agent.id = "a2"; agent.name = "X"; agent.description = None
+        agent.agent_type = "seller"; agent.status = "active"; agent.created_at = None
+        result = _agent_to_type(agent)
+        assert result.description == ""
+
+    def test_listing_to_type_none_quality(self):
+        from marketplace.graphql.schema import _listing_to_type
+        listing = MagicMock()
+        listing.id = "l2"; listing.title = "T"; listing.category = "C"
+        listing.seller_id = "s2"; listing.price_usdc = 1.0
+        listing.quality_score = None; listing.status = "active"
+        result = _listing_to_type(listing)
+        assert result.quality_score == 0.0
