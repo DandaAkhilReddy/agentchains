@@ -6,8 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  deploy-infrastructure:
     runs-on: ubuntu-latest
+    outputs:
+      acr-server: ${{ steps.acr.outputs.server }}
     steps:
       - uses: actions/checkout@v4
 
@@ -16,7 +18,6 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Step 1: Deploy all infrastructure (creates ACR, Container App, etc.)
       - name: Deploy Bicep infrastructure
         run: |
           az deployment sub create \
@@ -32,7 +33,6 @@ jobs:
               eventSigningSecret='${{ secrets.EVENT_SIGNING_SECRET }}' \
               memoryEncryptionKey='${{ secrets.MEMORY_ENCRYPTION_KEY }}'
 
-      # Step 2: Extract ACR login server from Bicep outputs
       - name: Get ACR login server from deployment
         id: acr
         run: |
@@ -43,13 +43,22 @@ jobs:
           echo "server=$ACR_SERVER" >> "$GITHUB_OUTPUT"
           echo "ACR login server: $ACR_SERVER"
 
-      # Step 3: Login to ACR (now exists after Bicep deploy)
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    needs: deploy-infrastructure
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: Login to ACR
         run: |
-          ACR_NAME=$(echo "${{ steps.acr.outputs.server }}" | cut -d'.' -f1)
+          ACR_NAME=$(echo "${{ needs.deploy-infrastructure.outputs.acr-server }}" | cut -d'.' -f1)
           az acr login --name "$ACR_NAME"
 
-      # Step 4: Build and push Docker image
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -59,21 +68,20 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ steps.acr.outputs.server }}/agentchains:${{ github.sha }}
-            ${{ steps.acr.outputs.server }}/agentchains:latest
+            ${{ needs.deploy-infrastructure.outputs.acr-server }}/agentchains:${{ github.sha }}
+            ${{ needs.deploy-infrastructure.outputs.acr-server }}/agentchains:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Step 5: Update Container App with the real image
-      - name: Deploy to Container Apps
+      - name: Deploy new revision to Container Apps
         run: |
           az containerapp update \
             --name agentchains-app-prod \
             --resource-group rg-agentchains-prod \
-            --image "${{ steps.acr.outputs.server }}/agentchains:${{ github.sha }}"
+            --image "${{ needs.deploy-infrastructure.outputs.acr-server }}/agentchains:${{ github.sha }}" \
+            --revision-suffix "${{ github.sha }}"
 
-      # Step 6: Smoke test
-      - name: Smoke test
+      - name: Smoke test new revision
         run: |
           FQDN=$(az containerapp show \
             --name agentchains-app-prod \
@@ -89,10 +97,25 @@ jobs:
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$FQDN/api/v1/health")
             if [ "$STATUS" = "200" ]; then
               echo "Health check passed on attempt $i"
-              exit 0
+              break
             fi
             echo "Attempt $i: status=$STATUS, retrying in 15s..."
             sleep 15
           done
-          echo "Health check failed after 5 attempts"
-          exit 1
+
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed after 5 attempts"
+            exit 1
+          fi
+
+      - name: Promote traffic to new revision
+        run: |
+          LATEST_REVISION=$(az containerapp revision list \
+            --name agentchains-app-prod \
+            --resource-group rg-agentchains-prod \
+            --query "[-1].name" -o tsv)
+          echo "Promoting revision: $LATEST_REVISION"
+          az containerapp ingress traffic set \
+            --name agentchains-app-prod \
+            --resource-group rg-agentchains-prod \
+            --revision-weight "$LATEST_REVISION=100"
