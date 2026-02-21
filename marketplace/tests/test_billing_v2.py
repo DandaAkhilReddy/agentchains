@@ -74,3 +74,47 @@ class TestBillingPlanModel:
     async def test_plan_custom_agents_limit(self, db):
         plan = BillingPlan(name="CL", agents_limit=50); db.add(plan); await db.commit(); await db.refresh(plan)
         assert plan.agents_limit == 50
+
+    async def test_plan_description_default_empty(self, db):
+        plan = BillingPlan(name="ND"); db.add(plan); await db.commit(); await db.refresh(plan)
+        assert plan.description == ""
+
+    async def test_plan_large_limits(self, db):
+        plan = BillingPlan(name="Big", api_calls_limit=10_000_000, storage_gb_limit=5000)
+        db.add(plan); await db.commit(); await db.refresh(plan)
+        assert plan.api_calls_limit == 10_000_000 and plan.storage_gb_limit == 5000
+
+
+class TestSubscriptionModel:
+
+    async def test_create_subscription(self, db):
+        plan = await _create_plan(db)
+        sub = Subscription(agent_id=_uid(), plan_id=plan.id)
+        db.add(sub); await db.commit(); await db.refresh(sub)
+        assert sub.id and sub.status == "active" and sub.cancel_at_period_end is False
+
+    async def test_subscription_period_dates(self, db):
+        plan = await _create_plan(db); now = datetime.now(timezone.utc)
+        sub = Subscription(agent_id=_uid(), plan_id=plan.id, current_period_start=now, current_period_end=now + timedelta(days=30))
+        db.add(sub); await db.commit(); await db.refresh(sub)
+        assert (sub.current_period_end - sub.current_period_start).days == 30
+
+    async def test_subscription_cancel_flag(self, db):
+        plan = await _create_plan(db)
+        sub = Subscription(agent_id=_uid(), plan_id=plan.id, cancel_at_period_end=True)
+        db.add(sub); await db.commit(); await db.refresh(sub)
+        assert sub.cancel_at_period_end is True
+
+    async def test_subscription_stripe_id(self, db):
+        plan = await _create_plan(db)
+        sub = Subscription(agent_id=_uid(), plan_id=plan.id, stripe_subscription_id="sub_123")
+        db.add(sub); await db.commit(); await db.refresh(sub)
+        assert sub.stripe_subscription_id == "sub_123"
+
+    async def test_subscription_statuses(self, db):
+        plan = await _create_plan(db)
+        for s in ("active", "cancelled", "past_due", "trialing"):
+            db.add(Subscription(agent_id=_uid(), plan_id=plan.id, status=s))
+        await db.commit()
+        result = await db.execute(select(Subscription))
+        assert {s.status for s in result.scalars().all()} == {"active", "cancelled", "past_due", "trialing"}
