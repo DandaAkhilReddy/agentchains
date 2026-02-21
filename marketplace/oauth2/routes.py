@@ -2,10 +2,11 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.config import settings
 from marketplace.database import get_db
 from marketplace.oauth2 import server
 
@@ -122,13 +123,46 @@ async def authorize_endpoint(
     code_challenge: Optional[str] = Query(default=None),
     code_challenge_method: Optional[str] = Query(default=None),
     user_id: Optional[str] = Query(default=None),
+    authorization: Optional[str] = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """Authorization endpoint - issues an authorization code.
 
-    In production, this would render a consent screen. For the API,
-    it directly issues a code (assuming the user has already authenticated).
+    Requires a valid Bearer token to identify the user. The user_id query
+    parameter is only accepted in non-production environments for testing.
     """
+    from marketplace.core.auth import decode_token
+
+    authenticated_user_id: Optional[str] = None
+
+    # Extract user_id from auth token if provided
+    if authorization:
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            try:
+                payload = decode_token(parts[1])
+                authenticated_user_id = payload.get("sub")
+            except Exception:
+                raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+    is_prod = settings.environment.lower() in {"production", "prod"}
+
+    if authenticated_user_id:
+        resolved_user_id = authenticated_user_id
+    elif user_id and not is_prod:
+        # Allow query-param user_id only in non-production (testing convenience)
+        resolved_user_id = user_id
+    elif user_id and is_prod:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header required in production; user_id query param is not accepted",
+        )
+    else:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header with Bearer token is required",
+        )
+
     try:
         code = await server.authorize(
             db=db,
@@ -137,7 +171,7 @@ async def authorize_endpoint(
             scope=scope,
             code_challenge=code_challenge or "",
             code_challenge_method=code_challenge_method or "",
-            user_id=user_id or "",
+            user_id=resolved_user_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
