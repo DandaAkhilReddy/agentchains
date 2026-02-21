@@ -1,9 +1,7 @@
 """Tests for A2UI session manager — session lifecycle, rate limiting, pending inputs."""
 
-import asyncio
 import uuid
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -19,39 +17,43 @@ class TestSessionCreation:
     def test_create_session(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
         assert session is not None
-        assert session["agent_id"] == "agent-1"
-        assert session["user_id"] == "user-1"
+        assert session.agent_id == "agent-1"
+        assert session.user_id == "user-1"
 
     def test_create_session_generates_id(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
-        assert "session_id" in session
-        assert len(session["session_id"]) > 0
+        assert hasattr(session, "session_id")
+        assert len(session.session_id) > 0
 
     def test_create_session_unique_ids(self, session_manager):
         s1 = session_manager.create_session("agent-1", "user-1")
         s2 = session_manager.create_session("agent-1", "user-1")
-        assert s1["session_id"] != s2["session_id"]
+        assert s1.session_id != s2.session_id
 
-    def test_create_session_sets_status(self, session_manager):
+    def test_create_session_has_expected_fields(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
-        assert session.get("status") in ("active", "connected", None) or "session_id" in session
+        # A2UISession is a dataclass with these fields
+        assert hasattr(session, "session_id")
+        assert hasattr(session, "agent_id")
+        assert hasattr(session, "user_id")
+        assert hasattr(session, "created_at")
 
     def test_create_multiple_sessions_for_same_agent(self, session_manager):
         s1 = session_manager.create_session("agent-1", "user-1")
         s2 = session_manager.create_session("agent-1", "user-2")
-        assert s1["session_id"] != s2["session_id"]
+        assert s1.session_id != s2.session_id
 
     def test_create_session_stores_in_manager(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
-        retrieved = session_manager.get_session(session["session_id"])
+        retrieved = session_manager.get_session(session.session_id)
         assert retrieved is not None
 
 
 class TestSessionRetrieval:
     def test_get_existing_session(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
-        retrieved = session_manager.get_session(session["session_id"])
-        assert retrieved["agent_id"] == "agent-1"
+        retrieved = session_manager.get_session(session.session_id)
+        assert retrieved.agent_id == "agent-1"
 
     def test_get_nonexistent_session_returns_none(self, session_manager):
         result = session_manager.get_session("nonexistent-id")
@@ -59,78 +61,64 @@ class TestSessionRetrieval:
 
     def test_get_session_after_close_returns_none(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
-        session_manager.close_session(session["session_id"])
-        result = session_manager.get_session(session["session_id"])
+        session_manager.close_session(session.session_id)
+        result = session_manager.get_session(session.session_id)
         assert result is None
 
 
 class TestSessionClose:
     def test_close_session(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
-        result = session_manager.close_session(session["session_id"])
-        assert result is True or result is None  # depends on impl
+        result = session_manager.close_session(session.session_id)
+        # close_session returns None (no return statement)
+        assert result is None
 
     def test_close_nonexistent_session(self, session_manager):
         result = session_manager.close_session("nonexistent-id")
-        # Should not raise
-        assert result is False or result is None
+        # Should not raise; returns None
+        assert result is None
 
     def test_close_session_removes_from_manager(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
-        session_manager.close_session(session["session_id"])
-        assert session_manager.get_session(session["session_id"]) is None
+        session_manager.close_session(session.session_id)
+        assert session_manager.get_session(session.session_id) is None
 
 
 class TestSessionRateLimiting:
     def test_rate_limit_allows_initial_requests(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
-        sid = session["session_id"]
-        # First request should be allowed
-        allowed = session_manager.check_rate_limit(sid)
+        # check_rate_limit takes an A2UISession object, not a string
+        allowed = session_manager.check_rate_limit(session)
         assert allowed is True
 
     def test_rate_limit_allows_multiple_requests(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
-        sid = session["session_id"]
         for _ in range(10):
-            allowed = session_manager.check_rate_limit(sid)
+            allowed = session_manager.check_rate_limit(session)
             assert allowed is True
 
-    def test_rate_limit_unknown_session(self, session_manager):
-        result = session_manager.check_rate_limit("nonexistent")
-        assert result is False or result is True  # impl-specific
+    def test_rate_limit_rejects_after_exceeding_limit(self, session_manager):
+        mgr = A2UISessionManager(rate_limit_per_minute=5)
+        session = mgr.create_session("agent-1", "user-1")
+        for _ in range(5):
+            mgr.check_rate_limit(session)
+        # 6th request should be rejected
+        assert mgr.check_rate_limit(session) is False
 
 
 class TestSessionPendingInputs:
-    def test_add_pending_input(self, session_manager):
+    def test_pending_inputs_initially_empty(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
-        sid = session["session_id"]
-        request_id = "req-1"
-        session_manager.add_pending_input(sid, request_id, {"prompt": "Enter name"})
-        pending = session_manager.get_pending_input(sid, request_id)
-        assert pending is not None
+        assert len(session.pending_inputs) == 0
 
-    def test_get_nonexistent_pending_input(self, session_manager):
+    def test_resolve_pending_input_returns_false_for_nonexistent(self, session_manager):
         session = session_manager.create_session("agent-1", "user-1")
-        result = session_manager.get_pending_input(session["session_id"], "nonexistent")
-        assert result is None
+        result = session_manager.resolve_pending_input(session.session_id, "nonexistent", "val")
+        assert result is False
 
-    def test_resolve_pending_input(self, session_manager):
-        session = session_manager.create_session("agent-1", "user-1")
-        sid = session["session_id"]
-        session_manager.add_pending_input(sid, "req-1", {"prompt": "Enter"})
-        session_manager.resolve_pending_input(sid, "req-1", "value")
-        # After resolving, should be gone
-        result = session_manager.get_pending_input(sid, "req-1")
-        assert result is None
-
-    def test_multiple_pending_inputs(self, session_manager):
-        session = session_manager.create_session("agent-1", "user-1")
-        sid = session["session_id"]
-        session_manager.add_pending_input(sid, "req-1", {"prompt": "Name"})
-        session_manager.add_pending_input(sid, "req-2", {"prompt": "Age"})
-        assert session_manager.get_pending_input(sid, "req-1") is not None
-        assert session_manager.get_pending_input(sid, "req-2") is not None
+    def test_resolve_pending_input_returns_false_for_unknown_session(self, session_manager):
+        result = session_manager.resolve_pending_input("nonexistent-sid", "req-1", "val")
+        assert result is False
 
 
 class TestConcurrentSessions:
@@ -142,7 +130,7 @@ class TestConcurrentSessions:
         assert len(sessions) == 100
         # All sessions should be retrievable
         for s in sessions:
-            assert session_manager.get_session(s["session_id"]) is not None
+            assert session_manager.get_session(s.session_id) is not None
 
     def test_close_all_sessions(self, session_manager):
         sessions = []
@@ -150,13 +138,18 @@ class TestConcurrentSessions:
             s = session_manager.create_session("agent-1", f"user-{i}")
             sessions.append(s)
         for s in sessions:
-            session_manager.close_session(s["session_id"])
+            session_manager.close_session(s.session_id)
         for s in sessions:
-            assert session_manager.get_session(s["session_id"]) is None
+            assert session_manager.get_session(s.session_id) is None
 
     def test_mixed_create_and_close(self, session_manager):
         s1 = session_manager.create_session("agent-1", "user-1")
         s2 = session_manager.create_session("agent-1", "user-2")
-        session_manager.close_session(s1["session_id"])
-        assert session_manager.get_session(s1["session_id"]) is None
-        assert session_manager.get_session(s2["session_id"]) is not None
+        session_manager.close_session(s1.session_id)
+        assert session_manager.get_session(s1.session_id) is None
+        assert session_manager.get_session(s2.session_id) is not None
+
+    def test_active_count(self, session_manager):
+        session_manager.create_session("agent-1", "user-1")
+        session_manager.create_session("agent-1", "user-2")
+        assert session_manager.active_count == 2
