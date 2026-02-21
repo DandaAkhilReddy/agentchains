@@ -6,9 +6,10 @@ lightgbm when available.  Falls back gracefully when neither is installed.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
-import pickle
 from pathlib import Path
 from typing import Any
 
@@ -67,7 +68,8 @@ class ReputationModel:
         self._model: Any = None
         self._model_type: str = "none"
         self._model_dir = Path(model_dir) if model_dir else _DEFAULT_MODEL_DIR
-        self._model_path = self._model_dir / "reputation_model.pkl"
+        self._model_path = self._model_dir / "reputation_model.joblib"
+        self._hash_path = self._model_dir / "reputation_model.sha256"
 
         # Try to load a saved model on init
         if self._model_path.exists():
@@ -176,11 +178,20 @@ class ReputationModel:
 
         return max(0.0, min(1.0, score))
 
+    @staticmethod
+    def _compute_file_hash(path: Path) -> str:
+        """Compute SHA-256 hash of a file."""
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
     def save(self, path: str | None = None) -> str:
-        """Save the trained model to disk.
+        """Save the trained model to disk using joblib (safer than pickle).
 
         Args:
-            path: File path to save to. Defaults to models/reputation_model.pkl.
+            path: File path to save to. Defaults to models/reputation_model.joblib.
 
         Returns:
             The path where the model was saved.
@@ -188,41 +199,63 @@ class ReputationModel:
         Raises:
             RuntimeError: If no model is loaded.
         """
+        import joblib
+
         if self._model is None:
             raise RuntimeError("No model to save. Train a model first.")
 
         save_path = Path(path) if path else self._model_path
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(save_path, "wb") as f:
-            pickle.dump(
-                {
-                    "model": self._model,
-                    "model_type": self._model_type,
-                    "features": FEATURE_NAMES,
-                },
-                f,
-            )
+        joblib.dump(
+            {
+                "model": self._model,
+                "model_type": self._model_type,
+                "features": FEATURE_NAMES,
+            },
+            save_path,
+        )
 
-        logger.info("Saved reputation model to %s", save_path)
+        # Write SHA-256 hash for integrity verification on load
+        hash_path = save_path.with_suffix(".sha256")
+        file_hash = self._compute_file_hash(save_path)
+        hash_path.write_text(file_hash)
+
+        logger.info("Saved reputation model to %s (hash: %s)", save_path, file_hash)
         return str(save_path)
 
     def load(self, path: str | None = None) -> None:
-        """Load a model from disk.
+        """Load a model from disk using joblib with SHA-256 integrity check.
 
         Args:
-            path: File path to load from. Defaults to models/reputation_model.pkl.
+            path: File path to load from. Defaults to models/reputation_model.joblib.
 
         Raises:
             FileNotFoundError: If the model file does not exist.
+            ValueError: If the model file fails integrity verification.
         """
+        import joblib
+
         load_path = Path(path) if path else self._model_path
 
         if not load_path.exists():
             raise FileNotFoundError(f"Model file not found: {load_path}")
 
-        with open(load_path, "rb") as f:
-            data = pickle.load(f)  # noqa: S301
+        # Verify integrity before loading
+        hash_path = load_path.with_suffix(".sha256")
+        if hash_path.exists():
+            expected_hash = hash_path.read_text().strip()
+            actual_hash = self._compute_file_hash(load_path)
+            if actual_hash != expected_hash:
+                raise ValueError(
+                    f"Model file integrity check failed: {load_path} "
+                    f"(expected {expected_hash}, got {actual_hash})"
+                )
+            logger.info("Model file integrity verified: %s", load_path)
+        else:
+            logger.warning("No hash file found for %s — skipping integrity check", load_path)
+
+        data = joblib.load(load_path)
 
         if isinstance(data, dict):
             self._model = data.get("model")
