@@ -19,6 +19,25 @@ from marketplace.models.memory_share import MemoryAccessLog, MemorySharePolicy
 logger = logging.getLogger(__name__)
 
 
+class MemoryFederationService:
+    """Facade for cross-agent memory federation operations."""
+
+    def __init__(self, db: AsyncSession | None = None):
+        self._db = db
+
+    async def create_share(self, db: AsyncSession | None = None, **kwargs) -> Any:
+        session = db or self._db
+        return await create_share_policy(session, **kwargs)
+
+    async def revoke_share(self, db: AsyncSession | None = None, **kwargs) -> bool:
+        session = db or self._db
+        return await revoke_share_policy(session, **kwargs)
+
+    async def check(self, db: AsyncSession | None = None, **kwargs) -> Any:
+        session = db or self._db
+        return await check_access(session, **kwargs)
+
+
 async def create_share_policy(
     db: AsyncSession,
     owner_agent_id: str,
