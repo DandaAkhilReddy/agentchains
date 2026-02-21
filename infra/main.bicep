@@ -51,9 +51,6 @@ param eventSigningSecret string = ''
 @secure()
 param memoryEncryptionKey string = ''
 
-@description('Azure region for PostgreSQL (eastus may be restricted)')
-param postgresLocation string = 'westus2'
-
 @description('Container image to deploy')
 param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
@@ -70,7 +67,7 @@ var tags = {
 }
 
 // Resource naming (Azure naming conventions)
-var postgresServerName = '${projectName}-pgdb-${environment}'
+// var postgresServerName = '${projectName}-pgdb-${environment}'
 var redisName = '${projectName}-redis-${environment}'
 var storageAccountName = replace('${projectName}st${environment}', '-', '')
 var keyVaultName = '${projectName}-kv-${environment}'
@@ -108,18 +105,19 @@ module insights 'modules/insights.bicep' = {
 }
 
 // --- Data Layer ---
-module postgres 'modules/postgres.bicep' = {
-  name: 'deploy-postgres'
-  scope: resourceGroup
-  params: {
-    location: postgresLocation
-    serverName: postgresServerName
-    adminLogin: postgresAdminLogin
-    adminPassword: postgresAdminPassword
-    environment: environment
-    tags: tags
-  }
-}
+// TODO: Re-enable once PostgreSQL Flexible Server quota is approved
+// module postgres 'modules/postgres.bicep' = {
+//   name: 'deploy-postgres'
+//   scope: resourceGroup
+//   params: {
+//     location: location
+//     serverName: postgresServerName
+//     adminLogin: postgresAdminLogin
+//     adminPassword: postgresAdminPassword
+//     environment: environment
+//     tags: tags
+//   }
+// }
 
 module redis 'modules/redis.bicep' = {
   name: 'deploy-redis'
@@ -231,7 +229,7 @@ module containerapp 'modules/containerapp.bicep' = {
       }
       {
         name: 'DATABASE_URL'
-        value: 'postgresql+asyncpg://${postgresAdminLogin}:${postgresAdminPassword}@${postgres.outputs.fqdn}:5432/agentchains?ssl=require'
+        value: 'postgresql+asyncpg://${postgresAdminLogin}:${postgresAdminPassword}@placeholder:5432/agentchains?ssl=require'
       }
       {
         name: 'REDIS_URL'
@@ -263,7 +261,7 @@ module containerapp 'modules/containerapp.bicep' = {
       }
       {
         name: 'POSTGRES_HOST'
-        value: postgres.outputs.fqdn
+        value: 'placeholder'
       }
       {
         name: 'POSTGRES_DB'
@@ -333,8 +331,8 @@ output containerAppUrl string = containerapp.outputs.url
 @description('The Container App FQDN')
 output containerAppFqdn string = containerapp.outputs.fqdn
 
-@description('The PostgreSQL server FQDN')
-output postgresFqdn string = postgres.outputs.fqdn
+// TODO: Re-enable once PostgreSQL is deployed
+// output postgresFqdn string = postgres.outputs.fqdn
 
 @description('The Redis hostname')
 output redisHostName string = redis.outputs.hostName
