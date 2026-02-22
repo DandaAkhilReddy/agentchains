@@ -46,8 +46,8 @@ param corsOrigins array = ['*']
 // Scaling configuration based on environment
 var minReplicas = environment == 'prod' ? 2 : 0
 var maxReplicas = environment == 'prod' ? 10 : 2
-var cpuCores = '0.25'
-var memorySize = '0.5Gi'
+var cpuCores = environment == 'prod' ? '0.5' : '0.25'
+var memorySize = environment == 'prod' ? '1.0Gi' : '0.5Gi'
 
 // Container Apps Environment
 resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
@@ -55,7 +55,7 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   location: location
   tags: tags
   properties: {
-    zoneRedundant: false
+    zoneRedundant: environment == 'prod'
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: !empty(logAnalyticsWorkspaceId) ? {
@@ -161,6 +161,26 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             http: {
               metadata: {
                 concurrentRequests: environment == 'prod' ? '50' : '10'
+              }
+            }
+          }
+          {
+            name: 'cpu-scaling'
+            custom: {
+              type: 'cpu'
+              metadata: {
+                type: 'Utilization'
+                value: '70'
+              }
+            }
+          }
+          {
+            name: 'memory-scaling'
+            custom: {
+              type: 'memory'
+              metadata: {
+                type: 'Utilization'
+                value: '70'
               }
             }
           }
