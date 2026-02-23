@@ -8,8 +8,10 @@ import asyncio
 import json
 import logging
 from collections import defaultdict, deque
+from collections.abc import Callable, Coroutine
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Any
 
 import httpx
 from sqlalchemy import select
@@ -80,13 +82,24 @@ async def list_workflows(
 # Execution lifecycle
 # ---------------------------------------------------------------------------
 
+# Type alias for the optional node event callback.
+# Signature: async def on_node_event(event_type, node_id, node_type, **kwargs) -> None
+OnNodeEventCallback = Callable[..., Coroutine[Any, Any, None]] | None
+
+
 async def execute_workflow(
     db: AsyncSession,
     workflow_id: str,
     initiated_by: str,
     input_data: dict | None = None,
+    on_node_event: OnNodeEventCallback = None,
 ) -> WorkflowExecution:
-    """Start executing a workflow. Creates an execution record and runs the DAG."""
+    """Start executing a workflow. Creates an execution record and runs the DAG.
+
+    Args:
+        on_node_event: Optional async callback invoked when node lifecycle
+            events occur (node_started, node_completed, node_failed).
+    """
     workflow = await get_workflow(db, workflow_id)
     if not workflow:
         raise ValueError(f"Workflow not found: {workflow_id}")
@@ -104,7 +117,7 @@ async def execute_workflow(
 
     # Run the DAG asynchronously
     try:
-        await _run_dag(db, execution, workflow)
+        await _run_dag(db, execution, workflow, on_node_event=on_node_event)
     except Exception as exc:
         execution.status = "failed"
         execution.error_message = str(exc)
@@ -251,6 +264,7 @@ async def _run_dag(
     db: AsyncSession,
     execution: WorkflowExecution,
     workflow: WorkflowDefinition,
+    on_node_event: OnNodeEventCallback = None,
 ) -> None:
     """Internal: parse the workflow graph and execute layer-by-layer."""
     execution.status = "running"
@@ -292,7 +306,10 @@ async def _run_dag(
                 if dep_id in node_outputs:
                     node_input[dep_id] = node_outputs[dep_id]
 
-            result = await _execute_node(db, execution.id, node_def, node_input)
+            result = await _execute_node(
+                db, execution.id, node_def, node_input,
+                on_node_event=on_node_event,
+            )
             return node_id, result
 
         # Execute all nodes in this layer concurrently
@@ -339,6 +356,7 @@ async def _execute_node(
     execution_id: str,
     node_def: dict,
     input_data: dict,
+    on_node_event: OnNodeEventCallback = None,
 ) -> dict:
     """Dispatch a single node execution based on its type.
 
@@ -366,6 +384,18 @@ async def _execute_node(
     db.add(node_exec)
     await db.commit()
     await db.refresh(node_exec)
+
+    # Fire node_started callback
+    if on_node_event:
+        try:
+            await on_node_event(
+                "node_started", node_id, node_type,
+                agent_id=config.get("agent_id"),
+            )
+        except Exception:
+            logger.debug("on_node_event callback failed for node_started", exc_info=True)
+
+    started_at = datetime.now(timezone.utc)
 
     try:
         if node_type == "agent_call":
@@ -396,6 +426,22 @@ async def _execute_node(
         node_exec.completed_at = datetime.now(timezone.utc)
         await db.commit()
 
+        # Fire node_completed callback
+        if on_node_event:
+            completed_at = datetime.now(timezone.utc)
+            duration_ms = int((completed_at - started_at).total_seconds() * 1000)
+            try:
+                await on_node_event(
+                    "node_completed", node_id, node_type,
+                    agent_id=config.get("agent_id"),
+                    output_json=node_exec.output_json,
+                    input_json=node_exec.input_json,
+                    cost_usd=node_exec.cost_usd,
+                    duration_ms=duration_ms,
+                )
+            except Exception:
+                logger.debug("on_node_event callback failed for node_completed", exc_info=True)
+
         return result
 
     except Exception as exc:
@@ -404,6 +450,18 @@ async def _execute_node(
         node_exec.completed_at = datetime.now(timezone.utc)
         await db.commit()
         logger.error("Node '%s' in execution '%s' failed: %s", node_id, execution_id, exc)
+
+        # Fire node_failed callback
+        if on_node_event:
+            try:
+                await on_node_event(
+                    "node_failed", node_id, node_type,
+                    agent_id=config.get("agent_id"),
+                    error_message=str(exc),
+                )
+            except Exception:
+                logger.debug("on_node_event callback failed for node_failed", exc_info=True)
+
         raise
 
 
