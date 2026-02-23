@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../../test/test-utils";
 import WalletPage from "../WalletPage";
 import * as authModule from "../../hooks/useAuth";
 import * as api from "../../lib/api";
 
+const mockToast = vi.fn();
+
 vi.mock("../../hooks/useAuth");
 vi.mock("../../components/Toast", () => ({
-  useToast: () => ({ toast: vi.fn() }),
+  useToast: () => ({ toast: mockToast }),
 }));
 vi.mock("../../lib/api", () => ({
   fetchWalletBalance: vi.fn(),
@@ -92,8 +94,10 @@ describe("WalletPage", () => {
       id: "dep-1",
       amount_usd: 10,
       status: "completed",
-    });
+    } as any);
   });
+
+  /* ── Auth Gate ── */
 
   it("shows auth gate when not authenticated", () => {
     mockUnauthenticated();
@@ -244,5 +248,564 @@ describe("WalletPage", () => {
     await user.click(signInBtn);
 
     expect(loginFn).toHaveBeenCalledWith("my-wallet-jwt");
+  });
+
+  /* ── Additional tests for coverage ── */
+
+  it("Sign In button is disabled when input is empty", () => {
+    mockUnauthenticated();
+    renderWithProviders(<WalletPage />);
+
+    const signInBtn = screen.getByRole("button", { name: "Sign In" });
+    expect(signInBtn).toBeDisabled();
+  });
+
+  it("does not login when input is only whitespace", async () => {
+    const loginFn = vi.fn();
+    vi.spyOn(authModule, "useAuth").mockReturnValue({
+      token: "",
+      login: loginFn,
+      logout: vi.fn(),
+      isAuthenticated: false,
+    } as any);
+
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    const input = screen.getByPlaceholderText("eyJhbGciOi...");
+    await user.type(input, "   ");
+
+    // Button should be disabled for whitespace-only input
+    const signInBtn = screen.getByRole("button", { name: "Sign In" });
+    expect(signInBtn).toBeDisabled();
+  });
+
+  it("login via Enter key", async () => {
+    const loginFn = vi.fn();
+    vi.spyOn(authModule, "useAuth").mockReturnValue({
+      token: "",
+      login: loginFn,
+      logout: vi.fn(),
+      isAuthenticated: false,
+    } as any);
+
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    const input = screen.getByPlaceholderText("eyJhbGciOi...");
+    await user.type(input, "jwt-via-enter{Enter}");
+
+    expect(loginFn).toHaveBeenCalledWith("jwt-via-enter");
+  });
+
+  it("shows Popular badge on Builder package", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Popular")).toBeInTheDocument();
+    });
+  });
+
+  it("shows Buy Credits button", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Buy Credits")).toBeInTheDocument();
+    });
+  });
+
+  it("Buy Credits button is disabled when no amount is entered", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Buy Credits")).toBeInTheDocument();
+    });
+
+    const buyBtn = screen.getByText("Buy Credits").closest("button");
+    expect(buyBtn).toBeDisabled();
+  });
+
+  it("selects a credit package and sets deposit amount", async () => {
+    mockAuthenticated();
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Starter")).toBeInTheDocument();
+    });
+
+    // Click the Starter package ($5)
+    await user.click(screen.getByText("Starter"));
+
+    // The buy button should now be enabled since amount is set
+    const buyBtn = screen.getByText("Buy Credits").closest("button");
+    expect(buyBtn).not.toBeDisabled();
+  });
+
+  it("deposit flow calls createDeposit and shows success toast", async () => {
+    mockAuthenticated();
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Starter")).toBeInTheDocument();
+    });
+
+    // Click the Starter package ($5)
+    await user.click(screen.getByText("Starter"));
+
+    // Click Buy Credits
+    await user.click(screen.getByText("Buy Credits"));
+
+    await waitFor(() => {
+      expect(api.createDeposit).toHaveBeenCalledWith("test-wallet-token", {
+        amount_usd: 5,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.stringContaining("$5.00"),
+        "success",
+      );
+    });
+  });
+
+  it("deposit error shows error toast", async () => {
+    mockAuthenticated();
+    vi.mocked(api.createDeposit).mockRejectedValue(new Error("Payment failed"));
+
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Builder")).toBeInTheDocument();
+    });
+
+    // Click Builder package ($10)
+    await user.click(screen.getByText("Builder"));
+
+    // Click Buy Credits
+    await user.click(screen.getByText("Buy Credits"));
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith("Payment failed", "error");
+    });
+  });
+
+  it("custom amount input clears selected package", async () => {
+    mockAuthenticated();
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Starter")).toBeInTheDocument();
+    });
+
+    // First select a package
+    await user.click(screen.getByText("Pro"));
+
+    // Then type a custom amount - this should clear the package selection
+    const customInput = screen.getByPlaceholderText("Custom amount");
+    await user.type(customInput, "42");
+
+    // Buy button should be enabled with the custom amount
+    const buyBtn = screen.getByText("Buy Credits").closest("button");
+    expect(buyBtn).not.toBeDisabled();
+  });
+
+  it("deposit with custom amount", async () => {
+    mockAuthenticated();
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Custom amount")).toBeInTheDocument();
+    });
+
+    const customInput = screen.getByPlaceholderText("Custom amount");
+    await user.type(customInput, "15");
+
+    await user.click(screen.getByText("Buy Credits"));
+
+    await waitFor(() => {
+      expect(api.createDeposit).toHaveBeenCalledWith("test-wallet-token", {
+        amount_usd: 15,
+      });
+    });
+  });
+
+  it("renders transaction entries with type labels", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Deposit")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Purchase")).toBeInTheDocument();
+    expect(screen.getByText("Sale")).toBeInTheDocument();
+  });
+
+  it("renders transaction amounts with correct sign", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      // Deposit: +$50.00
+      expect(screen.getByText("+$50.00")).toBeInTheDocument();
+    });
+    // Purchase: -$15.00
+    expect(screen.getByText("-$15.00")).toBeInTheDocument();
+    // Sale: +$25.00
+    expect(screen.getByText("+$25.00")).toBeInTheDocument();
+  });
+
+  it("renders transaction fees", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      // tx-2 has fee 0.75
+      expect(screen.getByText("$0.75")).toBeInTheDocument();
+    });
+    // tx-3 has fee 1.25
+    expect(screen.getByText("$1.25")).toBeInTheDocument();
+  });
+
+  it("renders -- for zero fees", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      // tx-1 has fee_amount 0, should show "--"
+      const dashes = screen.getAllByText("--");
+      expect(dashes.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("renders transaction memos", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Initial deposit")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Bought listing")).toBeInTheDocument();
+    expect(screen.getByText("Sold data pack")).toBeInTheDocument();
+  });
+
+  it("renders entry with empty memo as --", async () => {
+    mockAuthenticated();
+    vi.mocked(api.fetchWalletHistory).mockResolvedValue({
+      entries: [
+        {
+          id: "tx-nomemo",
+          from_account_id: null,
+          to_account_id: "acct-1",
+          amount: 10,
+          fee_amount: 0,
+          tx_type: "bonus",
+          reference_id: null,
+          memo: "",
+          created_at: "2026-02-20T10:00:00Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    });
+
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Bonus")).toBeInTheDocument();
+    });
+    // memo is empty, should render "--"
+    const dashes = screen.getAllByText("--");
+    expect(dashes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders unknown tx_type with fallback styling", async () => {
+    mockAuthenticated();
+    vi.mocked(api.fetchWalletHistory).mockResolvedValue({
+      entries: [
+        {
+          id: "tx-unknown",
+          from_account_id: null,
+          to_account_id: "acct-1",
+          amount: 1,
+          fee_amount: 0,
+          tx_type: "custom_type",
+          reference_id: null,
+          memo: "Custom tx",
+          created_at: "2026-02-20T10:00:00Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    });
+
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      // Falls back to using the raw tx_type as label
+      expect(screen.getByText("custom_type")).toBeInTheDocument();
+    });
+  });
+
+  it("renders refund tx_type with correct label", async () => {
+    mockAuthenticated();
+    vi.mocked(api.fetchWalletHistory).mockResolvedValue({
+      entries: [
+        {
+          id: "tx-refund",
+          from_account_id: "acct-2",
+          to_account_id: "acct-1",
+          amount: 5,
+          fee_amount: 0,
+          tx_type: "refund",
+          reference_id: null,
+          memo: "Refund processed",
+          created_at: "2026-02-20T12:00:00Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    });
+
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Refund")).toBeInTheDocument();
+    });
+    // Refund is an income type, should show +
+    expect(screen.getByText("+$5.00")).toBeInTheDocument();
+  });
+
+  it("renders fee tx_type with correct amount sign", async () => {
+    mockAuthenticated();
+    vi.mocked(api.fetchWalletHistory).mockResolvedValue({
+      entries: [
+        {
+          id: "tx-fee",
+          from_account_id: "acct-1",
+          to_account_id: "acct-platform",
+          amount: 2,
+          fee_amount: 0,
+          tx_type: "fee",
+          reference_id: null,
+          memo: "Platform fee",
+          created_at: "2026-02-20T13:00:00Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    });
+
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      // Fee is not income, should show - sign
+      expect(screen.getByText("-$2.00")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Platform fee")).toBeInTheDocument();
+  });
+
+  it("renders transfer tx_type with correct label", async () => {
+    mockAuthenticated();
+    vi.mocked(api.fetchWalletHistory).mockResolvedValue({
+      entries: [
+        {
+          id: "tx-transfer",
+          from_account_id: "acct-1",
+          to_account_id: "acct-other",
+          amount: 8,
+          fee_amount: 0.4,
+          tx_type: "transfer",
+          reference_id: null,
+          memo: "Agent transfer",
+          created_at: "2026-02-20T14:00:00Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    });
+
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Transfer")).toBeInTheDocument();
+    });
+  });
+
+  it("shows pagination when total > 10", async () => {
+    mockAuthenticated();
+    vi.mocked(api.fetchWalletHistory).mockResolvedValue({
+      entries: Array.from({ length: 10 }, (_, i) => ({
+        id: `tx-${i}`,
+        from_account_id: null,
+        to_account_id: "acct-1",
+        amount: 10 + i,
+        fee_amount: 0,
+        tx_type: "deposit",
+        reference_id: null,
+        memo: `Deposit ${i}`,
+        created_at: "2026-02-20T10:00:00Z",
+      })),
+      total: 25,
+      page: 1,
+      page_size: 10,
+    });
+
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+    });
+  });
+
+  it("does not show pagination when total <= 10", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Transaction History")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/Page \d+ of \d+/)).not.toBeInTheDocument();
+  });
+
+  it("clicking filter tab changes the active filter", async () => {
+    mockAuthenticated();
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Deposits")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Deposits"));
+
+    // After clicking the filter, the query should re-fetch with the new filter
+    await waitFor(() => {
+      expect(api.fetchWalletHistory).toHaveBeenCalledWith(
+        "test-wallet-token",
+        expect.objectContaining({ tx_type: "deposit" }),
+      );
+    });
+  });
+
+  it("clicking Sales tab triggers re-fetch with sale filter", async () => {
+    mockAuthenticated();
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Sales")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Sales"));
+
+    await waitFor(() => {
+      expect(api.fetchWalletHistory).toHaveBeenCalledWith(
+        "test-wallet-token",
+        expect.objectContaining({ tx_type: "sale" }),
+      );
+    });
+  });
+
+  it("shows quick buy presets subtitle text", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Quick buy presets -- or enter any custom amount below",
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows credit amounts for packages", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      // Each package shows the dollar amount (e.g. "$5", "$10")
+      expect(screen.getByText("$5")).toBeInTheDocument();
+    });
+    expect(screen.getByText("$10")).toBeInTheDocument();
+    expect(screen.getByText("$25")).toBeInTheDocument();
+    expect(screen.getByText("$50")).toBeInTheDocument();
+  });
+
+  it("shows credit text for each package", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("$5.00 credit")).toBeInTheDocument();
+    });
+    expect(screen.getByText("$10.00 credit")).toBeInTheDocument();
+    expect(screen.getByText("$25.00 credit")).toBeInTheDocument();
+    expect(screen.getByText("$50.00 credit")).toBeInTheDocument();
+  });
+
+  it("handles balance with zero values", async () => {
+    mockAuthenticated();
+    vi.mocked(api.fetchWalletBalance).mockResolvedValue({
+      balance: 0,
+      total_deposited: 0,
+      total_earned: 0,
+      total_spent: 0,
+      total_fees_paid: 0,
+    });
+
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      // All should show $0.00
+      const zeros = screen.getAllByText("$0.00");
+      expect(zeros.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows DataTable column headers", async () => {
+    mockAuthenticated();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Type")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Amount")).toBeInTheDocument();
+    expect(screen.getByText("Memo")).toBeInTheDocument();
+    expect(screen.getByText("Date")).toBeInTheDocument();
+  });
+
+  it("selecting Scale package sets deposit to $50", async () => {
+    mockAuthenticated();
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Scale")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Scale"));
+    await user.click(screen.getByText("Buy Credits"));
+
+    await waitFor(() => {
+      expect(api.createDeposit).toHaveBeenCalledWith("test-wallet-token", {
+        amount_usd: 50,
+      });
+    });
   });
 });
