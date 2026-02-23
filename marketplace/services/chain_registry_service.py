@@ -229,3 +229,67 @@ async def get_chain_template(
         select(ChainTemplate).where(ChainTemplate.id == template_id)
     )
     return result.scalar_one_or_none()
+
+
+async def fork_chain_template(
+    db: AsyncSession,
+    source_template_id: str,
+    new_author_id: str,
+    name: str | None = None,
+    graph_json: str | None = None,
+) -> ChainTemplate:
+    """Fork (clone) a chain template, optionally modifying name or graph.
+
+    Creates a new WorkflowDefinition and ChainTemplate with
+    ``forked_from_id`` pointing back to the original.
+    """
+    source = await get_chain_template(db, source_template_id)
+    if not source:
+        raise ValueError("Source chain template not found")
+
+    final_graph_json = graph_json or source.graph_json
+
+    # Validate new graph if caller provided one
+    if graph_json:
+        try:
+            graph = json.loads(graph_json)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise ValueError("graph_json must be valid JSON") from exc
+        await validate_graph_agents(db, graph)
+
+    final_name = name or f"Fork of {source.name}"
+
+    workflow = await create_workflow(
+        db,
+        name=f"chain:{final_name}",
+        graph_json=final_graph_json,
+        owner_id=new_author_id,
+        description=source.description,
+        max_budget_usd=source.max_budget_usd,
+    )
+
+    forked = ChainTemplate(
+        name=final_name,
+        description=source.description,
+        category=source.category,
+        workflow_id=workflow.id,
+        graph_json=final_graph_json,
+        author_id=new_author_id,
+        forked_from_id=source_template_id,
+        version=1,
+        status="active",
+        tags_json=source.tags_json,
+        required_capabilities_json=source.required_capabilities_json,
+        max_budget_usd=source.max_budget_usd,
+    )
+    db.add(forked)
+    await db.commit()
+    await db.refresh(forked)
+
+    logger.info(
+        "Forked chain template %s → %s (author %s)",
+        source_template_id,
+        forked.id,
+        new_author_id,
+    )
+    return forked
