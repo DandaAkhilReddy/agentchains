@@ -184,3 +184,123 @@ async def archive_chain_template(
     template.status = "archived"
     await db.commit()
     return {"detail": "Chain template archived", "template_id": template_id}
+
+
+# ── Fork / Execute / Execution Endpoints ──────────────────────────
+
+
+@router.post("/chain-templates/{template_id}/fork", status_code=201)
+async def fork_chain_template(
+    template_id: str,
+    req: ChainTemplateForkRequest,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Fork an existing chain template, optionally modifying name or graph."""
+    try:
+        forked = await chain_registry_service.fork_chain_template(
+            db,
+            source_template_id=template_id,
+            new_author_id=agent_id,
+            name=req.name,
+            graph_json=req.graph_json,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _template_to_dict(forked)
+
+
+@router.post("/chain-templates/{template_id}/execute", status_code=202)
+async def execute_chain(
+    template_id: str,
+    req: ChainExecuteRequest,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Execute a chain template. Returns execution_id immediately (async)."""
+    try:
+        execution = await chain_registry_service.execute_chain(
+            db,
+            template_id=template_id,
+            initiated_by=agent_id,
+            input_data=req.input_data,
+            idempotency_key=req.idempotency_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _execution_to_dict(execution)
+
+
+@router.get("/chain-executions/{execution_id}")
+async def get_chain_execution(
+    execution_id: str,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Get chain execution status and details."""
+    execution = await chain_registry_service.get_chain_execution(db, execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail="Chain execution not found")
+    return _execution_to_dict(execution)
+
+
+@router.get("/chain-executions/{execution_id}/provenance")
+async def get_chain_provenance(
+    execution_id: str,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Get provenance data. Access restricted to initiator and template author."""
+    try:
+        provenance = await chain_registry_service.get_chain_provenance(
+            db,
+            chain_execution_id=execution_id,
+            requesting_agent_id=agent_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    if provenance.get("error") == "forbidden":
+        raise HTTPException(
+            status_code=403,
+            detail="Only the chain initiator or template author can view provenance",
+        )
+    return provenance
+
+
+@router.get("/chain-templates/{template_id}/executions")
+async def list_chain_executions(
+    template_id: str,
+    status: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """List executions for a specific chain template."""
+    template = await chain_registry_service.get_chain_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Chain template not found")
+
+    base = select(ChainExecution).where(
+        ChainExecution.chain_template_id == template_id
+    )
+    if status:
+        base = base.where(ChainExecution.status == status)
+
+    count_q = select(func.count()).select_from(base.subquery())
+    total_result = await db.execute(count_q)
+    total = total_result.scalar() or 0
+
+    query = (
+        base.order_by(ChainExecution.created_at.desc()).offset(offset).limit(limit)
+    )
+    result = await db.execute(query)
+    executions = list(result.scalars().all())
+
+    return {
+        "executions": [_execution_to_dict(e) for e in executions],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
