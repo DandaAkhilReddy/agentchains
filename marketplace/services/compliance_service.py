@@ -80,7 +80,7 @@ async def export_agent_data(
             "role": "buyer" if t.buyer_id == agent_id else "seller",
             "amount_usdc": float(t.amount_usdc),
             "status": t.status,
-            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "created_at": t.initiated_at.isoformat() if t.initiated_at else None,
         }
         for t in transactions
     ]
