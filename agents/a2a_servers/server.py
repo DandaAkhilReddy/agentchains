@@ -77,6 +77,7 @@ def create_a2a_app(
     # ── Agent Card Endpoint ─────────────────────────────────
 
     @app.get("/.well-known/agent.json")
+    @app.get("/.well-known/agent-card.json")
     async def get_agent_card():
         """Serve the A2A agent card for discovery."""
         return agent_card

@@ -3,6 +3,9 @@
 import json
 from typing import Any
 
+# A2A Extension URI for AgentChains chaining metadata
+AGENTCHAINS_CHAINING_EXT = "https://agentchains.ai/ext/chaining/v1"
+
 
 def generate_agent_card(
     name: str,
@@ -12,6 +15,7 @@ def generate_agent_card(
     capabilities: list[str] | None = None,
     auth_schemes: list[dict[str, str]] | None = None,
     version: str = "0.1.0",
+    chaining_params: dict[str, Any] | None = None,
 ) -> dict:
     """Generate an A2A-compliant agent card.
 
@@ -37,14 +41,24 @@ def generate_agent_card(
     if auth_schemes is None:
         auth_schemes = [{"scheme": "bearer", "description": "JWT bearer token"}]
 
+    caps_dict: dict[str, Any] = {cap: True for cap in capabilities}
+
+    if chaining_params is not None:
+        caps_dict["extensions"] = [
+            {
+                "uri": AGENTCHAINS_CHAINING_EXT,
+                "required": False,
+                "description": "AgentChains chaining metadata",
+                "params": chaining_params,
+            }
+        ]
+
     return {
         "name": name,
         "description": description,
         "url": url,
         "version": version,
-        "capabilities": {
-            cap: True for cap in capabilities
-        },
+        "capabilities": caps_dict,
         "authentication": {
             "schemes": auth_schemes,
         },
@@ -63,12 +77,17 @@ def generate_agent_card(
     }
 
 
-def agent_card_from_marketplace(agent_data: dict, base_url: str) -> dict:
+def agent_card_from_marketplace(
+    agent_data: dict,
+    base_url: str,
+    chaining_params: dict[str, Any] | None = None,
+) -> dict:
     """Generate an agent card from marketplace registration data.
 
     Args:
         agent_data: Dict from marketplace agent registration (id, name, description, capabilities)
         base_url: URL where the A2A server runs
+        chaining_params: Optional AgentChains chaining extension metadata
 
     Returns:
         A2A AgentCard dict
@@ -98,4 +117,5 @@ def agent_card_from_marketplace(agent_data: dict, base_url: str) -> dict:
         url=base_url,
         skills=skills,
         version="0.1.0",
+        chaining_params=chaining_params,
     )
