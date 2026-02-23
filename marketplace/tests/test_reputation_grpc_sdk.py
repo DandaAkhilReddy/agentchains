@@ -908,7 +908,7 @@ class TestPaymentReconciliation:
         mock_settings.stripe_webhook_secret = "whsec_123"
 
         with patch("marketplace.config.settings", mock_settings):
-            with patch("marketplace.services.stripe_service.StripePaymentService") as MockSvc:
+            with patch("marketplace.services.payment_reconciliation_service.StripePaymentService") as MockSvc:
                 result = await reconcile_stripe_payments(mock_db)
         assert result["provider"] == "stripe"
         assert result["total_checked"] == 0
@@ -947,7 +947,7 @@ class TestPaymentReconciliation:
 
         with patch("marketplace.config.settings", mock_settings):
             with patch(
-                "marketplace.services.stripe_service.StripePaymentService",
+                "marketplace.services.payment_reconciliation_service.StripePaymentService",
                 return_value=mock_service_instance,
             ):
                 result = await reconcile_stripe_payments(mock_db)
@@ -968,7 +968,7 @@ class TestPaymentReconciliation:
         mock_settings.razorpay_key_secret = "rzp_test_secret"
 
         with patch("marketplace.config.settings", mock_settings):
-            with patch("marketplace.services.razorpay_service.RazorpayPaymentService") as MockSvc:
+            with patch("marketplace.services.payment_reconciliation_service.RazorpayPaymentService") as MockSvc:
                 result = await reconcile_razorpay_payments(mock_db)
         assert result["provider"] == "razorpay"
         assert result["total_checked"] == 0
@@ -1019,7 +1019,7 @@ class TestPaymentReconciliation:
         mock_settings.stripe_webhook_secret = "whsec_123"
 
         with patch("marketplace.config.settings", mock_settings):
-            with patch("marketplace.services.stripe_service.StripePaymentService"):
+            with patch("marketplace.services.payment_reconciliation_service.StripePaymentService"):
                 result = await reconcile_stripe_payments(mock_db)
         assert "reconciled_at" in result
         # Verify it parses as an ISO datetime
