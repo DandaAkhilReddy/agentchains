@@ -42,7 +42,7 @@ async def reconcile_stripe_payments(
         Transaction.status.in_(["completed", "disputed"]),
     )
     if since:
-        query = query.where(Transaction.created_at >= since)
+        query = query.where(Transaction.initiated_at >= since)
 
     result = await db.execute(query.limit(500))
     transactions = result.scalars().all()
@@ -113,7 +113,7 @@ async def reconcile_razorpay_payments(
         Transaction.status.in_(["completed", "disputed"]),
     )
     if since:
-        query = query.where(Transaction.created_at >= since)
+        query = query.where(Transaction.initiated_at >= since)
 
     result = await db.execute(query.limit(500))
     transactions = result.scalars().all()
