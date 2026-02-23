@@ -49,6 +49,33 @@ import {
   fetchRedemptions,
   cancelRedemption,
   fetchRedemptionMethods,
+  // V2 exports
+  onboardAgentV2,
+  attestRuntimeV2,
+  runKnowledgeChallengeV2,
+  fetchAgentTrustV2,
+  fetchAgentTrustPublicV2,
+  fetchDashboardAgentMeV2,
+  fetchDashboardCreatorMeV2,
+  fetchDashboardAgentPublicV2,
+  fetchOpenMarketAnalyticsV2,
+  importMemorySnapshotV2,
+  verifyMemorySnapshotV2,
+  fetchMemorySnapshotV2,
+  fetchStreamTokenV2,
+  fetchAdminOverviewV2,
+  fetchAdminFinanceV2,
+  fetchAdminUsageV2,
+  fetchAdminAgentsV2,
+  fetchAdminSecurityEventsV2,
+  fetchAdminPendingPayoutsV2,
+  approveAdminPayoutV2,
+  rejectAdminPayoutV2,
+  fetchAdminStreamTokenV2,
+  createWebhookSubscriptionV2,
+  fetchWebhookSubscriptionsV2,
+  deleteWebhookSubscriptionV2,
+  fetchSystemMetrics,
 } from "../api";
 
 describe("api.ts", () => {
@@ -699,6 +726,559 @@ describe("api.ts", () => {
       await expect(fetchMyEarnings("invalid-token")).rejects.toThrow(
         "API 403: Forbidden"
       );
+    });
+
+    test("authPut throws on error response", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 422,
+          text: () => Promise.resolve("Validation Error"),
+        } as Response)
+      );
+
+      await expect(
+        updateCreatorProfile("token", { display_name: "x" })
+      ).rejects.toThrow("API 422: Validation Error");
+    });
+
+    test("authDelete throws on error response", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 404,
+          text: () => Promise.resolve("Webhook not found"),
+        } as Response)
+      );
+
+      await expect(
+        deleteOpenClawWebhook("token", "nonexistent")
+      ).rejects.toThrow("API 404: Webhook not found");
+    });
+
+    test("authPost throws on error response", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 400,
+          text: () => Promise.resolve("Bad Request"),
+        } as Response)
+      );
+
+      await expect(
+        createDeposit("token", { amount_usd: -1 })
+      ).rejects.toThrow("API 400: Bad Request");
+    });
+  });
+
+  describe("get() skips empty string params", () => {
+    test("skips empty string values in params", async () => {
+      await fetchListings({ category: "", status: "active" });
+      const call = (fetch as any).mock.calls[0][0];
+      expect(call).not.toContain("category=");
+      expect(call).toContain("status=active");
+    });
+  });
+
+  describe("getV2() helper", () => {
+    test("constructs URL with BASE_V2=/api/v2", async () => {
+      await fetchAgentTrustPublicV2("agent-1");
+      const call = (fetch as any).mock.calls[0][0];
+      expect(call).toContain("/api/v2/agents/agent-1/trust/public");
+    });
+
+    test("appends query params", async () => {
+      await fetchOpenMarketAnalyticsV2(20);
+      const call = (fetch as any).mock.calls[0][0];
+      expect(call).toContain("/api/v2/analytics/market/open");
+      expect(call).toContain("limit=20");
+    });
+
+    test("throws on non-ok response", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 500,
+          text: () => Promise.resolve("Server Error"),
+        } as Response)
+      );
+
+      await expect(fetchAgentTrustPublicV2("agent-1")).rejects.toThrow(
+        "API 500: Server Error"
+      );
+    });
+
+    test("returns parsed JSON", async () => {
+      const mockData = { agent_id: "a1", agent_trust_score: 0.9 };
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockData),
+        } as Response)
+      );
+
+      const result = await fetchAgentTrustPublicV2("a1");
+      expect(result).toEqual(mockData);
+    });
+
+    test("skips undefined and empty params", async () => {
+      await fetchDashboardAgentPublicV2("agent-1");
+      const call = (fetch as any).mock.calls[0][0];
+      expect(call).toContain("/api/v2/dashboards/agent/agent-1/public");
+    });
+  });
+
+  describe("authGetV2() helper", () => {
+    test("adds Authorization Bearer header", async () => {
+      await fetchDashboardAgentMeV2("agent-token-v2");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer agent-token-v2" },
+        })
+      );
+    });
+
+    test("passes query params", async () => {
+      await fetchAdminAgentsV2("token", { page: 2, page_size: 10, status: "active" });
+      const call = (fetch as any).mock.calls[0][0];
+      expect(call).toContain("/api/v2/admin/agents");
+      expect(call).toContain("page=2");
+      expect(call).toContain("page_size=10");
+      expect(call).toContain("status=active");
+    });
+
+    test("throws on error response", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 401,
+          text: () => Promise.resolve("Unauthorized"),
+        } as Response)
+      );
+
+      await expect(fetchDashboardAgentMeV2("bad-token")).rejects.toThrow(
+        "API 401: Unauthorized"
+      );
+    });
+  });
+
+  describe("authPostV2() helper", () => {
+    test("uses POST method with v2 base", async () => {
+      await onboardAgentV2("creator-token", {
+        name: "TestAgent",
+        agent_type: "seller",
+        public_key: "pk-123",
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/agents/onboard"),
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer creator-token",
+            "Content-Type": "application/json",
+          }),
+        })
+      );
+    });
+
+    test("sends JSON body", async () => {
+      const body = {
+        name: "TestAgent",
+        agent_type: "seller" as const,
+        public_key: "pk-123",
+        description: "A test agent",
+      };
+      await onboardAgentV2("token", body);
+      expect(fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: JSON.stringify(body),
+        })
+      );
+    });
+
+    test("throws on error response", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 409,
+          text: () => Promise.resolve("Agent already exists"),
+        } as Response)
+      );
+
+      await expect(
+        onboardAgentV2("token", {
+          name: "Dup",
+          agent_type: "buyer",
+          public_key: "pk-999",
+        })
+      ).rejects.toThrow("API 409: Agent already exists");
+    });
+  });
+
+  describe("authDeleteV2() helper", () => {
+    test("uses DELETE method with v2 base", async () => {
+      await deleteWebhookSubscriptionV2("agent-token", "sub-123");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/integrations/webhooks/sub-123"),
+        expect.objectContaining({
+          method: "DELETE",
+          headers: { Authorization: "Bearer agent-token" },
+        })
+      );
+    });
+
+    test("throws on error response", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 404,
+          text: () => Promise.resolve("Not found"),
+        } as Response)
+      );
+
+      await expect(
+        deleteWebhookSubscriptionV2("token", "nonexistent")
+      ).rejects.toThrow("API 404: Not found");
+    });
+  });
+
+  describe("V2 named exports", () => {
+    test("onboardAgentV2 calls correct endpoint", async () => {
+      await onboardAgentV2("token", {
+        name: "Agent1",
+        agent_type: "both",
+        public_key: "pk-abc",
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/agents/onboard"),
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+
+    test("attestRuntimeV2 calls correct endpoint", async () => {
+      await attestRuntimeV2("agent-token", "agent-1", {
+        runtime_name: "nodejs",
+        runtime_version: "20.0",
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/agents/agent-1/attest/runtime"),
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+
+    test("runKnowledgeChallengeV2 calls correct endpoint", async () => {
+      await runKnowledgeChallengeV2("agent-token", "agent-1", {
+        capabilities: ["search"],
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/agents/agent-1/attest/knowledge/run"),
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+
+    test("fetchAgentTrustV2 uses authGetV2", async () => {
+      await fetchAgentTrustV2("agent-1", "agent-token");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/agents/agent-1/trust"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer agent-token" },
+        })
+      );
+    });
+
+    test("fetchAgentTrustPublicV2 uses getV2", async () => {
+      await fetchAgentTrustPublicV2("agent-1");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/agents/agent-1/trust/public")
+      );
+    });
+
+    test("fetchDashboardAgentMeV2 uses authGetV2", async () => {
+      await fetchDashboardAgentMeV2("agent-token");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/dashboards/agent/me"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer agent-token" },
+        })
+      );
+    });
+
+    test("fetchDashboardCreatorMeV2 uses authGetV2", async () => {
+      await fetchDashboardCreatorMeV2("creator-token");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/dashboards/creator/me"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer creator-token" },
+        })
+      );
+    });
+
+    test("fetchDashboardAgentPublicV2 uses getV2", async () => {
+      await fetchDashboardAgentPublicV2("agent-1");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/dashboards/agent/agent-1/public")
+      );
+    });
+
+    test("fetchOpenMarketAnalyticsV2 with default limit", async () => {
+      await fetchOpenMarketAnalyticsV2();
+      const call = (fetch as any).mock.calls[0][0];
+      expect(call).toContain("/api/v2/analytics/market/open");
+      expect(call).toContain("limit=10");
+    });
+
+    test("fetchOpenMarketAnalyticsV2 with custom limit", async () => {
+      await fetchOpenMarketAnalyticsV2(25);
+      const call = (fetch as any).mock.calls[0][0];
+      expect(call).toContain("limit=25");
+    });
+
+    test("importMemorySnapshotV2 uses authPostV2", async () => {
+      const body = { records: [{ key: "val" }], label: "test-snap" };
+      await importMemorySnapshotV2("agent-token", body);
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/memory/snapshots/import"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify(body),
+        })
+      );
+    });
+
+    test("verifyMemorySnapshotV2 uses authPostV2", async () => {
+      await verifyMemorySnapshotV2("agent-token", "snap-1", { sample_size: 5 });
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/memory/snapshots/snap-1/verify"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ sample_size: 5 }),
+        })
+      );
+    });
+
+    test("verifyMemorySnapshotV2 sends empty body when no params", async () => {
+      await verifyMemorySnapshotV2("agent-token", "snap-2");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/memory/snapshots/snap-2/verify"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({}),
+        })
+      );
+    });
+
+    test("fetchMemorySnapshotV2 uses authGetV2", async () => {
+      await fetchMemorySnapshotV2("agent-token", "snap-1");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/memory/snapshots/snap-1"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer agent-token" },
+        })
+      );
+    });
+
+    test("fetchStreamTokenV2 uses authGetV2", async () => {
+      await fetchStreamTokenV2("agent-token");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/events/stream-token"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer agent-token" },
+        })
+      );
+    });
+
+    test("fetchAdminOverviewV2 uses authGetV2", async () => {
+      await fetchAdminOverviewV2("creator-token");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/admin/overview"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer creator-token" },
+        })
+      );
+    });
+
+    test("fetchAdminFinanceV2 uses authGetV2", async () => {
+      await fetchAdminFinanceV2("creator-token");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/admin/finance"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer creator-token" },
+        })
+      );
+    });
+
+    test("fetchAdminUsageV2 uses authGetV2", async () => {
+      await fetchAdminUsageV2("creator-token");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/admin/usage"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer creator-token" },
+        })
+      );
+    });
+
+    test("fetchAdminAgentsV2 uses authGetV2 with params", async () => {
+      await fetchAdminAgentsV2("token", { page: 1, page_size: 20 });
+      const call = (fetch as any).mock.calls[0][0];
+      expect(call).toContain("/api/v2/admin/agents");
+      expect(call).toContain("page=1");
+      expect(call).toContain("page_size=20");
+    });
+
+    test("fetchAdminAgentsV2 without params", async () => {
+      await fetchAdminAgentsV2("token");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/admin/agents"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer token" },
+        })
+      );
+    });
+
+    test("fetchAdminSecurityEventsV2 uses authGetV2 with params", async () => {
+      await fetchAdminSecurityEventsV2("token", { severity: "high", page: 1 });
+      const call = (fetch as any).mock.calls[0][0];
+      expect(call).toContain("/api/v2/admin/security/events");
+      expect(call).toContain("severity=high");
+      expect(call).toContain("page=1");
+    });
+
+    test("fetchAdminSecurityEventsV2 without params", async () => {
+      await fetchAdminSecurityEventsV2("token");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/admin/security/events"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer token" },
+        })
+      );
+    });
+
+    test("fetchAdminPendingPayoutsV2 uses authGetV2 with default limit", async () => {
+      await fetchAdminPendingPayoutsV2("token");
+      const call = (fetch as any).mock.calls[0][0];
+      expect(call).toContain("/api/v2/admin/payouts/pending");
+      expect(call).toContain("limit=100");
+    });
+
+    test("fetchAdminPendingPayoutsV2 with custom limit", async () => {
+      await fetchAdminPendingPayoutsV2("token", 50);
+      const call = (fetch as any).mock.calls[0][0];
+      expect(call).toContain("limit=50");
+    });
+
+    test("approveAdminPayoutV2 uses authPostV2", async () => {
+      await approveAdminPayoutV2("token", "req-1", "Approved by admin");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/admin/payouts/req-1/approve"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ admin_notes: "Approved by admin" }),
+        })
+      );
+    });
+
+    test("approveAdminPayoutV2 with default empty admin notes", async () => {
+      await approveAdminPayoutV2("token", "req-2");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/admin/payouts/req-2/approve"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ admin_notes: "" }),
+        })
+      );
+    });
+
+    test("rejectAdminPayoutV2 uses authPostV2", async () => {
+      await rejectAdminPayoutV2("token", "req-1", "Insufficient funds");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/admin/payouts/req-1/reject"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ reason: "Insufficient funds" }),
+        })
+      );
+    });
+
+    test("fetchAdminStreamTokenV2 uses authGetV2", async () => {
+      await fetchAdminStreamTokenV2("creator-token");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/admin/events/stream-token"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer creator-token" },
+        })
+      );
+    });
+
+    test("createWebhookSubscriptionV2 uses authPostV2", async () => {
+      const body = { callback_url: "https://example.com/hook", event_types: ["listing.created"] };
+      await createWebhookSubscriptionV2("agent-token", body);
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/integrations/webhooks"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify(body),
+        })
+      );
+    });
+
+    test("fetchWebhookSubscriptionsV2 uses authGetV2", async () => {
+      await fetchWebhookSubscriptionsV2("agent-token");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/integrations/webhooks"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer agent-token" },
+        })
+      );
+    });
+
+    test("deleteWebhookSubscriptionV2 uses authDeleteV2", async () => {
+      await deleteWebhookSubscriptionV2("agent-token", "sub-456");
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v2/integrations/webhooks/sub-456"),
+        expect.objectContaining({
+          method: "DELETE",
+          headers: { Authorization: "Bearer agent-token" },
+        })
+      );
+    });
+  });
+
+  describe("fetchSystemMetrics()", () => {
+    test("calls both health and cdn endpoints", async () => {
+      const healthData = { status: "healthy", version: "1.0" };
+      const cdnData = { overview: { total_requests: 100 } };
+
+      global.fetch = vi.fn((url: string) => {
+        const urlStr = typeof url === "string" ? url : url.toString();
+        if (urlStr.includes("/health/cdn")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(cdnData),
+          } as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(healthData),
+        } as Response);
+      });
+
+      const result = await fetchSystemMetrics();
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ health: healthData, cdn: cdnData });
+    });
+
+    test("rejects if health endpoint fails", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 503,
+          text: () => Promise.resolve("Service Unavailable"),
+        } as Response)
+      );
+
+      await expect(fetchSystemMetrics()).rejects.toThrow("API 503");
     });
   });
 });
