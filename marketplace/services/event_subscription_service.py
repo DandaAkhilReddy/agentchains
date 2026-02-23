@@ -458,13 +458,13 @@ def validate_callback_url(callback_url: str) -> str:
 
     if literal_ip is not None:
         addresses = [literal_ip]
+        for addr in addresses:
+            if _is_disallowed_ip(addr):
+                raise ValueError("Callback URL resolves to a private or reserved address")
     elif _is_prod():
         addresses = _resolve_host_ips(host)
-    else:
-        addresses = []
-    for addr in addresses:
-        if _is_disallowed_ip(addr):
-            if _is_prod():
+        for addr in addresses:
+            if _is_disallowed_ip(addr):
                 raise ValueError("Callback URL resolves to a private or reserved address")
     normalized_path = parts.path or "/"
     normalized = urlunsplit((parts.scheme, parts.netloc, normalized_path, parts.query, ""))
