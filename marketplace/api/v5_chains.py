@@ -13,7 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marketplace.core.auth import get_current_agent_id
 from marketplace.database import get_db
 from marketplace.models.chain_template import ChainExecution
-from marketplace.services import auto_chain_service, chain_registry_service
+from marketplace.services import (
+    auto_chain_service,
+    chain_analytics_service,
+    chain_provenance_service,
+    chain_registry_service,
+)
 
 router = APIRouter(prefix="", tags=["chains"])
 
@@ -377,3 +382,82 @@ async def validate_chain(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return result
+
+
+# ── Analytics & Provenance Entries Endpoints ──────────────────────
+
+
+@router.get("/chain-templates/{template_id}/analytics")
+async def get_chain_analytics(
+    template_id: str,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Get performance analytics for a chain template."""
+    template = await chain_registry_service.get_chain_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Chain template not found")
+    return await chain_analytics_service.get_chain_performance(db, template_id)
+
+
+@router.get("/chains/popular")
+async def get_popular_chains(
+    category: str | None = None,
+    limit: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Get the most popular chain templates by execution count."""
+    chains = await chain_analytics_service.get_popular_chains(
+        db, category=category, limit=limit
+    )
+    return {"chains": chains, "total": len(chains)}
+
+
+@router.get("/chains/agents/{target_agent_id}/stats")
+async def get_agent_chain_stats(
+    target_agent_id: str,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Get chain participation statistics for a specific agent."""
+    return await chain_analytics_service.get_agent_chain_stats(db, target_agent_id)
+
+
+@router.get("/chain-executions/{execution_id}/provenance-entries")
+async def get_chain_provenance_entries(
+    execution_id: str,
+    event_type: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Get provenance entries for a chain execution. Access-controlled."""
+    # Access control: reuse same check as provenance endpoint
+    execution = await chain_registry_service.get_chain_execution(db, execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail="Chain execution not found")
+
+    template = await chain_registry_service.get_chain_template(
+        db, execution.chain_template_id
+    )
+    author_id = template.author_id if template else None
+
+    if agent_id != execution.initiated_by and agent_id != author_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the chain initiator or template author can view provenance entries",
+        )
+
+    entries, total = await chain_provenance_service.get_provenance_entries(
+        db, execution_id, event_type=event_type, limit=limit, offset=offset
+    )
+    timeline = await chain_provenance_service.get_provenance_timeline(db, execution_id)
+
+    return {
+        "entries": timeline[:limit],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
