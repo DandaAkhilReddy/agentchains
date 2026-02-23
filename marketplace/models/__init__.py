@@ -51,6 +51,7 @@ from marketplace.models.workflow import (
     WorkflowNodeExecution,
 )
 from marketplace.models.chain_template import ChainTemplate, ChainExecution
+from marketplace.models.chain_provenance import ChainProvenanceEntry
 from marketplace.models.webhook_v2 import DeadLetterEntry, DeliveryAttempt
 from marketplace.models.billing import BillingPlan, Subscription, UsageMeter, Invoice
 
@@ -112,4 +113,5 @@ __all__ = [
     "Invoice",
     "ChainTemplate",
     "ChainExecution",
+    "ChainProvenanceEntry",
 ]
