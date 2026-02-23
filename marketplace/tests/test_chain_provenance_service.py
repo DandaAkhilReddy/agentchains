@@ -4,6 +4,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 
@@ -69,20 +70,26 @@ async def _seed_chain_execution(db, make_agent):
 
 # ---------------------------------------------------------------------------
 # make_provenance_callback tests
+#
+# The callback creates its own DB session via async_session. In tests,
+# we monkeypatch async_session to use the test session factory so the
+# callback writes to the same in-memory database as the test fixture.
 # ---------------------------------------------------------------------------
 
 
 class TestMakeProvenanceCallback:
     @pytest.mark.asyncio
     async def test_callback_creates_started_entry(self, db, make_agent):
+        from marketplace.tests.conftest import _test_sessionmaker
+
         agent, template, execution = await _seed_chain_execution(db, make_agent)
 
-        callback = make_provenance_callback(execution.id)
-        await callback("node_started", "n0", "agent_call", agent_id=agent.id)
-
-        # Wait briefly for background write
-        from marketplace.core.async_tasks import drain_background_tasks
-        await drain_background_tasks(timeout_seconds=1.0)
+        with patch(
+            "marketplace.database.async_session",
+            new=_test_sessionmaker,
+        ):
+            callback = make_provenance_callback(execution.id)
+            await callback("node_started", "n0", "agent_call", agent_id=agent.id)
 
         entries, total = await chain_provenance_service.get_provenance_entries(
             db, execution.id
@@ -95,20 +102,23 @@ class TestMakeProvenanceCallback:
 
     @pytest.mark.asyncio
     async def test_callback_creates_completed_entry(self, db, make_agent):
+        from marketplace.tests.conftest import _test_sessionmaker
+
         agent, template, execution = await _seed_chain_execution(db, make_agent)
 
-        callback = make_provenance_callback(execution.id)
-        await callback(
-            "node_completed", "n0", "agent_call",
-            agent_id=agent.id,
-            input_json='{"query": "test"}',
-            output_json='{"result": "ok"}',
-            cost_usd=Decimal("0.05"),
-            duration_ms=150,
-        )
-
-        from marketplace.core.async_tasks import drain_background_tasks
-        await drain_background_tasks(timeout_seconds=1.0)
+        with patch(
+            "marketplace.database.async_session",
+            new=_test_sessionmaker,
+        ):
+            callback = make_provenance_callback(execution.id)
+            await callback(
+                "node_completed", "n0", "agent_call",
+                agent_id=agent.id,
+                input_json='{"query": "test"}',
+                output_json='{"result": "ok"}',
+                cost_usd=Decimal("0.05"),
+                duration_ms=150,
+            )
 
         entries, total = await chain_provenance_service.get_provenance_entries(
             db, execution.id, event_type="node_completed"
@@ -122,17 +132,20 @@ class TestMakeProvenanceCallback:
 
     @pytest.mark.asyncio
     async def test_callback_creates_failed_entry(self, db, make_agent):
+        from marketplace.tests.conftest import _test_sessionmaker
+
         agent, template, execution = await _seed_chain_execution(db, make_agent)
 
-        callback = make_provenance_callback(execution.id)
-        await callback(
-            "node_failed", "n0", "agent_call",
-            agent_id=agent.id,
-            error_message="Connection timeout",
-        )
-
-        from marketplace.core.async_tasks import drain_background_tasks
-        await drain_background_tasks(timeout_seconds=1.0)
+        with patch(
+            "marketplace.database.async_session",
+            new=_test_sessionmaker,
+        ):
+            callback = make_provenance_callback(execution.id)
+            await callback(
+                "node_failed", "n0", "agent_call",
+                agent_id=agent.id,
+                error_message="Connection timeout",
+            )
 
         entries, _ = await chain_provenance_service.get_provenance_entries(
             db, execution.id, event_type="node_failed"

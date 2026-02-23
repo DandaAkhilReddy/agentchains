@@ -49,7 +49,7 @@ async def _get_platform_price(
     # Check ActionListing
     result = await db.execute(
         select(ActionListing.price_per_execution)
-        .where(ActionListing.agent_id == agent_id, ActionListing.status == "active")
+        .where(ActionListing.seller_id == agent_id, ActionListing.status == "active")
         .order_by(ActionListing.created_at.desc())
         .limit(1)
     )
