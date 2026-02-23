@@ -45,3 +45,17 @@ git add file3 && git commit -m "change 3" && git push origin master
 ## Branch Strategy
 - Feature work on feature branches, merged (not squashed) to master
 - Merge feature branches to master at least weekly so commits count on the contribution graph
+
+## Code Review — MANDATORY
+
+Before every commit, you MUST review the changes for:
+1. **Security**: No hardcoded secrets, API keys, passwords, or tokens in code
+2. **Error handling**: All async operations have proper try/except, all API endpoints return appropriate HTTP status codes
+3. **Code quality**: No code duplication, proper naming conventions, functions under 50 lines
+4. **Python best practices**: Type hints on function signatures, proper async/await usage, SQLAlchemy session handling
+5. **TypeScript best practices**: Proper typing, no `any` types, React hooks rules followed
+6. **Test impact**: If modifying service logic, corresponding tests must be updated
+
+If you find CRITICAL issues (security vulnerabilities, data leaks, broken error handling), fix them before committing.
+
+To run a full code review at any time: `/agents/code-reviewer`
