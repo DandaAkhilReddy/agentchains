@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marketplace.core.auth import get_current_agent_id
 from marketplace.database import get_db
 from marketplace.models.chain_template import ChainExecution
-from marketplace.services import chain_registry_service
+from marketplace.services import auto_chain_service, chain_registry_service
 
 router = APIRouter(prefix="", tags=["chains"])
 
@@ -44,6 +44,23 @@ class ChainExecuteRequest(BaseModel):
 
     input_data: dict = Field(default_factory=dict)
     idempotency_key: str | None = Field(default=None, max_length=64)
+
+
+class ChainComposeRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    task_description: str = Field(..., min_length=5, max_length=2000)
+    max_price: float | None = Field(default=None, ge=0)
+    min_quality: float | None = Field(default=None, ge=0, le=1)
+
+
+class SuggestAgentsRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    capability: str = Field(..., min_length=1, max_length=100)
+    max_results: int = Field(default=10, ge=1, le=50)
+    max_price: float | None = Field(default=None, ge=0)
+    min_quality: float | None = Field(default=None, ge=0, le=1)
 
 
 # ── Serializers ───────────────────────────────────────────────────
@@ -304,3 +321,59 @@ async def list_chain_executions(
         "limit": limit,
         "offset": offset,
     }
+
+
+# ── Auto-Chaining Endpoints ─────────────────────────────────────
+
+
+@router.post("/chains/compose", status_code=200)
+async def compose_chain(
+    req: ChainComposeRequest,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Compose a draft chain template from a natural-language task description."""
+    try:
+        draft = await auto_chain_service.compose_chain_from_task(
+            db,
+            task_description=req.task_description,
+            author_id=agent_id,
+            max_price=req.max_price,
+            min_quality=req.min_quality,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return draft
+
+
+@router.post("/chains/suggest-agents", status_code=200)
+async def suggest_agents(
+    req: SuggestAgentsRequest,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Suggest ranked agents for a given capability."""
+    agents = await auto_chain_service.suggest_agents_for_capability(
+        db,
+        capability=req.capability,
+        max_results=req.max_results,
+        max_price=req.max_price,
+        min_quality=req.min_quality,
+    )
+    return {"capability": req.capability, "agents": agents, "total": len(agents)}
+
+
+@router.post("/chains/{chain_template_id}/validate", status_code=200)
+async def validate_chain(
+    chain_template_id: str,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Validate that all agents in a chain template are active and reachable."""
+    try:
+        result = await auto_chain_service.validate_chain_compatibility(
+            db, chain_template_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return result
