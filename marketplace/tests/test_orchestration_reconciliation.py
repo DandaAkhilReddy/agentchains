@@ -711,12 +711,18 @@ async def test_execute_workflow_unknown_node_type(db: AsyncSession):
 async def test_on_node_event_called_for_each_node(db: AsyncSession):
     """on_node_event receives node_started and node_completed events for each node."""
     owner = _uid()
+    # step2 depends on step1 so they execute sequentially (different layers),
+    # avoiding concurrent db session access which causes UNIQUE constraint errors.
     graph = json.dumps({
         "nodes": {
             "step1": {"type": "condition", "config": {"field": "x", "operator": "eq", "value": 1}},
-            "step2": {"type": "condition", "config": {"field": "x", "operator": "eq", "value": 1}},
+            "step2": {
+                "type": "condition",
+                "config": {"field": "x", "operator": "eq", "value": 1},
+                "depends_on": ["step1"],
+            },
         },
-        "edges": [],
+        "edges": [{"from": "step1", "to": "step2"}],
     })
     wf = await orch.create_workflow(db, name="CB Test", graph_json=graph, owner_id=owner)
 
@@ -816,7 +822,7 @@ async def test_execute_workflow_budget_exceeded(db: AsyncSession):
         name="Budget Test",
         graph_json=graph,
         owner_id=owner,
-        max_budget_usd=Decimal("0.00001"),
+        max_budget_usd=Decimal("0.0001"),  # 4 decimal places fits Numeric(12,4)
     )
 
     async def cheap_but_costly(*args, **kwargs):
