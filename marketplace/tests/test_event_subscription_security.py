@@ -45,10 +45,12 @@ def test_validate_callback_url_rejects_private_ip_in_production(monkeypatch):
         monkeypatch.setattr(settings, "environment", "development")
 
 
-def test_validate_callback_url_allows_dev_localhost(monkeypatch):
+def test_validate_callback_url_rejects_literal_private_ip_in_dev(monkeypatch):
     monkeypatch.setattr(settings, "environment", "development")
-    normalized = validate_callback_url("http://127.0.0.1:8080/hook")
-    assert normalized == "http://127.0.0.1:8080/hook"
+    # Literal IP addresses are always checked against private ranges,
+    # even in development, so 127.0.0.1 is rejected.
+    with pytest.raises(ValueError, match="private or reserved"):
+        validate_callback_url("http://127.0.0.1:8080/hook")
 
 
 def test_event_signature_verification_accepts_current_key(monkeypatch):
@@ -81,7 +83,7 @@ async def test_old_webhook_delivery_payloads_are_redacted(db, monkeypatch):
     await register_subscription(
         db,
         agent_id=agent_id,
-        callback_url="http://127.0.0.1:8080/hook",
+        callback_url="http://example.com/hook",
         event_types=["test_event"],
     )
 
