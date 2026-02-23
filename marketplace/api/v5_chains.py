@@ -16,8 +16,10 @@ from marketplace.models.chain_template import ChainExecution
 from marketplace.services import (
     auto_chain_service,
     chain_analytics_service,
+    chain_policy_service,
     chain_provenance_service,
     chain_registry_service,
+    chain_settlement_service,
 )
 
 router = APIRouter(prefix="", tags=["chains"])
@@ -66,6 +68,23 @@ class SuggestAgentsRequest(BaseModel):
     max_results: int = Field(default=10, ge=1, le=50)
     max_price: float | None = Field(default=None, ge=0)
     min_quality: float | None = Field(default=None, ge=0, le=1)
+
+
+class ChainPolicyCreateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str = ""
+    policy_type: str = Field(..., max_length=30)
+    rules_json: str = Field(..., min_length=2)
+    enforcement: str = Field(default="block", max_length=20)
+    scope: str = Field(default="chain", max_length=20)
+
+
+class EvaluatePoliciesRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    policy_ids: list[str] = Field(..., min_length=1)
 
 
 # ── Serializers ───────────────────────────────────────────────────
@@ -461,3 +480,119 @@ async def get_chain_provenance_entries(
         "limit": limit,
         "offset": offset,
     }
+
+
+# ── Policy Endpoints ─────────────────────────────────────────────
+
+
+def _policy_to_dict(p) -> dict:
+    """Serialise a ChainPolicy ORM instance to a plain dict."""
+    return {
+        "id": p.id,
+        "name": p.name,
+        "description": p.description,
+        "policy_type": p.policy_type,
+        "rules_json": p.rules_json,
+        "enforcement": p.enforcement,
+        "owner_id": p.owner_id,
+        "scope": p.scope,
+        "status": p.status,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+    }
+
+
+@router.post("/chains/policies", status_code=201)
+async def create_chain_policy(
+    req: ChainPolicyCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Create a new chain policy."""
+    try:
+        policy = await chain_policy_service.create_policy(
+            db,
+            name=req.name,
+            policy_type=req.policy_type,
+            rules_json=req.rules_json,
+            owner_id=agent_id,
+            description=req.description,
+            enforcement=req.enforcement,
+            scope=req.scope,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _policy_to_dict(policy)
+
+
+@router.get("/chains/policies")
+async def list_chain_policies(
+    owner_id: str | None = None,
+    policy_type: str | None = None,
+    status: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """List chain policies with optional filters."""
+    policies, total = await chain_policy_service.list_policies(
+        db, owner_id=owner_id, policy_type=policy_type,
+        status=status, limit=limit, offset=offset,
+    )
+    return {
+        "policies": [_policy_to_dict(p) for p in policies],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.post("/chains/{chain_template_id}/evaluate-policies")
+async def evaluate_chain_policies(
+    chain_template_id: str,
+    req: EvaluatePoliciesRequest,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Dry-run policy evaluation against a chain template."""
+    try:
+        result = await chain_policy_service.evaluate_chain_policies(
+            db, chain_template_id, req.policy_ids
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return result
+
+
+# ── Settlement Endpoints ─────────────────────────────────────────
+
+
+@router.get("/chain-executions/{execution_id}/settlement")
+async def get_chain_settlement(
+    execution_id: str,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Get settlement report for a chain execution."""
+    try:
+        report = await chain_settlement_service.get_settlement_report(
+            db, execution_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return report
+
+
+@router.get("/chain-templates/{template_id}/cost-estimate")
+async def get_chain_cost_estimate(
+    template_id: str,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Get a pre-execution cost estimate for a chain template."""
+    try:
+        estimate = await chain_settlement_service.estimate_chain_cost(db, template_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return estimate
