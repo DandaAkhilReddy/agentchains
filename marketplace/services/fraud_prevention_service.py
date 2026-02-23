@@ -39,7 +39,7 @@ async def detect_sybil_clusters(
         ).where(
             and_(
                 Transaction.status == "completed",
-                Transaction.created_at >= since,
+                Transaction.initiated_at >= since,
             )
         ).group_by(Transaction.buyer_id, Transaction.seller_id)
     )

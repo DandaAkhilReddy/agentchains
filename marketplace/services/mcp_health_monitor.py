@@ -10,6 +10,8 @@ import time
 
 import httpx
 
+from marketplace.database import async_session
+
 logger = logging.getLogger(__name__)
 
 _HEALTH_INTERVAL_SECONDS = 30
@@ -31,9 +33,7 @@ async def health_check_loop(interval: int = _HEALTH_INTERVAL_SECONDS) -> None:
 
 async def _run_health_checks() -> None:
     """Check health of all active federated MCP servers."""
-    from marketplace.database import async_session
     from marketplace.models.mcp_server import MCPServerEntry
-
     from sqlalchemy import select
 
     async with async_session() as db:
@@ -52,10 +52,9 @@ async def _run_health_checks() -> None:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Update health scores in DB
-    from marketplace.database import async_session as get_session
     from datetime import datetime, timezone
 
-    async with get_session() as db:
+    async with async_session() as db:
         for server, result in zip(servers, results):
             if isinstance(result, Exception):
                 new_score = max(0, (server.health_score or 100) - 20)
