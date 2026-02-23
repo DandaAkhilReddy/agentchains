@@ -27,6 +27,22 @@ REFRESH_TOKEN_LIFETIME = timedelta(days=30)
 AUTHORIZATION_CODE_LIFETIME = timedelta(minutes=10)
 
 
+def _utcnow_for(dt: datetime) -> datetime:
+    """Return current UTC time with the same tz-awareness as *dt*.
+
+    SQLite returns naive datetimes from DateTime(timezone=True) columns,
+    while mocks and PostgreSQL return timezone-aware datetimes.  This helper
+    makes the comparison value match the tzinfo state of the stored value so
+    that both cases work without TypeError.
+    """
+    now_utc = datetime.now(timezone.utc)
+    if dt is None or dt.tzinfo is None:
+        # naive — strip tzinfo to match the naive stored value
+        return now_utc.replace(tzinfo=None)
+    # aware — keep tzinfo for a like-for-like comparison
+    return now_utc
+
+
 def _hash_secret(secret: str) -> str:
     """Hash a client secret using SHA-256.
 
@@ -217,7 +233,7 @@ async def _exchange_authorization_code(
         raise ValueError("Invalid authorization code")
     if auth_code.used:
         raise ValueError("Authorization code has already been used")
-    if auth_code.expires_at < datetime.now(timezone.utc):
+    if auth_code.expires_at < _utcnow_for(auth_code.expires_at):
         raise ValueError("Authorization code has expired")
     if auth_code.client_id != client_id:
         raise ValueError("Client ID mismatch")
@@ -314,7 +330,7 @@ async def _exchange_refresh_token(
         raise ValueError("Invalid refresh token")
     if rt.revoked:
         raise ValueError("Refresh token has been revoked")
-    if rt.expires_at < datetime.now(timezone.utc):
+    if rt.expires_at < _utcnow_for(rt.expires_at):
         raise ValueError("Refresh token has expired")
 
     # Look up the original access token to get user info
@@ -470,7 +486,7 @@ async def validate_access_token(db: AsyncSession, token: str) -> dict | None:
         return None
     if at.revoked:
         return None
-    if at.expires_at < datetime.now(timezone.utc):
+    if at.expires_at < _utcnow_for(at.expires_at):
         return None
 
     return {
