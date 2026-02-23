@@ -163,4 +163,242 @@ describe("Sidebar", () => {
     fireEvent.click(toggleButton!);
     expect(localStorage.getItem("sidebar_collapsed")).toBe("false");
   });
+
+  /* ------------------------------------------------------------------ */
+  /* NEW: Additional tests for uncovered lines                           */
+  /* ------------------------------------------------------------------ */
+
+  it("reads collapsed state from localStorage on mount", () => {
+    // Pre-set localStorage to "true" before rendering
+    localStorage.setItem("sidebar_collapsed", "true");
+    const { container } = renderSidebar();
+    const desktopAside = container.querySelector("aside.hidden.md\\:flex");
+    // Sidebar should start collapsed because localStorage had "true"
+    expect(desktopAside?.className).toContain("w-16");
+    // Brand text should not be visible
+    expect(screen.queryByText("A2A Marketplace")).not.toBeInTheDocument();
+  });
+
+  it("handles localStorage.getItem throwing an error gracefully", () => {
+    // Make localStorage.getItem throw to exercise the catch branch
+    const original = Storage.prototype.getItem;
+    Storage.prototype.getItem = () => {
+      throw new Error("Storage unavailable");
+    };
+    // Should default to not collapsed (false) on error
+    const { container } = renderSidebar();
+    const desktopAside = container.querySelector("aside.hidden.md\\:flex");
+    expect(desktopAside?.className).toContain("w-60");
+    // Restore
+    Storage.prototype.getItem = original;
+  });
+
+  it("handles localStorage.setItem throwing an error gracefully", () => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new Error("Storage full");
+    };
+    // Should not throw during render
+    expect(() => renderSidebar()).not.toThrow();
+    Storage.prototype.setItem = original;
+  });
+
+  it("shows title attribute on nav buttons when sidebar is collapsed", () => {
+    const { container } = renderSidebar();
+    const toggleButton = container.querySelector("button.hidden.md\\:flex");
+    fireEvent.click(toggleButton!);
+
+    // When collapsed, each nav button should have a title attribute with the label
+    const buttons = container.querySelectorAll("button");
+    const walletButton = Array.from(buttons).find(
+      (btn) => btn.getAttribute("title") === "Wallet"
+    );
+    expect(walletButton).toBeDefined();
+
+    const dashboardButton = Array.from(buttons).find(
+      (btn) => btn.getAttribute("title") === "Dashboard"
+    );
+    expect(dashboardButton).toBeDefined();
+  });
+
+  it("does not show title attribute on nav buttons when sidebar is expanded", () => {
+    const { container } = renderSidebar();
+    // When expanded, title should be undefined
+    const buttons = container.querySelectorAll("button");
+    const walletButton = Array.from(buttons).find((btn) =>
+      btn.textContent?.includes("Wallet")
+    );
+    expect(walletButton?.getAttribute("title")).toBeNull();
+  });
+
+  it("shows the active indicator bar for the active tab", () => {
+    const { container } = renderSidebar({ activeTab: "agents" });
+    // The active indicator is a div with the blue background color
+    const agentsButton = Array.from(container.querySelectorAll("button")).find(
+      (btn) => btn.textContent?.includes("Agents")
+    );
+    expect(agentsButton).toBeDefined();
+    // The active indicator div is a child of the active button
+    const indicator = agentsButton?.querySelector("div");
+    expect(indicator).toBeDefined();
+    expect(indicator?.style.backgroundColor).toBe("rgb(96, 165, 250)");
+  });
+
+  it("does not show the active indicator for inactive tabs", () => {
+    const { container } = renderSidebar({ activeTab: "wallet" });
+    // Check a non-active button -- it should not have the indicator div
+    const dashboardButton = Array.from(container.querySelectorAll("button")).find(
+      (btn) => btn.textContent?.includes("Dashboard")
+    );
+    // The inactive button should NOT have a child div with the active indicator style
+    const childDivs = dashboardButton?.querySelectorAll("div") ?? [];
+    const hasIndicator = Array.from(childDivs).some(
+      (div) => div.style.backgroundColor === "rgb(96, 165, 250)"
+    );
+    expect(hasIndicator).toBe(false);
+  });
+
+  it("handles hover on an inactive nav button", () => {
+    const { container } = renderSidebar({ activeTab: "dashboard" });
+    const buttons = container.querySelectorAll("button");
+    const walletButton = Array.from(buttons).find((btn) =>
+      btn.textContent?.includes("Wallet")
+    );
+    expect(walletButton).toBeDefined();
+
+    // Mouse enter on inactive button
+    fireEvent.mouseEnter(walletButton!);
+    expect(walletButton!.style.color).toBe("rgb(226, 232, 240)");
+    expect(walletButton!.style.backgroundColor).toBe("rgba(96, 165, 250, 0.08)");
+
+    // Mouse leave on inactive button
+    fireEvent.mouseLeave(walletButton!);
+    expect(walletButton!.style.color).toBe("rgb(148, 163, 184)");
+    expect(walletButton!.style.backgroundColor).toBe("transparent");
+  });
+
+  it("does not change styles on hover for the active nav button", () => {
+    const { container } = renderSidebar({ activeTab: "wallet" });
+    const buttons = container.querySelectorAll("button");
+    const walletButton = Array.from(buttons).find((btn) =>
+      btn.textContent?.includes("Wallet")
+    );
+    expect(walletButton).toBeDefined();
+
+    // Mouse enter on active button should NOT change styles
+    fireEvent.mouseEnter(walletButton!);
+    expect(walletButton!.style.color).toBe("rgb(255, 255, 255)");
+    expect(walletButton!.style.backgroundColor).toBe("rgba(96, 165, 250, 0.1)");
+
+    // Mouse leave on active button should NOT change styles
+    fireEvent.mouseLeave(walletButton!);
+    expect(walletButton!.style.color).toBe("rgb(255, 255, 255)");
+    expect(walletButton!.style.backgroundColor).toBe("rgba(96, 165, 250, 0.1)");
+  });
+
+  it("handles hover on the collapse toggle button", () => {
+    const { container } = renderSidebar();
+    const toggleButton = container.querySelector("button.hidden.md\\:flex");
+    expect(toggleButton).toBeDefined();
+
+    fireEvent.mouseEnter(toggleButton!);
+    expect((toggleButton as HTMLElement).style.color).toBe("rgb(226, 232, 240)");
+
+    fireEvent.mouseLeave(toggleButton!);
+    expect((toggleButton as HTMLElement).style.color).toBe("rgb(100, 116, 139)");
+  });
+
+  it("handles hover on the mobile close button", () => {
+    const { container } = renderSidebar({ mobileOpen: true });
+    // The mobile close button has the X icon and md:hidden class
+    const closeButtons = Array.from(container.querySelectorAll("button")).filter(
+      (btn) => btn.classList.contains("ml-auto")
+    );
+    // There are two instances of sidebarContent (desktop + mobile), so close buttons may appear in both
+    // But the close button is only rendered when mobileOpen is true
+    const closeButton = closeButtons[0];
+    expect(closeButton).toBeDefined();
+
+    fireEvent.mouseEnter(closeButton!);
+    expect(closeButton!.style.color).toBe("rgb(226, 232, 240)");
+
+    fireEvent.mouseLeave(closeButton!);
+    expect(closeButton!.style.color).toBe("rgb(100, 116, 139)");
+  });
+
+  it("calls onMobileClose when mobile close button is clicked", () => {
+    const { container } = renderSidebar({ mobileOpen: true });
+    const closeButtons = Array.from(container.querySelectorAll("button")).filter(
+      (btn) => btn.classList.contains("ml-auto")
+    );
+    const closeButton = closeButtons[0];
+    expect(closeButton).toBeDefined();
+
+    fireEvent.click(closeButton!);
+    expect(onMobileClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not render mobile overlay when mobileOpen is false", () => {
+    const { container } = renderSidebar({ mobileOpen: false });
+    const overlay = container.querySelector("div.fixed.inset-0.z-40.md\\:hidden");
+    expect(overlay).not.toBeInTheDocument();
+  });
+
+  it("handles nav click without onMobileClose provided", () => {
+    render(
+      <Sidebar
+        activeTab={"dashboard" as TabId}
+        onTabChange={onTabChange}
+      />
+    );
+    const analyticsButton = screen.getByText("Analytics").closest("button");
+    // Should not throw when onMobileClose is undefined
+    expect(() => fireEvent.click(analyticsButton!)).not.toThrow();
+    expect(onTabChange).toHaveBeenCalledWith("analytics");
+  });
+
+  it("renders all nav items for each group", () => {
+    renderSidebar();
+    // Overview group
+    expect(screen.getByText("Agent")).toBeInTheDocument();
+    expect(screen.getByText("Admin")).toBeInTheDocument();
+    // Marketplace group
+    expect(screen.getByText("Actions")).toBeInTheDocument();
+  });
+
+  it("hides item labels when collapsed and shows only icons", () => {
+    const { container } = renderSidebar();
+    const toggleButton = container.querySelector("button.hidden.md\\:flex");
+    fireEvent.click(toggleButton!);
+
+    // Nav item labels should not be visible
+    expect(screen.queryByText("Wallet")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
+    expect(screen.queryByText("Analytics")).not.toBeInTheDocument();
+  });
+
+  it("renders different active tabs correctly", () => {
+    const tabs: TabId[] = ["roles", "agentDashboard", "adminDashboard", "listings", "catalog",
+      "actions", "transactions", "redeem", "analytics", "reputation",
+      "integrations", "creator", "onboarding", "pipeline", "docs", "technology"];
+
+    for (const tab of tabs) {
+      const { container, unmount } = renderSidebar({ activeTab: tab });
+      // The active button should exist with white color
+      const buttons = container.querySelectorAll("button");
+      const hasActive = Array.from(buttons).some(
+        (btn) => btn.style.color === "rgb(255, 255, 255)" &&
+                  btn.style.backgroundColor === "rgba(96, 165, 250, 0.1)"
+      );
+      expect(hasActive).toBe(true);
+      unmount();
+    }
+  });
+
+  it("mobile sidebar has correct backdrop styles", () => {
+    const { container } = renderSidebar({ mobileOpen: true });
+    const overlay = container.querySelector("div.fixed.inset-0.z-40.md\\:hidden");
+    expect(overlay).toBeInTheDocument();
+    expect(overlay?.style.backgroundColor).toBe("rgba(0, 0, 0, 0.7)");
+  });
 });
