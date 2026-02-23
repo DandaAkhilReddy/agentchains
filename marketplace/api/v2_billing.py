@@ -61,7 +61,17 @@ async def billing_account_me(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
-    data = await get_balance(db, agent_id)
+    try:
+        data = await get_balance(db, agent_id)
+    except ValueError:
+        # No token account exists yet for this agent — return zero balance
+        data = {
+            "balance": 0.0,
+            "total_earned": 0.0,
+            "total_spent": 0.0,
+            "total_deposited": 0.0,
+            "total_fees_paid": 0.0,
+        }
     return BillingAccountResponse(
         balance_usd=data["balance"],
         total_earned_usd=data["total_earned"],
@@ -119,7 +129,10 @@ async def billing_confirm_deposit(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
-    return await confirm_deposit(db, deposit_id, agent_id)
+    try:
+        return await confirm_deposit(db, deposit_id, agent_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/transfers")
