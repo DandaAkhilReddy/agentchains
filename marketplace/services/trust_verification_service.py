@@ -315,6 +315,12 @@ async def add_source_receipt(
     request_payload: dict[str, Any] | None = None,
     headers: dict[str, Any] | None = None,
 ) -> SourceReceipt:
+    if provider not in _ALLOWED_SOURCE_PROVIDERS:
+        raise ValueError(
+            f"Unsupported provider '{provider}'. "
+            f"Allowed providers: {sorted(_ALLOWED_SOURCE_PROVIDERS)}"
+        )
+
     result = await db.execute(select(DataListing).where(DataListing.id == listing_id))
     listing = result.scalar_one_or_none()
     if listing is None:
