@@ -16,7 +16,10 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.config import settings
 from marketplace.models.transaction import Transaction
+from marketplace.services.razorpay_service import RazorpayPaymentService
+from marketplace.services.stripe_service import StripePaymentService
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +32,6 @@ async def reconcile_stripe_payments(
 
     Returns a summary of matched, mismatched, and missing payments.
     """
-    from marketplace.config import settings
-    from marketplace.services.stripe_service import StripePaymentService
-
     service = StripePaymentService(
         secret_key=settings.stripe_secret_key,
         webhook_secret=settings.stripe_webhook_secret,
@@ -104,9 +104,6 @@ async def reconcile_razorpay_payments(
     since: datetime | None = None,
 ) -> dict[str, Any]:
     """Reconcile marketplace transactions against Razorpay payment records."""
-    from marketplace.config import settings
-    from marketplace.services.razorpay_service import RazorpayPaymentService
-
     service = RazorpayPaymentService(
         key_id=settings.razorpay_key_id,
         key_secret=settings.razorpay_key_secret,
@@ -177,9 +174,6 @@ async def retry_failed_payment(
 
     if tx.status != "failed":
         return {"error": f"Transaction status is {tx.status}, not 'failed'"}
-
-    from marketplace.config import settings
-    from marketplace.services.stripe_service import StripePaymentService
 
     service = StripePaymentService(
         secret_key=settings.stripe_secret_key,
