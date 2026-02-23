@@ -411,6 +411,11 @@ async def execute_chain(
 
     async def _run_chain():
         from marketplace.database import async_session as session_factory
+        from marketplace.services.chain_provenance_service import (
+            make_provenance_callback,
+        )
+
+        callback = make_provenance_callback(exec_id)
 
         async with session_factory() as exec_db:
             try:
@@ -419,6 +424,7 @@ async def execute_chain(
                     workflow_id=wf_id,
                     initiated_by=initiated_by,
                     input_data=input_data,
+                    on_node_event=callback,
                 )
 
                 # Update chain execution with workflow results
