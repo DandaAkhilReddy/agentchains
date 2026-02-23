@@ -15,8 +15,11 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from unittest.mock import patch
 
 import pytest
+
+from marketplace.config import settings
 
 # ---------------------------------------------------------------------------
 # URL prefix constants
@@ -1511,7 +1514,19 @@ async def test_deprecations_migration_doc_is_link():
 # service is in simulated mode and skips real signature verification.
 # For Razorpay, settings.razorpay_key_secret is also blank in tests so
 # signature verification is also skipped.
+#
+# Explicitly reset these settings for each webhook test to guard against
+# cross-test contamination when running the full 6000+ test suite.
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_webhook_settings(monkeypatch):
+    """Ensure Stripe/Razorpay settings are in simulated/test mode."""
+    monkeypatch.setattr(settings, "stripe_secret_key", "")
+    monkeypatch.setattr(settings, "stripe_webhook_secret", "")
+    monkeypatch.setattr(settings, "razorpay_key_id", "")
+    monkeypatch.setattr(settings, "razorpay_key_secret", "")
 
 
 async def test_webhooks_stripe_known_event(client):
