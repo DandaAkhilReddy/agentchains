@@ -82,12 +82,13 @@ async def test_webhook_create_invalid_url_too_short(client, make_agent):
     """POST /api/v2/integrations/webhooks — URL shorter than 8 chars fails validation."""
     agent, token = await make_agent(agent_type="seller")
 
+    # "http://" is 7 chars — below the min_length=8 threshold, triggers 422
     resp = await client.post(
         "/api/v2/integrations/webhooks",
         headers=_auth(token),
-        json={"callback_url": "http://x"},
+        json={"callback_url": "http://"},
     )
-    # Pydantic min_length=8 + service validates scheme/host
+    # Pydantic min_length=8 rejects URLs under 8 chars
     assert resp.status_code in (400, 422)
 
 
@@ -292,11 +293,11 @@ async def test_market_create_order_happy_path(client, make_agent, make_listing):
         headers=_auth(user_token),
         json={
             "listing_id": listing.id,
-            "payment_method": "wallet",
+            "payment_method": "simulated",
             "allow_unverified": True,
         },
     )
-    # 201 on success; 400/409 acceptable if wallet insufficient
+    # 201 on success; 400/409 acceptable if balance insufficient
     assert resp.status_code in (201, 400, 409)
 
 
@@ -321,12 +322,12 @@ async def test_market_create_order_unverified_listing_requires_flag(client, make
         headers=_auth(user_token),
         json={
             "listing_id": listing.id,
-            "payment_method": "wallet",
+            "payment_method": "simulated",
             "allow_unverified": False,
         },
     )
     # The service raises ValueError with "allow_unverified" in the message -> 409
-    # or 400 if wallet insufficient; 201 if verified
+    # or 400 if balance insufficient; 201 if verified
     assert resp.status_code in (201, 400, 409)
 
 
@@ -340,7 +341,7 @@ async def test_market_create_order_missing_listing(client):
         headers=_auth(user_token),
         json={
             "listing_id": _new_id(),
-            "payment_method": "wallet",
+            "payment_method": "simulated",
             "allow_unverified": True,
         },
     )
@@ -421,11 +422,13 @@ async def test_memory_import_snapshot_happy_path(client, make_agent):
     )
     assert resp.status_code == 201
     body = resp.json()
-    assert "snapshot_id" in body or "id" in body
+    # Response is {"snapshot": {"snapshot_id": ..., ...}, "chunk_hashes": [...], ...}
+    assert "snapshot" in body
+    assert "snapshot_id" in body["snapshot"]
 
 
 async def test_memory_import_snapshot_empty_records(client, make_agent):
-    """POST /api/v2/memory/snapshots/import — empty records list is accepted."""
+    """POST /api/v2/memory/snapshots/import — empty records list returns 400 (at least one required)."""
     agent, token = await make_agent(agent_type="seller")
 
     resp = await client.post(
@@ -433,7 +436,7 @@ async def test_memory_import_snapshot_empty_records(client, make_agent):
         headers=_auth(token),
         json={"source_type": "sdk", "label": "empty-snap", "records": []},
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 400
 
 
 async def test_memory_import_snapshot_invalid_source_type(client, make_agent):
@@ -472,7 +475,8 @@ async def test_memory_get_snapshot_happy_path(client, make_agent):
     )
     assert import_resp.status_code == 201
     body = import_resp.json()
-    snap_id = body.get("snapshot_id") or body.get("id")
+    # Response structure: {"snapshot": {"snapshot_id": ..., ...}, "chunk_hashes": [...]}
+    snap_id = body["snapshot"]["snapshot_id"]
     assert snap_id is not None
 
     get_resp = await client.get(
@@ -481,7 +485,7 @@ async def test_memory_get_snapshot_happy_path(client, make_agent):
     )
     assert get_resp.status_code == 200
     snap = get_resp.json()
-    assert snap.get("id") == snap_id or snap.get("snapshot_id") == snap_id
+    assert snap.get("snapshot_id") == snap_id
 
 
 async def test_memory_get_snapshot_not_found(client, make_agent):
@@ -516,7 +520,8 @@ async def test_memory_verify_snapshot_happy_path(client, make_agent):
     )
     assert import_resp.status_code == 201
     body = import_resp.json()
-    snap_id = body.get("snapshot_id") or body.get("id")
+    # Response structure: {"snapshot": {"snapshot_id": ..., ...}, "chunk_hashes": [...]}
+    snap_id = body["snapshot"]["snapshot_id"]
 
     verify_resp = await client.post(
         f"/api/v2/memory/snapshots/{snap_id}/verify",
@@ -552,7 +557,8 @@ async def test_memory_verify_snapshot_wrong_owner(client, make_agent):
     )
     assert import_resp.status_code == 201
     body = import_resp.json()
-    snap_id = body.get("snapshot_id") or body.get("id")
+    # Response structure: {"snapshot": {"snapshot_id": ..., ...}, "chunk_hashes": [...]}
+    snap_id = body["snapshot"]["snapshot_id"]
 
     verify_resp = await client.post(
         f"/api/v2/memory/snapshots/{snap_id}/verify",
@@ -663,14 +669,16 @@ async def test_payouts_cancel_request_happy_path(client, make_creator):
     async with TestSession() as db:
         db.add(TokenAccount(id=_new_id(), agent_id=None, balance=Decimal("0")))
         db.add(
-            TokenAccount(id=_new_id(), creator_id=creator.id, balance=Decimal("30.0"))
+            TokenAccount(id=_new_id(), creator_id=creator.id, balance=Decimal("50.0"))
         )
         await db.commit()
 
+    # Use bank_transfer (min $10) so the redemption stays "pending" and can be cancelled.
+    # api_credits is auto-processed to "completed" and cannot be cancelled.
     create_resp = await client.post(
         "/api/v2/payouts/requests",
         headers=_auth(creator_token),
-        json={"payout_method": "api_credits", "amount_usd": 2.0},
+        json={"payout_method": "bank_transfer", "amount_usd": 15.0},
     )
     assert create_resp.status_code == 201
     req_id = create_resp.json()["id"]
