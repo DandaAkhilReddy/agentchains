@@ -455,6 +455,7 @@ def create_app() -> FastAPI:
         API_V2_PREFIX, API_V2_ROUTERS,
         API_V3_PREFIX, API_V3_ROUTERS,
         API_V4_PREFIX, API_V4_ROUTERS,
+        API_V5_PREFIX, API_V5_ROUTERS,
     )
 
     for router in API_ROUTERS:
@@ -468,6 +469,9 @@ def create_app() -> FastAPI:
 
     for router in API_V4_ROUTERS:
         app.include_router(router, prefix=API_V4_PREFIX)
+
+    for router in API_V5_ROUTERS:
+        app.include_router(router, prefix=API_V5_PREFIX)
 
     # Webhooks at root level (for external service callbacks)
     from marketplace.api.webhooks import router as webhooks_root_router
