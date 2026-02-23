@@ -80,6 +80,16 @@ describe("CreatorDashboardPage", () => {
     expect(spinner).toBeInTheDocument();
   });
 
+  it("shows loading text during loading state", () => {
+    vi.mocked(api.fetchCreatorDashboard).mockImplementation(
+      () => new Promise(() => {}),
+    );
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    expect(screen.getByText("Loading dashboard...")).toBeInTheDocument();
+  });
+
   it("displays creator balance in USD", async () => {
     vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
 
@@ -360,5 +370,348 @@ describe("CreatorDashboardPage", () => {
     await waitFor(() => {
       expect(api.fetchCreatorDashboard).toHaveBeenCalledTimes(2);
     });
+  });
+
+  // ─── New coverage tests ───
+
+  it("renders the Creator Studio header", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Creator Studio")).toBeInTheDocument();
+    });
+  });
+
+  it("renders Your Agents section heading", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Your Agents")).toBeInTheDocument();
+    });
+  });
+
+  it("renders Claim an Agent section", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Claim an Agent")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Enter your agent's ID to claim ownership/),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("renders agent type badges", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("seller")).toBeInTheDocument();
+      expect(screen.getByText("buyer")).toBeInTheDocument();
+    });
+  });
+
+  it("renders agent status badges", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      // Both agents are active
+      const activeBadges = screen.getAllByText("active");
+      expect(activeBadges.length).toBe(2);
+    });
+  });
+
+  it("renders agent avatar initials correctly", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      // "Test Agent 1".slice(0,2).toUpperCase() = "TE"
+      const avatars = screen.getAllByText("TE");
+      expect(avatars.length).toBe(2); // Both agents start with "Te"
+    });
+  });
+
+  it("renders Earned and Balance labels for each agent", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      const earnedLabels = screen.getAllByText("Earned");
+      expect(earnedLabels.length).toBe(2);
+
+      const balanceLabels = screen.getAllByText("Balance");
+      expect(balanceLabels.length).toBe(2);
+    });
+  });
+
+  it("disables claim button when input is empty", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
+    });
+
+    const claimButton = screen.getByRole("button", { name: /Claim/i });
+    expect(claimButton).toBeDisabled();
+  });
+
+  it("enables claim button when input has value", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText(/Agent ID \(UUID\)/i);
+    await user.type(input, "some-agent-id");
+
+    const claimButton = screen.getByRole("button", { name: /Claim/i });
+    expect(claimButton).not.toBeDisabled();
+  });
+
+  it("shows success message in green color", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+    vi.mocked(api.claimAgent).mockResolvedValue({
+      agent_id: "new-agent-id",
+      creator_id: "creator-id",
+    });
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText(/Agent ID \(UUID\)/i);
+    await user.type(input, "new-agent-id");
+    const claimButton = screen.getByRole("button", { name: /Claim/i });
+    await user.click(claimButton);
+
+    await waitFor(() => {
+      const msg = screen.getByText("Agent linked successfully!");
+      // The color for success messages contains "#34d399"
+      expect(msg.style.color).toBe("rgb(52, 211, 153)");
+    });
+  });
+
+  it("shows error message in red color", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+    vi.mocked(api.claimAgent).mockRejectedValue(new Error("Agent not found"));
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText(/Agent ID \(UUID\)/i);
+    await user.type(input, "bad-id");
+    const claimButton = screen.getByRole("button", { name: /Claim/i });
+    await user.click(claimButton);
+
+    await waitFor(() => {
+      const msg = screen.getByText("Agent not found");
+      // The color for error messages contains "#f87171"
+      expect(msg.style.color).toBe("rgb(248, 113, 113)");
+    });
+  });
+
+  it("shows fallback error message when claim error has no message", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+    vi.mocked(api.claimAgent).mockRejectedValue({});
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText(/Agent ID \(UUID\)/i);
+    await user.type(input, "bad-id");
+    const claimButton = screen.getByRole("button", { name: /Claim/i });
+    await user.click(claimButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed to claim agent")).toBeInTheDocument();
+    });
+  });
+
+  it("handles stat card mouse hover interactions", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    const { container } = renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("USD Balance")).toBeInTheDocument();
+    });
+
+    // Find stat cards by their label text parent
+    const statCard = screen.getByText("USD Balance").closest("[class*='group']") as HTMLElement;
+    expect(statCard).toBeTruthy();
+
+    // Trigger mouseEnter and mouseLeave on the stat card
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.mouseEnter(statCard);
+    fireEvent.mouseLeave(statCard);
+    // No errors should occur
+  });
+
+  it("handles agent card mouse hover interactions", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Agent 1")).toBeInTheDocument();
+    });
+
+    const agentCard = screen.getByText("Test Agent 1").closest("[class*='group']") as HTMLElement;
+    expect(agentCard).toBeTruthy();
+
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.mouseEnter(agentCard);
+    fireEvent.mouseLeave(agentCard);
+    // No errors should occur
+  });
+
+  it("renders with null dashboard (fallback to zero values)", async () => {
+    // Simulate API error followed by render with null dashboard
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(api.fetchCreatorDashboard).mockRejectedValue(new Error("fail"));
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      // After loading fails, dashboard is null. The page should still render stat cards
+      // with fallback 0 values
+      expect(screen.getByText("USD Balance")).toBeInTheDocument();
+      const zeroAmounts = screen.getAllByText("$0.00");
+      expect(zeroAmounts.length).toBeGreaterThanOrEqual(1);
+    });
+
+    consoleError.mockRestore();
+  });
+
+  it("renders inactive agent status with gray badge variant", async () => {
+    const dashboardWithInactiveAgent = {
+      ...mockDashboard,
+      agents: [
+        {
+          agent_id: "agent-3",
+          agent_name: "Inactive Agent",
+          agent_type: "seller",
+          status: "inactive",
+          total_earned: 0.0,
+          total_spent: 0.0,
+          balance: 0.0,
+        },
+      ],
+      agents_count: 1,
+    };
+
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(dashboardWithInactiveAgent);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Inactive Agent")).toBeInTheDocument();
+      expect(screen.getByText("inactive")).toBeInTheDocument();
+    });
+  });
+
+  it("calls fetchCreatorDashboard with the correct token", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(api.fetchCreatorDashboard).toHaveBeenCalledWith("test-token-123");
+    });
+  });
+
+  it("formats million-dollar values correctly", async () => {
+    const millionDashboard = {
+      ...mockDashboard,
+      creator_balance: 1500000,
+      creator_total_earned: 2500000,
+    };
+
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(millionDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      // formatUSD(1500000) -> "$1.5M"
+      expect(screen.getByText("$1.5M")).toBeInTheDocument();
+      // formatUSD(2500000) -> "$2.5M"
+      expect(screen.getByText("$2.5M")).toBeInTheDocument();
+    });
+  });
+
+  it("updates claim input value on typing", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText(/Agent ID \(UUID\)/i) as HTMLInputElement;
+    await user.type(input, "abc-123");
+    expect(input.value).toBe("abc-123");
+  });
+
+  it("renders all four stat card labels", async () => {
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("USD Balance")).toBeInTheDocument();
+      expect(screen.getByText("Total Earned")).toBeInTheDocument();
+      expect(screen.getByText("Active Agents")).toBeInTheDocument();
+      expect(screen.getByText("Agent Earnings")).toBeInTheDocument();
+    });
+  });
+
+  it("does not call claimAgent when input is only whitespace", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.fetchCreatorDashboard).mockResolvedValue(mockDashboard);
+
+    renderWithProviders(<CreatorDashboardPage {...mockProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText(/Agent ID \(UUID\)/i);
+    // Type spaces (the trim() check should prevent the API call)
+    await user.type(input, "   ");
+
+    // The button should still be disabled because trim() is empty
+    const claimButton = screen.getByRole("button", { name: /Claim/i });
+    expect(claimButton).toBeDisabled();
   });
 });
