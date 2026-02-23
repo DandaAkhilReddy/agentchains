@@ -768,7 +768,7 @@ class TestMCPHealthMonitor:
         mock_session_factory = MagicMock(return_value=mock_session_ctx)
 
         with patch(
-            "marketplace.database.async_session",
+            "marketplace.services.mcp_health_monitor.async_session",
             mock_session_factory,
         ):
             await _run_health_checks()
@@ -796,7 +796,7 @@ class TestMCPHealthMonitor:
         mock_session_factory = MagicMock(return_value=mock_session_ctx)
 
         with patch(
-            "marketplace.database.async_session",
+            "marketplace.services.mcp_health_monitor.async_session",
             mock_session_factory,
         ), patch(
             "marketplace.services.mcp_health_monitor._check_server",
@@ -829,7 +829,7 @@ class TestMCPHealthMonitor:
         mock_session_factory = MagicMock(return_value=mock_session_ctx)
 
         with patch(
-            "marketplace.database.async_session",
+            "marketplace.services.mcp_health_monitor.async_session",
             mock_session_factory,
         ), patch(
             "marketplace.services.mcp_health_monitor._check_server",
@@ -862,7 +862,7 @@ class TestMCPHealthMonitor:
         mock_session_factory = MagicMock(return_value=mock_session_ctx)
 
         with patch(
-            "marketplace.database.async_session",
+            "marketplace.services.mcp_health_monitor.async_session",
             mock_session_factory,
         ), patch(
             "marketplace.services.mcp_health_monitor._check_server",
@@ -895,7 +895,7 @@ class TestMCPHealthMonitor:
         mock_session_factory = MagicMock(return_value=mock_session_ctx)
 
         with patch(
-            "marketplace.database.async_session",
+            "marketplace.services.mcp_health_monitor.async_session",
             mock_session_factory,
         ), patch(
             "marketplace.services.mcp_health_monitor._check_server",
@@ -928,7 +928,7 @@ class TestMCPHealthMonitor:
         mock_session_factory = MagicMock(return_value=mock_session_ctx)
 
         with patch(
-            "marketplace.database.async_session",
+            "marketplace.services.mcp_health_monitor.async_session",
             mock_session_factory,
         ), patch(
             "marketplace.services.mcp_health_monitor._check_server",
