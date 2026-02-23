@@ -293,3 +293,180 @@ async def fork_chain_template(
         new_author_id,
     )
     return forked
+
+
+# ---------------------------------------------------------------------------
+# Execution
+# ---------------------------------------------------------------------------
+
+
+async def _resolve_graph_endpoints(
+    db: AsyncSession, graph: dict
+) -> tuple[dict, list[str]]:
+    """Resolve agent_call endpoints from RegisteredAgent.a2a_endpoint.
+
+    Returns a *copy* of the graph with ``config.endpoint`` populated from
+    the platform database (SSRF-safe) and a list of participant agent IDs.
+    """
+    resolved = copy.deepcopy(graph)
+    participant_ids: list[str] = []
+
+    for node_id, node_def in resolved.get("nodes", {}).items():
+        node_type = node_def.get("type", "agent_call")
+        if node_type != "agent_call":
+            continue
+
+        config = node_def.get("config", {})
+        aid = config.get("agent_id")
+        if not aid:
+            raise ValueError(f"Node '{node_id}' missing config.agent_id")
+
+        result = await db.execute(
+            select(RegisteredAgent).where(RegisteredAgent.id == aid)
+        )
+        agent = result.scalar_one_or_none()
+        if not agent or agent.status != "active":
+            raise ValueError(f"Agent '{aid}' not found or not active")
+
+        config["endpoint"] = agent.a2a_endpoint
+        participant_ids.append(aid)
+
+    return resolved, sorted(set(participant_ids))
+
+
+async def execute_chain(
+    db: AsyncSession,
+    template_id: str,
+    initiated_by: str,
+    input_data: dict | None = None,
+    idempotency_key: str | None = None,
+) -> ChainExecution:
+    """Execute a chain template. Returns immediately; workflow runs in background.
+
+    Handles idempotency (duplicate key returns existing execution),
+    SSRF-safe endpoint resolution, and background workflow dispatch.
+    """
+    # 1. Idempotency check
+    if idempotency_key:
+        existing = await db.execute(
+            select(ChainExecution).where(
+                ChainExecution.idempotency_key == idempotency_key
+            )
+        )
+        found = existing.scalar_one_or_none()
+        if found:
+            return found
+
+    # 2. Load template
+    template = await get_chain_template(db, template_id)
+    if not template:
+        raise ValueError("Chain template not found")
+
+    # 3. SSRF-safe endpoint resolution
+    graph = json.loads(template.graph_json)
+    resolved_graph, participant_ids = await _resolve_graph_endpoints(db, graph)
+    resolved_graph_json = json.dumps(resolved_graph)
+
+    # 4. Create resolved WorkflowDefinition for this execution
+    resolved_workflow = await create_workflow(
+        db,
+        name=f"chain-exec:{template.name}:{template.id[:8]}",
+        graph_json=resolved_graph_json,
+        owner_id=initiated_by,
+        max_budget_usd=template.max_budget_usd,
+    )
+
+    # 5. Create ChainExecution record
+    chain_exec = ChainExecution(
+        chain_template_id=template_id,
+        initiated_by=initiated_by,
+        status="pending",
+        input_json=json.dumps(input_data or {}),
+        participant_agents_json=json.dumps(participant_ids),
+        idempotency_key=idempotency_key,
+        total_cost_usd=Decimal("0"),
+    )
+
+    try:
+        db.add(chain_exec)
+        await db.commit()
+        await db.refresh(chain_exec)
+    except IntegrityError:
+        # Race condition: another request inserted the same idempotency_key
+        await db.rollback()
+        if idempotency_key:
+            result = await db.execute(
+                select(ChainExecution).where(
+                    ChainExecution.idempotency_key == idempotency_key
+                )
+            )
+            return result.scalar_one()
+        raise
+
+    # 6. Fire-and-forget background execution
+    from marketplace.core.async_tasks import fire_and_forget
+
+    exec_id = chain_exec.id
+    wf_id = resolved_workflow.id
+
+    async def _run_chain():
+        from marketplace.database import async_session as session_factory
+
+        async with session_factory() as exec_db:
+            try:
+                wf_execution = await execute_workflow(
+                    exec_db,
+                    workflow_id=wf_id,
+                    initiated_by=initiated_by,
+                    input_data=input_data,
+                )
+
+                # Update chain execution with workflow results
+                ce_result = await exec_db.execute(
+                    select(ChainExecution).where(ChainExecution.id == exec_id)
+                )
+                ce = ce_result.scalar_one()
+                ce.workflow_execution_id = wf_execution.id
+                ce.status = wf_execution.status or "completed"
+                ce.output_json = wf_execution.output_json or "{}"
+                ce.total_cost_usd = wf_execution.total_cost_usd or Decimal("0")
+                ce.completed_at = wf_execution.completed_at or datetime.now(
+                    timezone.utc
+                )
+                ce.provenance_hash = _compute_provenance_hash(
+                    ce.input_json, ce.output_json
+                )
+                await exec_db.commit()
+
+                # Update template stats
+                tmpl_result = await exec_db.execute(
+                    select(ChainTemplate).where(
+                        ChainTemplate.id == template_id
+                    )
+                )
+                tmpl = tmpl_result.scalar_one()
+                tmpl.execution_count = (tmpl.execution_count or 0) + 1
+                await exec_db.commit()
+
+            except Exception as exc:
+                logger.error("Chain execution %s failed: %s", exec_id, exc)
+                try:
+                    ce_err = await exec_db.execute(
+                        select(ChainExecution).where(
+                            ChainExecution.id == exec_id
+                        )
+                    )
+                    ce_obj = ce_err.scalar_one_or_none()
+                    if ce_obj:
+                        ce_obj.status = "failed"
+                        ce_obj.completed_at = datetime.now(timezone.utc)
+                        await exec_db.commit()
+                except Exception:
+                    logger.exception(
+                        "Failed to mark chain execution %s as failed", exec_id
+                    )
+
+    fire_and_forget(_run_chain(), task_name=f"chain_exec:{exec_id}")
+
+    logger.info("Started chain execution %s for template %s", exec_id, template_id)
+    return chain_exec
