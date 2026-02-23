@@ -470,3 +470,97 @@ async def execute_chain(
 
     logger.info("Started chain execution %s for template %s", exec_id, template_id)
     return chain_exec
+
+
+async def get_chain_execution(
+    db: AsyncSession, execution_id: str
+) -> ChainExecution | None:
+    """Retrieve a single chain execution by ID."""
+    result = await db.execute(
+        select(ChainExecution).where(ChainExecution.id == execution_id)
+    )
+    return result.scalar_one_or_none()
+
+
+# ---------------------------------------------------------------------------
+# Provenance
+# ---------------------------------------------------------------------------
+
+
+async def get_chain_provenance(
+    db: AsyncSession,
+    chain_execution_id: str,
+    requesting_agent_id: str,
+) -> dict:
+    """Retrieve provenance for a chain execution.
+
+    Access is restricted to the chain initiator or the template author.
+    Sensitive keys in node I/O are redacted; SHA-256 hashes of originals
+    are returned for integrity verification.
+    """
+    chain_exec = await get_chain_execution(db, chain_execution_id)
+    if not chain_exec:
+        raise ValueError("Chain execution not found")
+
+    # Access control: load template to check author
+    template = await get_chain_template(db, chain_exec.chain_template_id)
+    author_id = template.author_id if template else None
+
+    if requesting_agent_id != chain_exec.initiated_by and requesting_agent_id != author_id:
+        return {"error": "forbidden"}
+
+    # Get workflow node executions for provenance
+    nodes_provenance: list[dict] = []
+
+    if chain_exec.workflow_execution_id:
+        node_executions = await get_execution_nodes(
+            db, chain_exec.workflow_execution_id
+        )
+
+        for ne in node_executions:
+            # Parse original I/O
+            raw_input = ne.input_json or "{}"
+            raw_output = ne.output_json or "{}"
+
+            try:
+                input_data = json.loads(raw_input)
+            except (json.JSONDecodeError, TypeError):
+                input_data = {}
+
+            try:
+                output_data = json.loads(raw_output)
+            except (json.JSONDecodeError, TypeError):
+                output_data = {}
+
+            # Compute hashes of originals before redaction
+            input_hash = hashlib.sha256(raw_input.encode()).hexdigest()
+            output_hash = hashlib.sha256(raw_output.encode()).hexdigest()
+
+            # Redact sensitive keys
+            redacted_input = _redact_sensitive_keys(input_data)
+            redacted_output = _redact_sensitive_keys(output_data)
+
+            nodes_provenance.append({
+                "node_id": ne.node_id,
+                "node_type": ne.node_type,
+                "status": ne.status,
+                "input_data": redacted_input,
+                "output_data": redacted_output,
+                "input_hash_sha256": input_hash,
+                "output_hash_sha256": output_hash,
+                "cost_usd": float(ne.cost_usd) if ne.cost_usd else 0.0,
+                "started_at": ne.started_at.isoformat() if ne.started_at else None,
+                "completed_at": ne.completed_at.isoformat() if ne.completed_at else None,
+            })
+
+    return {
+        "chain_execution_id": chain_exec.id,
+        "chain_template_id": chain_exec.chain_template_id,
+        "initiated_by": chain_exec.initiated_by,
+        "status": chain_exec.status,
+        "provenance_hash": chain_exec.provenance_hash,
+        "total_cost_usd": float(chain_exec.total_cost_usd or 0),
+        "created_at": chain_exec.created_at.isoformat() if chain_exec.created_at else None,
+        "completed_at": chain_exec.completed_at.isoformat() if chain_exec.completed_at else None,
+        "nodes": nodes_provenance,
+    }
