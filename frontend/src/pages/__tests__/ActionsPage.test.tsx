@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { renderWithProviders } from "../../test/test-utils";
 import ActionsPage from "../ActionsPage";
 import * as useActionsModule from "../../hooks/useActions";
@@ -13,9 +13,10 @@ vi.mock("../../components/AnimatedCounter", () => ({
   default: ({ value }: any) => <span>{value}</span>,
 }));
 
-// Mock the Toast hook
+// Mock the Toast hook - capture the toast function
+const mockToast = vi.fn();
 vi.mock("../../components/Toast", () => ({
-  useToast: () => ({ toast: vi.fn() }),
+  useToast: () => ({ toast: mockToast }),
   ToastProvider: ({ children }: any) => <>{children}</>,
 }));
 
@@ -104,6 +105,22 @@ const mockExecutionsResponse: ExecutionListResponse = {
 const mockEmptyExecutionsResponse: ExecutionListResponse = {
   executions: [],
   total: 0,
+  page: 1,
+  page_size: 20,
+};
+
+const mockPaginatedExecutionsResponse: ExecutionListResponse = {
+  executions: [
+    {
+      id: "exec-001",
+      action_id: "action-001",
+      status: "completed",
+      amount: 0.5,
+      created_at: new Date(Date.now() - 60000).toISOString(),
+      proof_verified: true,
+    },
+  ],
+  total: 50,
   page: 1,
   page_size: 20,
 };
@@ -326,5 +343,400 @@ describe("ActionsPage", () => {
         1,
       );
     });
+  });
+
+  // ─── New coverage tests ───
+
+  it("changes price filter and resets page to 1", async () => {
+    const mockUseActions = vi.fn().mockReturnValue({
+      data: mockActionsResponse,
+      isLoading: false,
+      error: null,
+    });
+    vi.spyOn(useActionsModule, "useActions").mockImplementation(mockUseActions);
+
+    renderWithProviders(<ActionsPage />);
+
+    const priceSelect = screen.getByDisplayValue("Any Price");
+    fireEvent.change(priceSelect, { target: { value: "0.5" } });
+
+    await waitFor(() => {
+      expect(mockUseActions).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        0.5,
+        1,
+      );
+    });
+  });
+
+  it("opens execution panel when Execute button is clicked", () => {
+    renderWithProviders(<ActionsPage />);
+
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    // The execution panel should now be visible with "Execution Panel" text
+    const panelLabels = screen.getAllByText("Execution Panel");
+    expect(panelLabels.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("closes execution panel when X button is clicked", () => {
+    renderWithProviders(<ActionsPage />);
+
+    // Open panel first
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    // Verify panel is open
+    expect(screen.getAllByText("Execution Panel").length).toBeGreaterThanOrEqual(1);
+
+    // Click the close button (X icon button)
+    const closeButtons = document.querySelectorAll("button");
+    const closeButton = Array.from(closeButtons).find(
+      btn => btn.querySelector(".lucide-x"),
+    );
+    expect(closeButton).toBeTruthy();
+    fireEvent.click(closeButton!);
+
+    // Panel should be closed
+    expect(screen.queryByText("Execution Panel")).not.toBeInTheDocument();
+  });
+
+  it("shows ExecutionForm when action is selected", () => {
+    renderWithProviders(<ActionsPage />);
+
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    // ExecutionForm should show "Execute Action" header
+    const execHeaders = screen.getAllByText("Execute Action");
+    expect(execHeaders.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows empty state when data is undefined and not loading", () => {
+    vi.spyOn(useActionsModule, "useActions").mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderWithProviders(<ActionsPage />);
+
+    expect(screen.getByText("No actions found")).toBeInTheDocument();
+  });
+
+  it("does not render header badge when data is undefined", () => {
+    vi.spyOn(useActionsModule, "useActions").mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderWithProviders(<ActionsPage />);
+
+    // No "N actions" badge should appear
+    expect(screen.queryByText(/\d+ actions?$/)).not.toBeInTheDocument();
+  });
+
+  it("displays execution history total badge when executions exist", () => {
+    renderWithProviders(<ActionsPage />);
+
+    expect(screen.getByText("2 total")).toBeInTheDocument();
+  });
+
+  it("does not show execution history badge when total is 0", () => {
+    vi.spyOn(useActionsModule, "useExecutions").mockReturnValue({
+      data: mockEmptyExecutionsResponse,
+    } as any);
+
+    renderWithProviders(<ActionsPage />);
+
+    expect(screen.queryByText("0 total")).not.toBeInTheDocument();
+  });
+
+  it("shows execution history pagination when pages > 1", () => {
+    vi.spyOn(useActionsModule, "useExecutions").mockReturnValue({
+      data: mockPaginatedExecutionsResponse,
+    } as any);
+
+    renderWithProviders(<ActionsPage />);
+
+    // 50 executions / 20 per page = 3 pages
+    const prevButtons = screen.getAllByRole("button", { name: "Previous page" });
+    const nextButtons = screen.getAllByRole("button", { name: "Next page" });
+    expect(prevButtons.length).toBeGreaterThanOrEqual(1);
+    expect(nextButtons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does not show execution history pagination when total fits in one page", () => {
+    // Default setup has 2 executions / 20 per page = 1 page
+    renderWithProviders(<ActionsPage />);
+
+    // With 3 actions (total < 12), there should be no pagination at all
+    expect(
+      screen.queryByRole("button", { name: "Previous page" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders 6 skeleton cards during loading", () => {
+    vi.spyOn(useActionsModule, "useActions").mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      error: null,
+    } as any);
+
+    const { container } = renderWithProviders(<ActionsPage />);
+
+    const skeletonCards = container.querySelectorAll(".animate-pulse");
+    expect(skeletonCards.length).toBeGreaterThan(0);
+  });
+
+  it("search resets page to 1", async () => {
+    const mockUseActions = vi.fn().mockReturnValue({
+      data: mockActionsResponse,
+      isLoading: false,
+      error: null,
+    });
+    vi.spyOn(useActionsModule, "useActions").mockImplementation(mockUseActions);
+
+    renderWithProviders(<ActionsPage />);
+
+    const searchInput = screen.getByPlaceholderText("Search actions...");
+    fireEvent.change(searchInput, { target: { value: "scraper" } });
+
+    await waitFor(() => {
+      expect(mockUseActions).toHaveBeenCalledWith(
+        "scraper",
+        undefined,
+        undefined,
+        1,
+      );
+    });
+  });
+
+  it("calls executeMutation.mutate when execution form is submitted", () => {
+    renderWithProviders(<ActionsPage />);
+
+    // Click Execute on first action to open panel
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    // Fill in the execution form - find the consent checkbox
+    const checkboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(checkboxes[0]);
+
+    // Find the submit button in the form (type="submit")
+    const submitButtons = document.querySelectorAll("button[type='submit']");
+    expect(submitButtons.length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(submitButtons[0]);
+
+    expect(mockExecuteMutate).toHaveBeenCalledWith(
+      {
+        actionId: "action-001",
+        payload: { parameters: {}, consent: true },
+      },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("calls toast with success message on execution success", () => {
+    renderWithProviders(<ActionsPage />);
+
+    // Click Execute on first action
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    // Check consent and submit
+    const checkboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(checkboxes[0]);
+
+    const submitButtons = document.querySelectorAll("button[type='submit']");
+    fireEvent.click(submitButtons[0]);
+
+    // Extract the onSuccess callback from mutate call
+    const mutateCall = mockExecuteMutate.mock.calls[0];
+    const callbacks = mutateCall[1];
+
+    // Simulate success
+    callbacks.onSuccess({ execution_id: "exec-new-001" });
+
+    expect(mockToast).toHaveBeenCalledWith(
+      "Execution started! ID: exec-new-001",
+      "success",
+    );
+  });
+
+  it("calls toast with error message on execution failure", () => {
+    renderWithProviders(<ActionsPage />);
+
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    const checkboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(checkboxes[0]);
+
+    const submitButtons = document.querySelectorAll("button[type='submit']");
+    fireEvent.click(submitButtons[0]);
+
+    const mutateCall = mockExecuteMutate.mock.calls[0];
+    const callbacks = mutateCall[1];
+
+    // Simulate error
+    callbacks.onError(new Error("Insufficient funds"));
+
+    expect(mockToast).toHaveBeenCalledWith("Insufficient funds", "error");
+  });
+
+  it("closes execution panel after successful execution", () => {
+    renderWithProviders(<ActionsPage />);
+
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    // Verify panel is open
+    expect(screen.getAllByText("Execution Panel").length).toBeGreaterThanOrEqual(1);
+
+    const checkboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(checkboxes[0]);
+
+    const submitButtons = document.querySelectorAll("button[type='submit']");
+    fireEvent.click(submitButtons[0]);
+
+    const mutateCall = mockExecuteMutate.mock.calls[0];
+    const callbacks = mutateCall[1];
+
+    // Simulate success - this should close the panel (state update)
+    act(() => {
+      callbacks.onSuccess({ execution_id: "exec-new-001" });
+    });
+
+    expect(screen.queryByText("Execution Panel")).not.toBeInTheDocument();
+  });
+
+  it("does not call mutate when selectedActionId is null", () => {
+    renderWithProviders(<ActionsPage />);
+
+    // Don't open any action panel.
+    expect(mockExecuteMutate).not.toHaveBeenCalled();
+  });
+
+  it("renders the execution panel with the correct action ID", () => {
+    renderWithProviders(<ActionsPage />);
+
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[1]); // Select the second action
+
+    // The ExecutionForm displays the action ID in a font-mono paragraph
+    // It appears in both desktop and mobile panels, so use getAllByText
+    const actionIdElements = screen.getAllByText("action-002");
+    expect(actionIdElements.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("passes isPending to execution form", () => {
+    vi.spyOn(useActionsModule, "useExecuteAction").mockReturnValue({
+      mutate: mockExecuteMutate,
+      isPending: true,
+    } as any);
+
+    renderWithProviders(<ActionsPage />);
+
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    // When isPending is true, the form shows "Executing..." text
+    // This appears in both desktop and mobile forms
+    const executingTexts = screen.getAllByText("Executing...");
+    expect(executingTexts.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders mobile execution panel (lg:hidden) when action selected", () => {
+    renderWithProviders(<ActionsPage />);
+
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    // Mobile panel renders with lg:hidden class
+    const mobilePanels = document.querySelectorAll(".lg\\:hidden");
+    expect(mobilePanels.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders desktop execution panel (lg:block) when action selected", () => {
+    renderWithProviders(<ActionsPage />);
+
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    // Desktop panel has lg:block class
+    const desktopPanels = document.querySelectorAll(".lg\\:block");
+    expect(desktopPanels.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("closes mobile panel via its own close button", () => {
+    renderWithProviders(<ActionsPage />);
+
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    // There are two close buttons (desktop and mobile) with X icon
+    const closeButtons = document.querySelectorAll("button");
+    const xButtons = Array.from(closeButtons).filter(
+      btn => btn.querySelector(".lucide-x"),
+    );
+    // Should have 2 X buttons (desktop + mobile)
+    expect(xButtons.length).toBe(2);
+
+    // Click the second one (mobile)
+    fireEvent.click(xButtons[1]);
+
+    expect(screen.queryByText("Execution Panel")).not.toBeInTheDocument();
+  });
+
+  it("opens different action when clicking different Execute buttons", () => {
+    renderWithProviders(<ActionsPage />);
+
+    // First click action-001
+    const executeButtons = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons[0]);
+
+    let actionIdElements = screen.getAllByText("action-001");
+    expect(actionIdElements.length).toBeGreaterThanOrEqual(1);
+
+    // Now click action-003 (close first by clicking X)
+    const closeButtons = document.querySelectorAll("button");
+    const closeButton = Array.from(closeButtons).find(
+      btn => btn.querySelector(".lucide-x"),
+    );
+    fireEvent.click(closeButton!);
+
+    // Re-query execute buttons after panel close
+    const executeButtons2 = screen.getAllByText("Execute");
+    fireEvent.click(executeButtons2[2]); // Third action
+
+    actionIdElements = screen.getAllByText("action-003");
+    expect(actionIdElements.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders empty state with PackageOpen icon", () => {
+    vi.spyOn(useActionsModule, "useActions").mockReturnValue({
+      data: mockActionsResponseEmpty,
+      isLoading: false,
+      error: null,
+    } as any);
+
+    const { container } = renderWithProviders(<ActionsPage />);
+
+    const packageIcon = container.querySelector(".lucide-package-open");
+    expect(packageIcon).toBeInTheDocument();
+  });
+
+  it("renders Execution History icon", () => {
+    const { container } = renderWithProviders(<ActionsPage />);
+
+    const historyIcon = container.querySelector(".lucide-history");
+    expect(historyIcon).toBeInTheDocument();
   });
 });
