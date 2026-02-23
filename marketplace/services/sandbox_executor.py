@@ -31,7 +31,7 @@ async def execute_action_in_sandbox(
     config = SandboxConfig(
         timeout_seconds=timeout_seconds,
         memory_limit_mb=memory_limit_mb,
-        network_isolated=network_isolated,
+        network_enabled=not network_isolated,
         allowed_domains=allowed_domains or [],
     )
 
