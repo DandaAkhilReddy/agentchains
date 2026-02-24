@@ -17,6 +17,7 @@ class A2UIConnectionManager:
     """Manage A2UI WebSocket connections with session and agent tracking."""
 
     MAX_CONNECTIONS = 500
+    MAX_CONNECTIONS_PER_AGENT = 10
 
     def __init__(self):
         self._session_ws: dict[str, WebSocket] = {}
@@ -26,6 +27,10 @@ class A2UIConnectionManager:
         """Accept and track a WebSocket connection for an A2UI session."""
         if len(self._session_ws) >= self.MAX_CONNECTIONS:
             await ws.close(code=4029, reason="Too many A2UI connections")
+            return False
+        agent_count = len(self._agent_sessions.get(agent_id, set()))
+        if agent_count >= self.MAX_CONNECTIONS_PER_AGENT:
+            await ws.close(code=4029, reason="Too many connections for this agent")
             return False
         await ws.accept()
         self._session_ws[session_id] = ws

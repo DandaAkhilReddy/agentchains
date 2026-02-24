@@ -581,6 +581,13 @@ def create_app() -> FastAPI:
         try:
             while True:
                 raw = await ws.receive_text()
+                if len(raw) > 1_048_576:  # 1 MB max message size
+                    await ws.send_text(json.dumps({
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {"code": -32000, "message": "Message too large"},
+                    }))
+                    continue
                 try:
                     body = json.loads(raw)
                 except json.JSONDecodeError:
