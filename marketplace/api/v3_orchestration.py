@@ -230,6 +230,8 @@ async def update_workflow(
     workflow = await orchestration_service.get_workflow(db, workflow_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if workflow.owner_id != agent_id:
+        raise HTTPException(status_code=403, detail="Only the workflow owner can update this workflow")
 
     if req.name is not None:
         workflow.name = req.name
@@ -261,6 +263,8 @@ async def delete_workflow(
     workflow = await orchestration_service.get_workflow(db, workflow_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if workflow.owner_id != agent_id:
+        raise HTTPException(status_code=403, detail="Only the workflow owner can delete this workflow")
 
     workflow.status = "archived"
     await db.commit()
@@ -326,6 +330,9 @@ async def pause_execution(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Pause a running execution."""
+    execution = await orchestration_service.get_execution(db, execution_id)
+    if execution and execution.initiated_by != agent_id:
+        raise HTTPException(status_code=403, detail="Only the execution initiator can pause this execution")
     success = await orchestration_service.pause_execution(db, execution_id)
     if not success:
         raise HTTPException(
@@ -342,6 +349,9 @@ async def resume_execution(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Resume a paused execution."""
+    execution = await orchestration_service.get_execution(db, execution_id)
+    if execution and execution.initiated_by != agent_id:
+        raise HTTPException(status_code=403, detail="Only the execution initiator can resume this execution")
     success = await orchestration_service.resume_execution(db, execution_id)
     if not success:
         raise HTTPException(
@@ -358,6 +368,9 @@ async def cancel_execution(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Cancel a pending, running, or paused execution."""
+    execution = await orchestration_service.get_execution(db, execution_id)
+    if execution and execution.initiated_by != agent_id:
+        raise HTTPException(status_code=403, detail="Only the execution initiator can cancel this execution")
     success = await orchestration_service.cancel_execution(db, execution_id)
     if not success:
         raise HTTPException(
