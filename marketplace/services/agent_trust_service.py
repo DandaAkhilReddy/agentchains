@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -98,7 +101,7 @@ async def _emit_trust_event(agent_id: str, payload: dict[str, Any]) -> None:
             task_name="broadcast_agent_trust",
         )
     except Exception:
-        pass
+        logger.warning("Broadcast failed for agent.trust.updated (agent %s)", agent_id, exc_info=True)
 
 
 async def _get_profile(db: AsyncSession, agent_id: str) -> AgentTrustProfile | None:
@@ -395,7 +398,7 @@ async def run_knowledge_challenge(
             task_name="broadcast_knowledge_challenge",
         )
     except Exception:
-        pass
+        logger.warning("Broadcast failed for %s event (agent %s)", event_type, agent_id, exc_info=True)
 
     return {
         "agent_id": agent_id,
