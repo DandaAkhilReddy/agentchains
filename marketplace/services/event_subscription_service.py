@@ -584,7 +584,43 @@ async def _deliver_to_subscription(
 
     for attempt in range(1, max_retries + 1):
         payload["delivery_attempt"] = attempt
-        validate_callback_url(subscription.callback_url)
+        # Re-validate URL at dispatch time to prevent DNS rebinding attacks
+        # (hostname may now resolve to a different IP than at registration)
+        try:
+            validate_callback_url(subscription.callback_url)
+            # Extra: always resolve and check IPs at delivery time regardless of env
+            host = urlsplit(subscription.callback_url).hostname
+            if host:
+                try:
+                    ipaddress.ip_address(host)
+                except ValueError:
+                    # It's a hostname — resolve fresh and verify all IPs
+                    resolved = _resolve_host_ips(host)
+                    for addr in resolved:
+                        if _is_disallowed_ip(addr):
+                            raise ValueError(
+                                "Callback URL resolves to a private or reserved address at delivery time"
+                            )
+        except ValueError as url_err:
+            db.add(
+                WebhookDelivery(
+                    id=str(uuid.uuid4()),
+                    subscription_id=subscription.id,
+                    event_id=payload["event_id"],
+                    event_type=payload["event_type"],
+                    payload_json=json.dumps(payload),
+                    signature="",
+                    status="blocked",
+                    response_code=None,
+                    response_body=str(url_err)[:1200],
+                    delivery_attempt=attempt,
+                )
+            )
+            subscription.failure_count = int(subscription.failure_count or 0) + 1
+            if subscription.failure_count >= settings.trust_webhook_max_failures:
+                subscription.status = "paused"
+            await db.commit()
+            return  # Don't retry — URL is invalid/rebinding
         signature = _sign(subscription.secret, payload)
         signed_event = {
             **payload,
