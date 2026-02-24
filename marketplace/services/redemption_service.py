@@ -7,7 +7,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marketplace.core.async_tasks import fire_and_forget
+from marketplace.core.events import broadcast_event
 from marketplace.models.redemption import ApiCreditBalance, RedemptionRequest
 from marketplace.models.token_account import TokenAccount, TokenLedger
 
@@ -23,16 +23,7 @@ _MIN_THRESHOLDS: dict[str, float] = {
 
 
 def _emit_admin_event(event_type: str, payload: dict) -> None:
-    try:
-        from marketplace.main import broadcast_event
-
-        fire_and_forget(
-            broadcast_event(event_type, payload),
-            task_name=f"redemption_{event_type}",
-        )
-    except Exception:
-        # Never block payout flow due to notification transport failure.
-        return
+    broadcast_event(event_type, payload)
 
 
 async def create_redemption(
