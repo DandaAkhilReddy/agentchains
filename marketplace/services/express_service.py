@@ -14,9 +14,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.core.events import broadcast_event
 from marketplace.core.exceptions import InsufficientBalanceError, NotFoundError, ValidationError
-
-from marketplace.core.async_tasks import fire_and_forget
 from marketplace.models.listing import DataListing
 from marketplace.models.transaction import Transaction
 from marketplace.services.cache_service import content_cache
@@ -100,30 +99,19 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
     elapsed_ms = (time.monotonic() - start) * 1000
 
     # 8. Broadcast WebSocket event (fire-and-forget)
-    try:
-        from marketplace.main import broadcast_event
-
-        fire_and_forget(
-            broadcast_event(
-                "express_purchase",
-                {
-                    "transaction_id": tx.id,
-                    "listing_id": lid,
-                    "title": listing_title,
-                    "buyer_id": buyer_id,
-                    "seller_id": seller_id,
-                    "price_usdc": price_usdc,
-                    "cost_usd": cost_usd,
-                    "payment_method": payment_method,
-                    "buyer_balance": token_result["buyer_balance"] if token_result else None,
-                    "delivery_ms": round(elapsed_ms, 1),
-                    "cache_hit": was_cache_hit,
-                },
-            ),
-            task_name="broadcast_express_purchase",
-        )
-    except Exception:
-        logger.warning("Broadcast failed for express_purchase event (tx %s)", tx.id, exc_info=True)
+    broadcast_event("express_purchase", {
+        "transaction_id": tx.id,
+        "listing_id": lid,
+        "title": listing_title,
+        "buyer_id": buyer_id,
+        "seller_id": seller_id,
+        "price_usdc": price_usdc,
+        "cost_usd": cost_usd,
+        "payment_method": payment_method,
+        "buyer_balance": token_result["buyer_balance"] if token_result else None,
+        "delivery_ms": round(elapsed_ms, 1),
+        "cache_hit": was_cache_hit,
+    })
 
     return JSONResponse(
         content={
