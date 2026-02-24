@@ -1,7 +1,10 @@
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from marketplace.core.async_tasks import fire_and_forget
 from marketplace.core.exceptions import (
@@ -21,7 +24,7 @@ def _broadcast(event_type: str, data: dict):
 
         fire_and_forget(broadcast_event(event_type, data), task_name=f"broadcast_{event_type}")
     except Exception:
-        pass
+        logger.warning("Broadcast failed for %s event", event_type, exc_info=True)
 
 
 async def initiate_transaction(
