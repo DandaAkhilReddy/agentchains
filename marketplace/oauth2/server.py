@@ -5,6 +5,7 @@ token exchange, token revocation, and userinfo endpoint.
 """
 
 import hashlib
+import hmac
 import secrets
 import base64
 import uuid
@@ -259,7 +260,7 @@ async def _exchange_authorization_code(
             select(OAuthClient).where(OAuthClient.client_id == client_id)
         )
         client = client_result.scalar_one_or_none()
-        if client is None or client.client_secret_hash != _hash_secret(client_secret):
+        if client is None or not hmac.compare_digest(client.client_secret_hash, _hash_secret(client_secret)):
             raise ValueError("Invalid client credentials")
 
     # Mark code as used
@@ -350,7 +351,7 @@ async def _exchange_refresh_token(
             select(OAuthClient).where(OAuthClient.client_id == client_id)
         )
         client = client_result.scalar_one_or_none()
-        if client is None or client.client_secret_hash != _hash_secret(client_secret):
+        if client is None or not hmac.compare_digest(client.client_secret_hash, _hash_secret(client_secret)):
             raise ValueError("Invalid client credentials")
 
     # Revoke old tokens
@@ -520,7 +521,7 @@ def _verify_pkce(
     computed_challenge = (
         base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
     )
-    return computed_challenge == code_challenge
+    return hmac.compare_digest(computed_challenge, code_challenge)
 
 
 class OAuth2Server:
