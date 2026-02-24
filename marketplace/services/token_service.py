@@ -406,7 +406,7 @@ async def transfer(
             "creator_royalty": float(royalty_ledger.amount) if royalty_ledger else 0,
         }), task_name="broadcast_payment")
     except Exception:
-        pass
+        logger.warning("Broadcast failed for payment event (ledger %s)", ledger.id, exc_info=True)
 
     logger.info(
         "Transfer %s: $%s USD from %s -> %s (fee=$%s) [%s]",
@@ -501,7 +501,7 @@ async def deposit(
             "amount_usd": float(amount_d),
         }), task_name="broadcast_deposit")
     except Exception:
-        pass
+        logger.warning("Broadcast failed for deposit event (agent %s)", agent_id, exc_info=True)
 
     logger.info(
         "Deposit %s: +$%s USD to agent %s (%s)",
