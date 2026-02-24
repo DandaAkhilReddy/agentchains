@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "environment": {
+      "value": "dev"
+    },
+    "projectName": {
+      "value": "agentchains"
+    },
+    "deployRedis": {
+      "value": false
+    },
+    "deployServiceBus": {
+      "value": false
+    },
+    "deploySearch": {
+      "value": false
+    },
+    "deployStorage": {
+      "value": false
+    },
+    "deployOpenAi": {
+      "value": false
+    }
+  }
+}
