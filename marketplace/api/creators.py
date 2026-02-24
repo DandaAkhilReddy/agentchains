@@ -17,21 +17,21 @@ router = APIRouter(prefix="/creators", tags=["creators"])
 # ---------------------------------------------------------------------------
 
 class CreatorRegisterRequest(BaseModel):
-    email: str = Field(..., min_length=5, max_length=255)
+    email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     display_name: str = Field(..., min_length=1, max_length=100)
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(None, max_length=20, pattern=r"^\+?[0-9]{7,20}$")
     country: Optional[str] = Field(None, min_length=2, max_length=2)
 
 class CreatorLoginRequest(BaseModel):
-    email: str
-    password: str
+    email: EmailStr
+    password: str = Field(..., min_length=1, max_length=128)
 
 class CreatorUpdateRequest(BaseModel):
-    display_name: Optional[str] = None
-    phone: Optional[str] = None
-    country: Optional[str] = None
-    payout_method: Optional[str] = None
+    display_name: Optional[str] = Field(None, max_length=100)
+    phone: Optional[str] = Field(None, max_length=20, pattern=r"^\+?[0-9]{7,20}$")
+    country: Optional[str] = Field(None, min_length=2, max_length=2)
+    payout_method: Optional[str] = Field(None, max_length=50)
     payout_details: Optional[dict] = None
 
 
