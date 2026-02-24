@@ -87,11 +87,15 @@ def load_plugins_from_directory(plugins_dir: str | Path | None = None) -> list[P
     return manifests
 
 
+_ALLOWED_PLUGIN_MODULE_PREFIX = "marketplace.plugins."
+
+
 def initialize_plugin(manifest: PluginManifest) -> Any:
     """Dynamically import and instantiate the plugin described by *manifest*.
 
-    The ``entry_point`` field must be in ``module.path:ClassName`` format.
-    Returns the instantiated plugin object.
+    The ``entry_point`` field must be in ``module.path:ClassName`` format
+    and the module must reside under ``marketplace.plugins.`` to prevent
+    arbitrary code execution via crafted manifests.
 
     Raises ``ValueError`` if the entry_point format is invalid and
     ``ImportError`` / ``AttributeError`` on module resolution failures.
@@ -104,6 +108,16 @@ def initialize_plugin(manifest: PluginManifest) -> Any:
         )
 
     module_path, class_name = entry_point.rsplit(":", 1)
+
+    if not module_path.startswith(_ALLOWED_PLUGIN_MODULE_PREFIX):
+        raise ValueError(
+            f"Plugin module must be under '{_ALLOWED_PLUGIN_MODULE_PREFIX}', "
+            f"got '{module_path}'"
+        )
+
+    if ".." in module_path:
+        raise ValueError(f"Invalid module path (path traversal detected): '{module_path}'")
+
     module = importlib.import_module(module_path)
     cls = getattr(module, class_name)
 
