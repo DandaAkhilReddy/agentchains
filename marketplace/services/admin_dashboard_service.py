@@ -165,65 +165,105 @@ async def get_admin_finance(db: AsyncSession) -> dict:
 
 
 async def get_admin_usage(db: AsyncSession) -> dict:
-    tx_result = await db.execute(select(Transaction).where(Transaction.status == "completed"))
-    completed = list(tx_result.scalars().all())
-    listing_ids = {
-        listing_id
-        for tx in completed
-        if (listing_id := dashboard_service._as_non_empty_str(tx.listing_id))  # noqa: SLF001
-    }
+    # SQL aggregation: total completed count, unique buyers/sellers
+    overview_agg = await db.execute(
+        select(
+            func.count(Transaction.id),
+            func.count(Transaction.buyer_id.distinct()),
+            func.count(Transaction.seller_id.distinct()),
+        ).where(Transaction.status == "completed")
+    )
+    overview_row = overview_agg.first()
+    info_used_count = int(overview_row[0] or 0)
+    unique_buyers = int(overview_row[1] or 0)
+    unique_sellers = int(overview_row[2] or 0)
 
-    listing_map: dict[str, DataListing] = {}
-    if listing_ids:
-        try:
-            listing_result = await db.execute(
-                select(DataListing).where(DataListing.id.in_(listing_ids))
-            )
-            listing_map = {row.id: row for row in listing_result.scalars().all()}
-        except Exception:
-            listing_map = {}
-
-    info_used_count = len(completed)
-    data_served_bytes = 0
-    money_saved = 0.0
-    category: dict[str, dict] = {}
-
-    for tx in completed:
-        listing = listing_map.get(tx.listing_id)
-        if listing is None:
-            continue
-        amount = float(tx.amount_usdc or 0)
-        fresh_cost = dashboard_service._fresh_cost_estimate_usd(listing)  # noqa: SLF001
-        saved = max(fresh_cost - amount, 0.0)
-        data_served_bytes += int(listing.content_size or 0)
-        money_saved += saved
-        bucket = category.setdefault(
-            listing.category,
-            {"category": listing.category, "usage_count": 0, "volume_usd": 0.0, "money_saved_usd": 0.0},
+    # SQL JOIN aggregation: category breakdown (count, volume, data bytes)
+    cat_agg = await db.execute(
+        select(
+            DataListing.category,
+            func.count(Transaction.id),
+            func.sum(Transaction.amount_usdc),
+            func.sum(DataListing.content_size),
         )
-        bucket["usage_count"] += 1
-        bucket["volume_usd"] += amount
-        bucket["money_saved_usd"] += saved
+        .join(DataListing, Transaction.listing_id == DataListing.id)
+        .where(Transaction.status == "completed")
+        .group_by(DataListing.category)
+    )
+    cat_rows = cat_agg.all()
+
+    data_served_bytes = sum(int(row[3] or 0) for row in cat_rows)
+    category_breakdown: list[dict] = []
+    category_volume: dict[str, float] = {}
+    for row in cat_rows:
+        cat_name = row[0] or "unknown"
+        volume = float(row[2] or 0)
+        category_volume[cat_name] = volume
+        category_breakdown.append({
+            "category": cat_name,
+            "usage_count": int(row[1] or 0),
+            "volume_usd": round(volume, 6),
+            "money_saved_usd": 0.0,  # computed below from listing metadata
+        })
+
+    # money_saved requires _fresh_cost_estimate_usd which parses listing metadata JSON,
+    # so we load only the distinct listings involved (not all transactions)
+    money_saved = 0.0
+    listing_ids_result = await db.execute(
+        select(Transaction.listing_id).where(
+            Transaction.status == "completed",
+            Transaction.listing_id.isnot(None),
+        ).distinct()
+    )
+    listing_ids = {row[0] for row in listing_ids_result.all() if row[0] and row[0].strip()}
+
+    if listing_ids:
+        listing_result = await db.execute(
+            select(DataListing).where(DataListing.id.in_(listing_ids))
+        )
+        listings = list(listing_result.scalars().all())
+
+        # Per-listing: get transaction volume from SQL
+        vol_agg = await db.execute(
+            select(
+                Transaction.listing_id,
+                func.count(Transaction.id),
+                func.sum(Transaction.amount_usdc),
+            )
+            .where(
+                Transaction.status == "completed",
+                Transaction.listing_id.in_(listing_ids),
+            )
+            .group_by(Transaction.listing_id)
+        )
+        vol_map = {row[0]: (int(row[1] or 0), float(row[2] or 0)) for row in vol_agg.all()}
+
+        cat_saved: dict[str, float] = {}
+        for listing in listings:
+            tx_count, tx_volume = vol_map.get(listing.id, (0, 0.0))
+            if tx_count == 0:
+                continue
+            fresh_cost = dashboard_service._fresh_cost_estimate_usd(listing)  # noqa: SLF001
+            avg_amount = tx_volume / tx_count if tx_count else 0.0
+            saved_per_tx = max(fresh_cost - avg_amount, 0.0)
+            total_saved = saved_per_tx * tx_count
+            money_saved += total_saved
+            cat_name = listing.category or "unknown"
+            cat_saved[cat_name] = cat_saved.get(cat_name, 0.0) + total_saved
+
+        # Merge money_saved into category_breakdown
+        for entry in category_breakdown:
+            entry["money_saved_usd"] = round(cat_saved.get(entry["category"], 0.0), 6)
+
+    category_breakdown.sort(key=lambda row: row["usage_count"], reverse=True)
 
     return {
         "info_used_count": info_used_count,
         "data_served_bytes": data_served_bytes,
-        "unique_buyers_count": len({tx.buyer_id for tx in completed if tx.buyer_id}),
-        "unique_sellers_count": len({tx.seller_id for tx in completed if tx.seller_id}),
+        "unique_buyers_count": unique_buyers,
+        "unique_sellers_count": unique_sellers,
         "money_saved_for_others_usd": round(money_saved, 6),
-        "category_breakdown": sorted(
-            (
-                {
-                    "category": row["category"],
-                    "usage_count": row["usage_count"],
-                    "volume_usd": round(float(row["volume_usd"]), 6),
-                    "money_saved_usd": round(float(row["money_saved_usd"]), 6),
-                }
-                for row in category.values()
-            ),
-            key=lambda row: row["usage_count"],
-            reverse=True,
-        ),
+        "category_breakdown": category_breakdown,
         "updated_at": _utcnow(),
     }
 
