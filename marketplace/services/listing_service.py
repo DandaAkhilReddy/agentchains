@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-from marketplace.core.async_tasks import fire_and_forget
+from marketplace.core.events import broadcast_event
 from marketplace.core.exceptions import AuthorizationError, ListingNotFoundError
 from marketplace.models.listing import DataListing
 from marketplace.schemas.listing import ListingCreateRequest, ListingUpdateRequest
@@ -74,25 +74,14 @@ async def create_listing(
     listing_cache.put(f"listing:{listing.id}", listing)
 
     # Broadcast event
-    try:
-        from marketplace.main import broadcast_event
-
-        fire_and_forget(
-            broadcast_event(
-                "listing_created",
-                {
-                    "listing_id": listing.id,
-                    "title": listing.title,
-                    "category": listing.category,
-                    "price_usd": float(listing.price_usdc),
-                    "price_usdc": float(listing.price_usdc),
-                    "seller_id": seller_id,
-                },
-            ),
-            task_name="broadcast_listing_created",
-        )
-    except Exception:
-        logger.warning("Broadcast failed for listing_created event on %s", listing.id, exc_info=True)
+    broadcast_event("listing_created", {
+        "listing_id": listing.id,
+        "title": listing.title,
+        "category": listing.category,
+        "price_usd": float(listing.price_usdc),
+        "price_usdc": float(listing.price_usdc),
+        "seller_id": seller_id,
+    })
 
     return listing
 
