@@ -54,6 +54,22 @@ param memoryEncryptionKey string = ''
 @description('Container image to deploy')
 param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
+// --- Optional service flags (set to false to skip expensive services) ---
+@description('Deploy Azure Cache for Redis (set false for in-memory fallback)')
+param deployRedis bool = true
+
+@description('Deploy Azure Service Bus (set false for synchronous/stub mode)')
+param deployServiceBus bool = true
+
+@description('Deploy Azure AI Search (set false for SQL-based search fallback)')
+param deploySearch bool = true
+
+@description('Deploy Azure Blob Storage (set false for local/container filesystem)')
+param deployStorage bool = true
+
+@description('Deploy Azure OpenAI (set false to use direct OpenAI API instead)')
+param deployOpenAi bool = true
+
 // ============================================================================
 // Variables
 // ============================================================================
@@ -67,7 +83,7 @@ var tags = {
 }
 
 // Resource naming (Azure naming conventions)
-// var postgresServerName = '${projectName}-pgdb-${environment}'
+var postgresServerName = '${projectName}-pgdb-${environment}'
 var redisName = '${projectName}-redis-${environment}'
 var storageAccountName = replace('${projectName}st${environment}', '-', '')
 var keyVaultName = '${projectName}-kv-${environment}'
@@ -118,7 +134,7 @@ module postgres 'modules/postgres.bicep' = {
   }
 }
 
-module redis 'modules/redis.bicep' = {
+module redis 'modules/redis.bicep' = if (deployRedis) {
   name: 'deploy-redis'
   scope: resourceGroup
   params: {
@@ -129,7 +145,7 @@ module redis 'modules/redis.bicep' = {
   }
 }
 
-module storage 'modules/storage.bicep' = {
+module storage 'modules/storage.bicep' = if (deployStorage) {
   name: 'deploy-storage'
   scope: resourceGroup
   params: {
@@ -154,7 +170,7 @@ module keyvault 'modules/keyvault.bicep' = {
 }
 
 // --- AI Services ---
-module search 'modules/search.bicep' = {
+module search 'modules/search.bicep' = if (deploySearch) {
   name: 'deploy-search'
   scope: resourceGroup
   params: {
@@ -165,7 +181,7 @@ module search 'modules/search.bicep' = {
   }
 }
 
-module openai 'modules/openai.bicep' = {
+module openai 'modules/openai.bicep' = if (deployOpenAi) {
   name: 'deploy-openai'
   scope: resourceGroup
   params: {
@@ -177,7 +193,7 @@ module openai 'modules/openai.bicep' = {
 }
 
 // --- Messaging ---
-module servicebus 'modules/servicebus.bicep' = {
+module servicebus 'modules/servicebus.bicep' = if (deployServiceBus) {
   name: 'deploy-servicebus'
   scope: resourceGroup
   params: {
@@ -201,18 +217,122 @@ module acr 'modules/acr.bicep' = {
 }
 
 // --- Compute (explicit dependsOn to ensure all infrastructure is ready) ---
+// Build env vars list: always-required vars + conditionally-added service vars
+var coreEnvVars = [
+  {
+    name: 'ENVIRONMENT'
+    value: environment
+  }
+  {
+    name: 'DATABASE_URL'
+    value: 'postgresql+asyncpg://${postgresAdminLogin}:${postgresAdminPassword}@placeholder:5432/agentchains?ssl=require'
+  }
+  {
+    name: 'JWT_SECRET_KEY'
+    value: jwtSecretKey
+  }
+  {
+    name: 'EVENT_SIGNING_SECRET'
+    value: eventSigningSecret
+  }
+  {
+    name: 'MEMORY_ENCRYPTION_KEY'
+    value: memoryEncryptionKey
+  }
+  {
+    name: 'CORS_ORIGINS'
+    value: environment == 'prod' ? 'https://agentchains.ai,https://www.agentchains.ai' : '*'
+  }
+  {
+    name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+    value: insights.outputs.connectionString
+  }
+  {
+    name: 'AZURE_KEYVAULT_URL'
+    value: keyvault.outputs.vaultUri
+  }
+  {
+    name: 'POSTGRES_HOST'
+    value: 'placeholder'
+  }
+  {
+    name: 'POSTGRES_DB'
+    value: 'agentchains'
+  }
+]
+
+var redisEnvVars = deployRedis ? [
+  {
+    name: 'REDIS_URL'
+    value: 'rediss://:${redis.outputs.primaryKey}@${redis.outputs.hostName}:${redis.outputs.sslPort}/0'
+  }
+  {
+    name: 'REDIS_HOST'
+    value: redis.outputs.hostName
+  }
+  {
+    name: 'REDIS_PORT'
+    value: string(redis.outputs.sslPort)
+  }
+] : []
+
+var storageEnvVars = deployStorage ? [
+  {
+    name: 'AZURE_STORAGE_ENDPOINT'
+    value: storage.outputs.primaryBlobEndpoint
+  }
+  {
+    name: 'AZURE_BLOB_CONNECTION'
+    value: storage.outputs.connectionString
+  }
+] : []
+
+var searchEnvVars = deploySearch ? [
+  {
+    name: 'AZURE_SEARCH_ENDPOINT'
+    value: search.outputs.endpoint
+  }
+  {
+    name: 'AZURE_SEARCH_KEY'
+    value: search.outputs.adminKey
+  }
+] : []
+
+var openAiEnvVars = deployOpenAi ? [
+  {
+    name: 'AZURE_OPENAI_ENDPOINT'
+    value: openai.outputs.endpoint
+  }
+  {
+    name: 'AZURE_OPENAI_DEPLOYMENT'
+    value: openai.outputs.gpt4oDeploymentName
+  }
+  {
+    name: 'AZURE_OPENAI_EMBEDDING_DEPLOYMENT'
+    value: openai.outputs.embeddingDeploymentName
+  }
+] : []
+
+var serviceBusEnvVars = deployServiceBus ? [
+  {
+    name: 'AZURE_SERVICEBUS_CONNECTION'
+    value: servicebus.outputs.connectionString
+  }
+  {
+    name: 'SERVICEBUS_NAMESPACE'
+    value: servicebus.outputs.namespaceName
+  }
+] : []
+
+var allEnvVars = concat(coreEnvVars, redisEnvVars, storageEnvVars, searchEnvVars, openAiEnvVars, serviceBusEnvVars)
+
 module containerapp 'modules/containerapp.bicep' = {
   name: 'deploy-containerapp'
   scope: resourceGroup
   dependsOn: [
     insights
     postgres
-    redis
     keyvault
-    search
-    openai
-    servicebus
-    storage
   ]
   params: {
     location: location
@@ -231,96 +351,7 @@ module containerapp 'modules/containerapp.bicep' = {
       '*'
     ]
     tags: tags
-    envVars: [
-      {
-        name: 'ENVIRONMENT'
-        value: environment
-      }
-      {
-        name: 'DATABASE_URL'
-        value: 'postgresql+asyncpg://${postgresAdminLogin}:${postgresAdminPassword}@placeholder:5432/agentchains?ssl=require'
-      }
-      {
-        name: 'REDIS_URL'
-        value: 'rediss://:${redis.outputs.primaryKey}@${redis.outputs.hostName}:${redis.outputs.sslPort}/0'
-      }
-      {
-        name: 'JWT_SECRET_KEY'
-        value: jwtSecretKey
-      }
-      {
-        name: 'EVENT_SIGNING_SECRET'
-        value: eventSigningSecret
-      }
-      {
-        name: 'MEMORY_ENCRYPTION_KEY'
-        value: memoryEncryptionKey
-      }
-      {
-        name: 'CORS_ORIGINS'
-        value: environment == 'prod' ? 'https://agentchains.ai,https://www.agentchains.ai' : '*'
-      }
-      {
-        name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-        value: insights.outputs.connectionString
-      }
-      {
-        name: 'AZURE_KEYVAULT_URL'
-        value: keyvault.outputs.vaultUri
-      }
-      {
-        name: 'POSTGRES_HOST'
-        value: 'placeholder'
-      }
-      {
-        name: 'POSTGRES_DB'
-        value: 'agentchains'
-      }
-      {
-        name: 'REDIS_HOST'
-        value: redis.outputs.hostName
-      }
-      {
-        name: 'REDIS_PORT'
-        value: string(redis.outputs.sslPort)
-      }
-      {
-        name: 'AZURE_STORAGE_ENDPOINT'
-        value: storage.outputs.primaryBlobEndpoint
-      }
-      {
-        name: 'AZURE_BLOB_CONNECTION'
-        value: storage.outputs.connectionString
-      }
-      {
-        name: 'AZURE_SEARCH_ENDPOINT'
-        value: search.outputs.endpoint
-      }
-      {
-        name: 'AZURE_SEARCH_KEY'
-        value: search.outputs.adminKey
-      }
-      {
-        name: 'AZURE_OPENAI_ENDPOINT'
-        value: openai.outputs.endpoint
-      }
-      {
-        name: 'AZURE_OPENAI_DEPLOYMENT'
-        value: openai.outputs.gpt4oDeploymentName
-      }
-      {
-        name: 'AZURE_OPENAI_EMBEDDING_DEPLOYMENT'
-        value: openai.outputs.embeddingDeploymentName
-      }
-      {
-        name: 'AZURE_SERVICEBUS_CONNECTION'
-        value: servicebus.outputs.connectionString
-      }
-      {
-        name: 'SERVICEBUS_NAMESPACE'
-        value: servicebus.outputs.namespaceName
-      }
-    ]
+    envVars: allEnvVars
   }
 }
 
@@ -343,23 +374,23 @@ output containerAppFqdn string = containerapp.outputs.fqdn
 // TODO: Re-enable once PostgreSQL is deployed
 // output postgresFqdn string = postgres.outputs.fqdn
 
-@description('The Redis hostname')
-output redisHostName string = redis.outputs.hostName
+@description('The Redis hostname (empty if Redis not deployed)')
+output redisHostName string = deployRedis ? redis.outputs.hostName : ''
 
-@description('The Storage blob endpoint')
-output storageBlobEndpoint string = storage.outputs.primaryBlobEndpoint
+@description('The Storage blob endpoint (empty if Storage not deployed)')
+output storageBlobEndpoint string = deployStorage ? storage.outputs.primaryBlobEndpoint : ''
 
 @description('The Key Vault URI')
 output keyVaultUri string = keyvault.outputs.vaultUri
 
-@description('The Azure AI Search endpoint')
-output searchEndpoint string = search.outputs.endpoint
+@description('The Azure AI Search endpoint (empty if Search not deployed)')
+output searchEndpoint string = deploySearch ? search.outputs.endpoint : ''
 
-@description('The Azure OpenAI endpoint')
-output openAiEndpoint string = openai.outputs.endpoint
+@description('The Azure OpenAI endpoint (empty if OpenAI not deployed)')
+output openAiEndpoint string = deployOpenAi ? openai.outputs.endpoint : ''
 
-@description('The Service Bus endpoint')
-output serviceBusEndpoint string = servicebus.outputs.endpoint
+@description('The Service Bus endpoint (empty if Service Bus not deployed)')
+output serviceBusEndpoint string = deployServiceBus ? servicebus.outputs.endpoint : ''
 
 @description('The Application Insights connection string')
 output appInsightsConnectionString string = insights.outputs.connectionString
