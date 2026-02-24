@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-import json
 import math
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.core.utils import (
+    load_json as _load_json,
+    safe_float as _safe_float,
+    safe_int as _safe_int,
+    utcnow as _utcnow,
+)
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.agent_trust import AgentTrustProfile
 from marketplace.models.listing import DataListing
@@ -17,31 +22,10 @@ from marketplace.services import creator_service, dual_layer_service
 from marketplace.services.match_service import FRESH_COST_ESTIMATES
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 def _as_non_empty_str(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
-
-
-def _safe_float(value: object, default: float = 0.0) -> float:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return default
-    if not math.isfinite(number):
-        return default
-    return number
-
-
-def _safe_int(value: object, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def _collect_listing_ids(transactions: list[Transaction]) -> set[str]:
@@ -51,16 +35,6 @@ def _collect_listing_ids(transactions: list[Transaction]) -> set[str]:
         if listing_id:
             listing_ids.add(listing_id)
     return listing_ids
-
-
-def _load_json(value: str | None, fallback: dict) -> dict:
-    if not value:
-        return fallback
-    try:
-        parsed = json.loads(value)
-        return parsed if isinstance(parsed, dict) else fallback
-    except Exception:
-        return fallback
 
 
 def _fresh_cost_estimate_usd(listing: DataListing) -> float:
