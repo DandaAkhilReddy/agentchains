@@ -1,0 +1,6 @@
+# Local settings (per-developer)
+settings.local.json
+
+# Ephemeral session data
+*.jsonl
+todo.md
