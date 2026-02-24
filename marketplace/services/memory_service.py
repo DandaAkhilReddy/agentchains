@@ -44,11 +44,17 @@ def _hash_text(text: str) -> str:
 
 
 def _memory_key() -> bytes:
-    # Derive a 256-bit key from configured material to support simple env-based keys.
+    # Derive a 256-bit key using PBKDF2 for proper key stretching.
     material = (settings.memory_encryption_key or "").strip()
     if not material:
         raise RuntimeError("MEMORY_ENCRYPTION_KEY must be configured")
-    return hashlib.sha256(material.encode("utf-8")).digest()
+    return hashlib.pbkdf2_hmac(
+        "sha256",
+        material.encode("utf-8"),
+        b"agentchains-memory-v1",
+        iterations=100_000,
+        dklen=32,
+    )
 
 
 def _encrypt_chunk_payload(plaintext: str) -> str:
