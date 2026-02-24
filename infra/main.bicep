@@ -342,7 +342,12 @@ module containerapp 'modules/containerapp.bicep' = {
   dependsOn: [
     insights
     postgres
+    redis
     keyvault
+    search
+    openai
+    servicebus
+    storage
   ]
   params: {
     location: location
