@@ -1,8 +1,12 @@
 """Auto-match endpoint: agents describe what they need, marketplace finds the best seller."""
 
+import logging
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from marketplace.core.auth import get_current_agent_id
 from marketplace.core.async_tasks import fire_and_forget
@@ -49,7 +53,7 @@ async def auto_match(
                     led_to_purchase=1 if (req.auto_buy and result["matches"]) else 0,
                 )
         except Exception:
-            pass
+            logger.warning("Failed to log demand signal for auto-match", exc_info=True)
 
     fire_and_forget(_log_demand(), task_name="automatch_log_demand")
 
