@@ -102,8 +102,22 @@ async def register_client(
 async def get_client(
     client_id: str,
     db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
-    """Get OAuth2 client details by client_id."""
+    """Get OAuth2 client details by client_id (requires authentication)."""
+    from marketplace.core.auth import decode_token
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization required")
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Bearer token required")
+    try:
+        payload = decode_token(parts[1])
+        authenticated_id = payload.get("sub")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
     import json
     from sqlalchemy import select
     from marketplace.oauth2.models import OAuthClient
@@ -115,13 +129,16 @@ async def get_client(
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
+    # Only the owner can view client details
+    if client.owner_id != authenticated_id:
+        raise HTTPException(status_code=403, detail="Not the owner of this client")
+
     return {
         "client_id": client.client_id,
         "name": client.name,
         "redirect_uris": json.loads(client.redirect_uris or "[]"),
         "scopes": client.scopes,
         "grant_types": client.grant_types,
-        "owner_id": client.owner_id,
         "status": client.status,
         "created_at": client.created_at.isoformat() if client.created_at else "",
     }
