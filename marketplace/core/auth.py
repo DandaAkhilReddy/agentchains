@@ -13,6 +13,8 @@ def create_access_token(agent_id: str, agent_name: str) -> str:
     payload = {
         "sub": agent_id,
         "name": agent_name,
+        "aud": "agentchains-marketplace",
+        "iss": "agentchains",
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
@@ -49,6 +51,8 @@ def create_stream_token(
         "type": token_type,
         "sub_type": subject_type,
         "allowed_topics": allowed_topics,
+        "aud": "agentchains-marketplace",
+        "iss": "agentchains",
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
@@ -58,7 +62,13 @@ def create_stream_token(
 def decode_token(token: str) -> dict:
     """Decode and validate a JWT token. Returns the payload."""
     try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
+            issuer="agentchains",
+        )
         if payload.get("sub") is None:
             raise UnauthorizedError("Token missing subject")
         token_type = payload.get("type")
@@ -76,7 +86,13 @@ def decode_token(token: str) -> dict:
 def decode_stream_token(token: str) -> dict:
     """Decode and validate a short-lived WebSocket stream token."""
     try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
+            issuer="agentchains",
+        )
     except JWTError:
         raise UnauthorizedError("Invalid or expired token")
     if payload.get("sub") is None:

@@ -21,6 +21,8 @@ def create_user_token(user_id: str, email: str) -> str:
         "email": email,
         "type": "user",
         "jti": str(uuid.uuid4()),
+        "aud": "agentchains-marketplace",
+        "iss": "agentchains",
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
@@ -35,7 +37,13 @@ def get_current_user_id(authorization: str | None = Header(default=None)) -> str
     if len(parts) != 2 or parts[0].lower() != "bearer":
         raise UnauthorizedError("Authorization header must be: Bearer <token>")
     try:
-        payload = jwt.decode(parts[1], settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            parts[1],
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
+            issuer="agentchains",
+        )
         if payload.get("type") != "user":
             raise UnauthorizedError("Not a user token")
         user_id = payload.get("sub")
