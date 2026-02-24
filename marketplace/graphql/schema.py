@@ -11,6 +11,7 @@ from strawberry.fastapi import GraphQLRouter
 
 from sqlalchemy import select
 
+from marketplace.config import settings
 from marketplace.database import async_session
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.listing import DataListing
@@ -213,12 +214,16 @@ class Mutation:
     @strawberry.mutation
     async def create_listing(
         self,
+        info: strawberry.types.Info,
         title: str,
         category: str,
         price_usdc: float,
-        seller_id: str,
     ) -> ListingType:
-        """Create a new data listing in the marketplace."""
+        """Create a new data listing in the marketplace (requires authentication)."""
+        user = info.context.get("user")
+        if not user or not user.get("id"):
+            raise PermissionError("Authentication required to create listings")
+        seller_id = user["id"]
         async with async_session() as db:
             content_hash = "sha256:" + hashlib.sha256(b"").hexdigest()
             listing = DataListing(
@@ -244,10 +249,38 @@ class Mutation:
 # Schema & Router
 # ---------------------------------------------------------------------------
 
+_is_prod = settings.environment.lower() in {"production", "prod"}
+
 schema = strawberry.Schema(
     query=Query,
     mutation=Mutation,
-    extensions=[QueryDepthLimiter(max_depth=10)],
+    extensions=[QueryDepthLimiter(max_depth=5)],
 )
 
-graphql_router = GraphQLRouter(schema, path="/graphql")
+
+async def _graphql_context_getter(request=None, **kwargs):
+    """Build GraphQL context with authenticated user and DB session."""
+    from starlette.requests import Request as StarletteRequest
+
+    context: dict = {"user": None, "db": None}
+
+    if request and isinstance(request, StarletteRequest):
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:]
+            try:
+                from marketplace.core.auth import decode_token
+                payload = decode_token(token)
+                context["user"] = {"id": payload.get("sub"), "token_type": payload.get("type")}
+            except Exception:
+                pass  # Unauthenticated — queries still work, mutations will deny
+
+    return context
+
+
+graphql_router = GraphQLRouter(
+    schema,
+    path="/graphql",
+    context_getter=_graphql_context_getter,
+    allow_queries_via_get=False,  # Disable GET queries to prevent caching of sensitive data
+)
