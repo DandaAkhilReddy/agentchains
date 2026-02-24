@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.config import settings
 from marketplace.database import get_db
 from marketplace.mcp.auth import validate_mcp_auth
 from marketplace.mcp.session_manager import session_manager
@@ -65,14 +66,10 @@ async def handle_message(
         })
 
     # ── All other methods require a session ──
+    # Only accept session_id from the X-MCP-Session-ID header, never from request body
     session = None
     if session_id:
         session = session_manager.get_session(session_id)
-    if not session:
-        # Try getting session from params
-        sid = params.get("_session_id", "")
-        if sid:
-            session = session_manager.get_session(sid)
     if not session:
         return _jsonrpc_error(msg_id, -32000, "No active session. Call initialize first.")
 
@@ -94,7 +91,9 @@ async def handle_message(
                 "content": [{"type": "text", "text": json.dumps(result)}],
             })
         except Exception as e:
-            return _jsonrpc_error(msg_id, -32000, f"Tool execution error: {str(e)}")
+            _prod = settings.environment.lower() in {"production", "prod"}
+            msg = "Internal tool error" if _prod else str(e)
+            return _jsonrpc_error(msg_id, -32000, f"Tool execution error: {msg}")
 
     # ── resources/list ──
     elif method == "resources/list":
@@ -109,7 +108,9 @@ async def handle_message(
                 "contents": [{"uri": uri, "mimeType": "application/json", "text": json.dumps(result)}],
             })
         except Exception as e:
-            return _jsonrpc_error(msg_id, -32000, f"Resource read error: {str(e)}")
+            _prod = settings.environment.lower() in {"production", "prod"}
+            msg = "Internal resource error" if _prod else str(e)
+            return _jsonrpc_error(msg_id, -32000, f"Resource read error: {msg}")
 
     # ── ping ──
     elif method == "ping":
