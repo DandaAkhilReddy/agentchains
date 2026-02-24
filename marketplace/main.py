@@ -384,15 +384,20 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
+            "style-src 'self'; "
             "img-src 'self' data: https:; "
             "connect-src 'self' wss: ws:; "
-            "script-src 'self'"
+            "script-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
         )
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Permissions-Policy"] = (
-            "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
         )
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         return response
 
 
