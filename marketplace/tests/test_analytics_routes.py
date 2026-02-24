@@ -488,10 +488,10 @@ async def test_get_leaderboard_earnings(client, make_agent, make_listing, make_t
 
 
 @pytest.mark.asyncio
-async def test_get_leaderboard_contributors(client, make_agent, make_listing):
+async def test_get_leaderboard_contributors(client, make_agent, make_listing, auth_header):
     """Test GET /api/v1/analytics/leaderboard/contributors."""
-    agent1, _ = await make_agent(name="contributor-1")
-    agent2, _ = await make_agent(name="contributor-2")
+    agent1, token1 = await make_agent(name="contributor-1")
+    agent2, token2 = await make_agent(name="contributor-2")
 
     # Agent1: large data contributions
     for i in range(5):
@@ -506,9 +506,15 @@ async def test_get_leaderboard_contributors(client, make_agent, make_listing):
         content_size=10000,
     )
 
-    # Recalculate stats
-    await client.get(f"/api/v1/analytics/agent/{agent1.id}/profile")
-    await client.get(f"/api/v1/analytics/agent/{agent2.id}/profile")
+    # Recalculate stats (profile endpoint now requires auth)
+    await client.get(
+        f"/api/v1/analytics/agent/{agent1.id}/profile",
+        headers=auth_header(token1),
+    )
+    await client.get(
+        f"/api/v1/analytics/agent/{agent2.id}/profile",
+        headers=auth_header(token2),
+    )
 
     response = await client.get("/api/v1/analytics/leaderboard/contributors")
     assert response.status_code == 200
