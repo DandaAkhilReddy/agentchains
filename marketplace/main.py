@@ -515,11 +515,24 @@ def create_app() -> FastAPI:
     except ImportError:
         logger.info("strawberry-graphql not installed — GraphQL disabled")
 
+    # ── WebSocket origin validation helper ──
+    def _validate_ws_origin(ws: WebSocket) -> bool:
+        """Reject WebSocket connections from untrusted origins."""
+        origin = ws.headers.get("origin")
+        if not origin:
+            return True  # Non-browser clients may not send Origin
+        if not allowed_origins or "*" in allowed_origins:
+            return True
+        return origin in allowed_origins
+
     # WebSocket for live feed (JWT-authenticated)
     @app.websocket("/ws/feed")
     async def live_feed(ws: WebSocket, token: str | None = Query(default=None)) -> None:
         from marketplace.core.auth import decode_token
 
+        if not _validate_ws_origin(ws):
+            await ws.close(code=4003, reason="Origin not allowed")
+            return
         if not token:
             await ws.close(code=4001, reason="Missing token query parameter")
             return
@@ -556,6 +569,9 @@ def create_app() -> FastAPI:
     async def live_feed_v2(ws: WebSocket, token: str | None = Query(default=None)) -> None:
         from marketplace.core.auth import decode_stream_token
 
+        if not _validate_ws_origin(ws):
+            await ws.close(code=4003, reason="Origin not allowed")
+            return
         if not token:
             await ws.close(code=4001, reason="Missing token query parameter")
             return
@@ -581,6 +597,9 @@ def create_app() -> FastAPI:
         from marketplace.a2ui.message_handler import handle_a2ui_message
         from marketplace.core.auth import decode_stream_token
 
+        if not _validate_ws_origin(ws):
+            await ws.close(code=4003, reason="Origin not allowed")
+            return
         if not token:
             await ws.close(code=4001, reason="Missing token query parameter")
             return
