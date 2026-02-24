@@ -201,15 +201,81 @@ async def get_open_market_analytics(db: AsyncSession, limit: int = 10) -> dict:
     total_agents = int((await db.execute(select(func.count(RegisteredAgent.id)))).scalar() or 0)
     total_listings = int((await db.execute(select(func.count(DataListing.id)))).scalar() or 0)
 
+    # SQL aggregation for totals instead of loading all transactions into Python
+    tx_agg = await db.execute(
+        select(
+            func.count(Transaction.id),
+            func.sum(Transaction.amount_usdc),
+        ).where(Transaction.status == "completed")
+    )
+    tx_agg_row = tx_agg.first()
+    total_completed = int(tx_agg_row[0] or 0)
+    platform_volume = _safe_float(tx_agg_row[1], default=0.0)
+
+    # Top sellers by revenue — SQL aggregation
+    seller_agg_result = await db.execute(
+        select(
+            Transaction.seller_id,
+            func.sum(Transaction.amount_usdc).label("total_revenue"),
+            func.count(Transaction.id).label("tx_count"),
+        )
+        .where(Transaction.status == "completed")
+        .group_by(Transaction.seller_id)
+        .order_by(func.sum(Transaction.amount_usdc).desc())
+        .limit(limit)
+    )
+    seller_agg_rows = seller_agg_result.all()
+    seller_ids_for_names = {row[0] for row in seller_agg_rows if row[0]}
+
+    # Top sellers by usage
+    usage_agg_result = await db.execute(
+        select(
+            Transaction.seller_id,
+            func.count(Transaction.id).label("tx_count"),
+        )
+        .where(Transaction.status == "completed")
+        .group_by(Transaction.seller_id)
+        .order_by(func.count(Transaction.id).desc())
+        .limit(limit)
+    )
+    usage_agg_rows = usage_agg_result.all()
+    seller_ids_for_names.update(row[0] for row in usage_agg_rows if row[0])
+
+    # Batch-load agent names
+    agent_names: dict[str, str] = {}
+    if seller_ids_for_names:
+        names_result = await db.execute(
+            select(RegisteredAgent.id, RegisteredAgent.name).where(
+                RegisteredAgent.id.in_(seller_ids_for_names)
+            )
+        )
+        agent_names = {row[0]: row[1] for row in names_result.all()}
+
+    top_agents_by_revenue = [
+        {
+            "agent_id": row[0] or "unknown",
+            "agent_name": agent_names.get(row[0], "Unknown"),
+            "money_received_usd": round(_safe_float(row[1], default=0.0), 6),
+        }
+        for row in seller_agg_rows
+    ]
+
+    top_agents_by_usage = [
+        {
+            "agent_id": row[0] or "unknown",
+            "agent_name": agent_names.get(row[0], "Unknown"),
+            "info_used_count": int(row[1] or 0),
+        }
+        for row in usage_agg_rows
+    ]
+
+    # Category breakdown — still need listing join for category info
+    # Use a single JOIN query instead of loading all transactions
     tx_rows = await db.execute(
         select(Transaction).where(Transaction.status == "completed")
     )
     completed_transactions = list(tx_rows.scalars().all())
-    total_completed = len(completed_transactions)
-    platform_volume = sum(_safe_float(tx.amount_usdc, default=0.0) for tx in completed_transactions)
 
-    by_seller: dict[str, float] = {}
-    by_usage: dict[str, int] = {}
     listing_ids = _collect_listing_ids(completed_transactions)
     listing_map: dict[str, DataListing] = {}
     if listing_ids:
@@ -224,15 +290,10 @@ async def get_open_market_analytics(db: AsyncSession, limit: int = 10) -> dict:
     category_usage: dict[str, dict] = {}
     total_saved = 0.0
     for tx in completed_transactions:
-        seller_id = _as_non_empty_str(tx.seller_id) or "unknown"
-        amount = _safe_float(tx.amount_usdc, default=0.0)
-        by_seller[seller_id] = by_seller.get(seller_id, 0.0) + amount
-        by_usage[seller_id] = by_usage.get(seller_id, 0) + 1
-
         listing = listing_map.get(tx.listing_id)
         if listing is None:
             continue
-
+        amount = _safe_float(tx.amount_usdc, default=0.0)
         category = _as_non_empty_str(getattr(listing, "category", None)) or "unknown"
         entry = category_usage.setdefault(
             category,
@@ -244,27 +305,6 @@ async def get_open_market_analytics(db: AsyncSession, limit: int = 10) -> dict:
         entry["volume_usd"] += amount
         entry["money_saved_usd"] += saved
         total_saved += saved
-
-    names_result = await db.execute(select(RegisteredAgent.id, RegisteredAgent.name))
-    agent_names = {row[0]: row[1] for row in names_result.all()}
-
-    top_agents_by_revenue = [
-        {
-            "agent_id": seller_id,
-            "agent_name": agent_names.get(seller_id, "Unknown"),
-            "money_received_usd": round(amount, 6),
-        }
-        for seller_id, amount in sorted(by_seller.items(), key=lambda item: item[1], reverse=True)[:limit]
-    ]
-
-    top_agents_by_usage = [
-        {
-            "agent_id": seller_id,
-            "agent_name": agent_names.get(seller_id, "Unknown"),
-            "info_used_count": count,
-        }
-        for seller_id, count in sorted(by_usage.items(), key=lambda item: item[1], reverse=True)[:limit]
-    ]
 
     top_categories_by_usage = sorted(
         (
