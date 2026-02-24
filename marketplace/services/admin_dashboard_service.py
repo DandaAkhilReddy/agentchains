@@ -1,12 +1,13 @@
 """Admin dashboard aggregation helpers."""
 
 from __future__ import annotations
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
+from marketplace.core.utils import utcnow as _utcnow
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.agent_trust import AgentTrustProfile
 from marketplace.models.audit_log import AuditLog
@@ -22,10 +23,6 @@ _TRUST_WEIGHT = {
     "pending_verification": 0.7,
     "verification_failed": 0.0,
 }
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 async def get_admin_overview(db: AsyncSession) -> dict:
