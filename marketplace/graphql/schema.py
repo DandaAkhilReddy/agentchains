@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 import strawberry
+from strawberry.extensions import QueryDepthLimiter
 from strawberry.fastapi import GraphQLRouter
 
 from sqlalchemy import select
@@ -240,6 +241,10 @@ class Mutation:
 # Schema & Router
 # ---------------------------------------------------------------------------
 
-schema = strawberry.Schema(query=Query, mutation=Mutation)
+schema = strawberry.Schema(
+    query=Query,
+    mutation=Mutation,
+    extensions=[QueryDepthLimiter(max_depth=10)],
+)
 
 graphql_router = GraphQLRouter(schema, path="/graphql")
