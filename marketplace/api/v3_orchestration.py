@@ -78,7 +78,7 @@ class WorkflowCreateRequest(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=200)
     description: str = ""
-    graph_json: str = Field(..., min_length=2, description="JSON string of the DAG definition")
+    graph_json: str = Field(..., min_length=2, max_length=1_000_000, description="JSON string of the DAG definition")
     max_budget_usd: float | None = Field(default=None, ge=0)
 
 
@@ -192,9 +192,13 @@ async def list_workflows(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
-    """List workflow definitions with optional filters."""
+    """List workflow definitions with optional filters.
+
+    Agents can only list their own workflows. The owner_id filter is
+    ignored and always set to the authenticated agent.
+    """
     workflows = await orchestration_service.list_workflows(
-        db, owner_id=owner_id, status=status, limit=limit,
+        db, owner_id=agent_id, status=status, limit=limit,
     )
     # Apply offset manually (service returns up to limit)
     sliced = workflows[offset:]
@@ -305,6 +309,8 @@ async def get_execution(
     execution = await orchestration_service.get_execution(db, execution_id)
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
+    if execution.initiated_by != agent_id:
+        raise HTTPException(status_code=403, detail="Only the execution initiator can view this execution")
     return _execution_to_dict(execution)
 
 
@@ -315,6 +321,11 @@ async def get_execution_nodes(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Get all node execution statuses for a workflow execution."""
+    execution = await orchestration_service.get_execution(db, execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    if execution.initiated_by != agent_id:
+        raise HTTPException(status_code=403, detail="Only the execution initiator can view this execution")
     nodes = await orchestration_service.get_execution_nodes(db, execution_id)
     return {
         "execution_id": execution_id,
@@ -390,6 +401,8 @@ async def get_execution_cost(
     execution = await orchestration_service.get_execution(db, execution_id)
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
+    if execution.initiated_by != agent_id:
+        raise HTTPException(status_code=403, detail="Only the execution initiator can view this execution")
 
     total_cost = await orchestration_service.get_execution_cost(db, execution_id)
     nodes = await orchestration_service.get_execution_nodes(db, execution_id)
