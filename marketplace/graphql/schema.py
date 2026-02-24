@@ -1,9 +1,12 @@
 """Strawberry GraphQL schema with types, queries, mutations, and the router."""
 
 import hashlib
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 import strawberry
 from strawberry.extensions import QueryDepthLimiter
@@ -273,7 +276,7 @@ async def _graphql_context_getter(request=None, **kwargs):
                 payload = decode_token(token)
                 context["user"] = {"id": payload.get("sub"), "token_type": payload.get("type")}
             except Exception:
-                pass  # Unauthenticated — queries still work, mutations will deny
+                logger.warning("GraphQL auth token decode failed", exc_info=True)
 
     return context
 
