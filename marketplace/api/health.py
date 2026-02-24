@@ -19,8 +19,23 @@ router = APIRouter(tags=["health"])
 _VERSION = "0.4.0"
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
+    from marketplace.config import settings as _cfg
+
+    _is_prod = _cfg.environment.lower() in {"production", "prod"}
+
+    # In production, return minimal info to avoid leaking operational metrics
+    if _is_prod:
+        try:
+            await db.execute(text("SELECT 1"))
+            return {"status": "healthy", "version": _VERSION}
+        except Exception:
+            return JSONResponse(
+                status_code=503,
+                content={"status": "unhealthy", "version": _VERSION},
+            )
+
     agents = (await db.execute(select(func.count(RegisteredAgent.id)))).scalar() or 0
     listings = (await db.execute(select(func.count(DataListing.id)))).scalar() or 0
     txns = (await db.execute(select(func.count(Transaction.id)))).scalar() or 0
