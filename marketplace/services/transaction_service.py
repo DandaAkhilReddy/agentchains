@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 from marketplace.core.async_tasks import fire_and_forget
 from marketplace.core.exceptions import (
+    AuthorizationError,
     InvalidTransactionStateError,
     TransactionNotFoundError,
 )
@@ -80,8 +81,7 @@ async def confirm_payment(
     """Confirm payment for a transaction."""
     tx = await _get_transaction(db, tx_id)
     if buyer_id and tx.buyer_id != buyer_id:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Not the buyer for this transaction")
+        raise AuthorizationError("Not the buyer for this transaction")
     if tx.status != "payment_pending":
         raise InvalidTransactionStateError(tx.status, "payment_pending")
 
@@ -129,8 +129,7 @@ async def deliver_content(
     """Seller delivers content for a transaction."""
     tx = await _get_transaction(db, tx_id)
     if tx.seller_id != seller_id:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Not the seller for this transaction")
+        raise AuthorizationError("Not the seller for this transaction")
     if tx.status != "payment_confirmed":
         raise InvalidTransactionStateError(tx.status, "payment_confirmed")
 
@@ -157,8 +156,7 @@ async def verify_delivery(db: AsyncSession, tx_id: str, buyer_id: str) -> Transa
     """Buyer verifies the delivered content matches expected hash."""
     tx = await _get_transaction(db, tx_id)
     if tx.buyer_id != buyer_id:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Not the buyer for this transaction")
+        raise AuthorizationError("Not the buyer for this transaction")
     if tx.status != "delivered":
         raise InvalidTransactionStateError(tx.status, "delivered")
 
