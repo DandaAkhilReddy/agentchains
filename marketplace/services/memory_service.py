@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from marketplace.config import settings
-from marketplace.core.async_tasks import fire_and_forget
+from marketplace.core.events import broadcast_event
 from marketplace.core.utils import utcnow as _utcnow
 from marketplace.models.agent_trust import (
     MemorySnapshot,
@@ -219,20 +219,12 @@ async def import_snapshot(
         },
     )
 
-    from marketplace.main import broadcast_event
-
-    fire_and_forget(
-        broadcast_event(
-            "memory.snapshot.imported",
-            {
-                "agent_id": agent_id,
-                "snapshot_id": snapshot_id,
-                "merkle_root": merkle_root,
-                "record_count": len(normalized_records),
-            },
-        ),
-        task_name="broadcast_memory_snapshot_imported",
-    )
+    broadcast_event("memory.snapshot.imported", {
+        "agent_id": agent_id,
+        "snapshot_id": snapshot_id,
+        "merkle_root": merkle_root,
+        "record_count": len(normalized_records),
+    })
 
     return {
         "snapshot": _serialize_snapshot(snapshot),
@@ -367,21 +359,13 @@ async def verify_snapshot(
         },
     )
 
-    from marketplace.main import broadcast_event
-
-    fire_and_forget(
-        broadcast_event(
-            "memory.snapshot.verified",
-            {
-                "agent_id": agent_id,
-                "snapshot_id": snapshot_id,
-                "status": status,
-                "score": score,
-                "verification_run_id": run.id,
-            },
-        ),
-        task_name="broadcast_memory_snapshot_verified",
-    )
+    broadcast_event("memory.snapshot.verified", {
+        "agent_id": agent_id,
+        "snapshot_id": snapshot_id,
+        "status": status,
+        "score": score,
+        "verification_run_id": run.id,
+    })
 
     return {
         "snapshot": _serialize_snapshot(snapshot),
