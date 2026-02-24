@@ -11,8 +11,8 @@ from marketplace.core.exceptions import UnauthorizedError
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    """Hash a password using bcrypt with explicit work factor."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=14)).decode("utf-8")
 
 
 def verify_password(password: str, hashed: str) -> bool:
