@@ -441,9 +441,22 @@ def create_app() -> FastAPI:
         openapi_url=None if _is_prod else "/openapi.json",
     )
 
-    # Global exception handler: suppress stack traces in production
+    # Domain exception handler: maps DomainError subclasses to HTTP responses
     from fastapi.responses import JSONResponse as _JSONResponse
+    from marketplace.core.exceptions import DomainError
 
+    @app.exception_handler(DomainError)
+    async def _domain_exception_handler(request: Request, exc: DomainError):
+        logger.warning(
+            "DomainError [%s] on %s %s: %s",
+            exc.code, request.method, request.url.path, exc.detail,
+        )
+        return _JSONResponse(
+            status_code=exc.http_status,
+            content={"detail": exc.detail, "code": exc.code},
+        )
+
+    # Global exception handler: suppress stack traces in production
     @app.exception_handler(Exception)
     async def _global_exception_handler(request: Request, exc: Exception):
         from marketplace.config import settings as _cfg
