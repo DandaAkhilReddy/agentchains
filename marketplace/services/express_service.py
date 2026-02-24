@@ -3,9 +3,12 @@
 Target: <100ms for cache-hit content.
 """
 
+import logging
 import time
 import uuid
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
@@ -119,7 +122,7 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
             task_name="broadcast_express_purchase",
         )
     except Exception:
-        pass  # Don't fail the purchase if broadcast fails
+        logger.warning("Broadcast failed for express_purchase event (tx %s)", tx.id, exc_info=True)
 
     return JSONResponse(
         content={
