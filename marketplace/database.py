@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -53,7 +55,21 @@ def _sqlite_table_exists(sync_conn, table: str) -> bool:
     return bool(row)
 
 
+_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+_ALLOWED_MIGRATION_TABLES = frozenset(_SQLITE_COLUMN_MIGRATIONS.keys())
+
+
+def _validate_identifier(value: str, label: str) -> str:
+    """Validate a SQL identifier to prevent injection."""
+    if not _IDENTIFIER_RE.match(value):
+        raise ValueError(f"Invalid {label}: {value!r}")
+    return value
+
+
 def _sqlite_has_column(sync_conn, table: str, column: str) -> bool:
+    if table not in _ALLOWED_MIGRATION_TABLES:
+        raise ValueError(f"Table {table!r} not in allowed migration tables")
+    _validate_identifier(table, "table name")
     rows = sync_conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
     return any(row[1] == column for row in rows)
 
@@ -61,11 +77,16 @@ def _sqlite_has_column(sync_conn, table: str, column: str) -> bool:
 def _apply_sqlite_compat_migrations(sync_conn) -> None:
     """Apply lightweight additive SQLite migrations for local developer DBs."""
     for table, migrations in _SQLITE_COLUMN_MIGRATIONS.items():
+        _validate_identifier(table, "table name")
+        if table not in _ALLOWED_MIGRATION_TABLES:
+            raise ValueError(f"Table {table!r} not in allowed migration tables")
         if not _sqlite_table_exists(sync_conn, table):
             continue
         for column, ddl in migrations:
-            if _sqlite_has_column(sync_conn, table, column):
-                continue
+            _validate_identifier(column, "column name")
+            _DANGEROUS_KW = {"DROP", "DELETE", "TRUNCATE", "INSERT", "UPDATE", ";", "--"}
+            if any(kw in ddl.upper() for kw in _DANGEROUS_KW):
+                raise ValueError(f"Dangerous keyword in DDL: {ddl!r}")
             sync_conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
