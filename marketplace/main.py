@@ -614,9 +614,10 @@ def create_app() -> FastAPI:
             await ws.close(code=4003, reason="Invalid or expired stream token")
             return
 
+        import secrets as _secrets
         agent_id = payload.get("sub", "")
-        # Use a temporary session_id until a2ui.init assigns a real one
-        temp_session_id = f"ws-{agent_id}"
+        # Use a cryptographically random session_id until a2ui.init assigns a real one
+        temp_session_id = f"ws-{_secrets.token_urlsafe(16)}"
         connected = await a2ui_connection_manager.connect(ws, temp_session_id, agent_id)
         if not connected:
             return
