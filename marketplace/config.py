@@ -150,13 +150,23 @@ def validate_security_posture(cfg: Settings) -> None:
             "Set a strong random secret via the JWT_SECRET_KEY environment variable before deploying to production."
         )
 
-    if cfg.event_signing_secret in _INSECURE_SECRETS and not is_prod:
+    if cfg.event_signing_secret in _INSECURE_SECRETS:
+        if is_prod:
+            raise RuntimeError(
+                "FATAL: EVENT_SIGNING_SECRET is set to an insecure default. "
+                "Set a strong random secret via the EVENT_SIGNING_SECRET environment variable before deploying to production."
+            )
         _logger.critical(
             "SECURITY: EVENT_SIGNING_SECRET is set to the default insecure value. "
             "Set a strong random secret via the EVENT_SIGNING_SECRET environment variable before deploying to production."
         )
 
-    if cfg.memory_encryption_key in _INSECURE_SECRETS and not is_prod:
+    if cfg.memory_encryption_key in _INSECURE_SECRETS:
+        if is_prod:
+            raise RuntimeError(
+                "FATAL: MEMORY_ENCRYPTION_KEY is set to an insecure default. "
+                "Set a strong random secret via the MEMORY_ENCRYPTION_KEY environment variable before deploying to production."
+            )
         _logger.critical(
             "SECURITY: MEMORY_ENCRYPTION_KEY is set to the default insecure value. "
             "Set a strong random secret via the MEMORY_ENCRYPTION_KEY environment variable before deploying to production."
