@@ -134,7 +134,7 @@ class AgentServiceServicer:
         """Dispatch a task to the appropriate handler."""
         if task_type == "agent_call":
             # Forward to A2A client
-            return {"result": f"Agent call completed for {agent_id}"}
+            return {"result": "Agent call completed"}
         elif task_type == "tool_call":
             # Forward to MCP tools
             return {"result": "Tool call completed"}
