@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Bot,
   TrendingUp,
@@ -10,12 +10,12 @@ import {
   DollarSign,
   Coins,
 } from "lucide-react";
-import { fetchCreatorDashboard, claimAgent } from "../lib/api";
+import { claimAgent } from "../lib/api";
+import { useCreatorDashboard } from "../hooks/useCreatorDashboard";
 import PageHeader from "../components/PageHeader";
 import Badge from "../components/Badge";
 import AnimatedCounter from "../components/AnimatedCounter";
 import { formatUSD } from "../lib/format";
-import type { CreatorDashboard } from "../types/api";
 
 interface Props {
   token: string;
@@ -25,24 +25,9 @@ interface Props {
 }
 
 export default function CreatorDashboardPage({ token, creatorName, onNavigate, onLogout }: Props) {
-  const [dashboard, setDashboard] = useState<CreatorDashboard | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: dashboard, isLoading: loading, refetch } = useCreatorDashboard(token);
   const [claimId, setClaimId] = useState("");
   const [claimMsg, setClaimMsg] = useState("");
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const data = await fetchCreatorDashboard(token);
-      setDashboard(data);
-    } catch (e) {
-      console.error("Dashboard load failed:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, [token]);
 
   const handleClaim = async () => {
     if (!claimId.trim()) return;
@@ -50,7 +35,7 @@ export default function CreatorDashboardPage({ token, creatorName, onNavigate, o
       await claimAgent(token, claimId.trim());
       setClaimMsg("Agent linked successfully!");
       setClaimId("");
-      load();
+      refetch();
     } catch (e: any) {
       setClaimMsg(e.message || "Failed to claim agent");
     }
