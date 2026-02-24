@@ -220,6 +220,8 @@ async def get_workflow(
     workflow = await orchestration_service.get_workflow(db, workflow_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if workflow.owner_id != agent_id:
+        raise HTTPException(status_code=404, detail="Workflow not found")
     return _workflow_to_dict(workflow)
 
 
@@ -342,13 +344,15 @@ async def pause_execution(
 ):
     """Pause a running execution."""
     execution = await orchestration_service.get_execution(db, execution_id)
-    if execution and execution.initiated_by != agent_id:
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    if execution.initiated_by != agent_id:
         raise HTTPException(status_code=403, detail="Only the execution initiator can pause this execution")
     success = await orchestration_service.pause_execution(db, execution_id)
     if not success:
         raise HTTPException(
             status_code=409,
-            detail="Execution cannot be paused (not running or not found)",
+            detail="Execution cannot be paused (not in a running state)",
         )
     return {"detail": "Execution paused", "execution_id": execution_id}
 
@@ -361,13 +365,15 @@ async def resume_execution(
 ):
     """Resume a paused execution."""
     execution = await orchestration_service.get_execution(db, execution_id)
-    if execution and execution.initiated_by != agent_id:
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    if execution.initiated_by != agent_id:
         raise HTTPException(status_code=403, detail="Only the execution initiator can resume this execution")
     success = await orchestration_service.resume_execution(db, execution_id)
     if not success:
         raise HTTPException(
             status_code=409,
-            detail="Execution cannot be resumed (not paused or not found)",
+            detail="Execution cannot be resumed (not in a paused state)",
         )
     return {"detail": "Execution resumed", "execution_id": execution_id}
 
@@ -380,13 +386,15 @@ async def cancel_execution(
 ):
     """Cancel a pending, running, or paused execution."""
     execution = await orchestration_service.get_execution(db, execution_id)
-    if execution and execution.initiated_by != agent_id:
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    if execution.initiated_by != agent_id:
         raise HTTPException(status_code=403, detail="Only the execution initiator can cancel this execution")
     success = await orchestration_service.cancel_execution(db, execution_id)
     if not success:
         raise HTTPException(
             status_code=409,
-            detail="Execution cannot be cancelled (already completed/cancelled or not found)",
+            detail="Execution cannot be cancelled (already completed or cancelled)",
         )
     return {"detail": "Execution cancelled", "execution_id": execution_id}
 
