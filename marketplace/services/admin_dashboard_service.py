@@ -34,32 +34,44 @@ async def get_admin_overview(db: AsyncSession) -> dict:
     active_listings = int(
         (await db.execute(select(func.count(DataListing.id)).where(DataListing.status == "active"))).scalar() or 0
     )
+    total_transactions = int((await db.execute(select(func.count(Transaction.id)))).scalar() or 0)
 
-    tx_result = await db.execute(select(Transaction).where(Transaction.status == "completed"))
-    completed_tx = list(tx_result.scalars().all())
-    platform_volume = sum(float(tx.amount_usdc or 0) for tx in completed_tx)
+    # SQL aggregation for completed transaction totals
+    tx_agg = await db.execute(
+        select(
+            func.count(Transaction.id),
+            func.sum(Transaction.amount_usdc),
+        ).where(Transaction.status == "completed")
+    )
+    tx_agg_row = tx_agg.first()
+    completed_count = int(tx_agg_row[0] or 0)
+    platform_volume = float(tx_agg_row[1] or 0)
 
-    listing_ids = {
-        listing_id
-        for tx in completed_tx
-        if (listing_id := dashboard_service._as_non_empty_str(tx.listing_id))  # noqa: SLF001
-    }
-    listing_map: dict[str, DataListing] = {}
-    if listing_ids:
-        try:
-            listing_result = await db.execute(
-                select(DataListing).where(DataListing.id.in_(listing_ids))
-            )
-            listing_map = {row.id: row for row in listing_result.scalars().all()}
-        except Exception:
-            listing_map = {}
-
+    # Trust-weighted revenue still needs listing join, but use batch approach
     trust_weighted = 0.0
-    for tx in completed_tx:
-        listing = listing_map.get(tx.listing_id)
-        trust_status = listing.trust_status if listing else "pending_verification"
-        weight = _TRUST_WEIGHT.get(trust_status, 0.7)
-        trust_weighted += float(tx.amount_usdc or 0) * weight
+    if completed_count > 0:
+        tx_result = await db.execute(select(Transaction).where(Transaction.status == "completed"))
+        completed_tx = list(tx_result.scalars().all())
+        listing_ids = {
+            listing_id
+            for tx in completed_tx
+            if (listing_id := dashboard_service._as_non_empty_str(tx.listing_id))  # noqa: SLF001
+        }
+        listing_map: dict[str, DataListing] = {}
+        if listing_ids:
+            try:
+                listing_result = await db.execute(
+                    select(DataListing).where(DataListing.id.in_(listing_ids))
+                )
+                listing_map = {row.id: row for row in listing_result.scalars().all()}
+            except Exception:
+                listing_map = {}
+
+        for tx in completed_tx:
+            listing = listing_map.get(tx.listing_id)
+            trust_status = listing.trust_status if listing else "pending_verification"
+            weight = _TRUST_WEIGHT.get(trust_status, 0.7)
+            trust_weighted += float(tx.amount_usdc or 0) * weight
 
     return {
         "environment": settings.environment,
@@ -67,8 +79,8 @@ async def get_admin_overview(db: AsyncSession) -> dict:
         "active_agents": active_agents,
         "total_listings": total_listings,
         "active_listings": active_listings,
-        "total_transactions": int((await db.execute(select(func.count(Transaction.id)))).scalar() or 0),
-        "completed_transactions": len(completed_tx),
+        "total_transactions": total_transactions,
+        "completed_transactions": completed_count,
         "platform_volume_usd": round(platform_volume, 6),
         "trust_weighted_revenue_usd": round(trust_weighted, 6),
         "updated_at": _utcnow(),
@@ -76,48 +88,77 @@ async def get_admin_overview(db: AsyncSession) -> dict:
 
 
 async def get_admin_finance(db: AsyncSession) -> dict:
-    tx_result = await db.execute(select(Transaction).where(Transaction.status == "completed"))
-    completed_tx = list(tx_result.scalars().all())
-    platform_volume = sum(float(tx.amount_usdc or 0) for tx in completed_tx)
+    # SQL aggregation for transaction totals
+    tx_agg = await db.execute(
+        select(
+            func.count(Transaction.id),
+            func.sum(Transaction.amount_usdc),
+        ).where(Transaction.status == "completed")
+    )
+    tx_agg_row = tx_agg.first()
+    completed_count = int(tx_agg_row[0] or 0)
+    platform_volume = float(tx_agg_row[1] or 0)
+
     consumer_orders_count = int((await db.execute(select(func.count(ConsumerOrder.id)))).scalar() or 0)
     fee_result = await db.execute(select(func.sum(PlatformFee.fee_usd)))
     platform_fee_volume_usd = float(fee_result.scalar() or 0)
 
-    pending_payouts = await db.execute(
-        select(RedemptionRequest).where(RedemptionRequest.status == "pending")
+    # SQL aggregation for payout stats
+    payout_agg = await db.execute(
+        select(
+            RedemptionRequest.status,
+            func.count(RedemptionRequest.id),
+            func.sum(RedemptionRequest.amount_usd),
+        )
+        .where(RedemptionRequest.status.in_(["pending", "processing"]))
+        .group_by(RedemptionRequest.status)
     )
-    processing_payouts = await db.execute(
-        select(RedemptionRequest).where(RedemptionRequest.status == "processing")
+    payout_stats: dict[str, dict] = {}
+    for row in payout_agg.all():
+        payout_stats[row[0]] = {"count": int(row[1] or 0), "usd": float(row[2] or 0)}
+
+    # Top sellers by revenue — SQL aggregation
+    seller_agg = await db.execute(
+        select(
+            Transaction.seller_id,
+            func.sum(Transaction.amount_usdc).label("total"),
+        )
+        .where(Transaction.status == "completed")
+        .group_by(Transaction.seller_id)
+        .order_by(func.sum(Transaction.amount_usdc).desc())
+        .limit(20)
     )
-    pending_rows = list(pending_payouts.scalars().all())
-    processing_rows = list(processing_payouts.scalars().all())
-
-    by_seller: dict[str, float] = {}
-    for tx in completed_tx:
-        seller_id = dashboard_service._as_non_empty_str(tx.seller_id) or "unknown"  # noqa: SLF001
-        by_seller[seller_id] = by_seller.get(seller_id, 0.0) + float(tx.amount_usdc or 0)
-
-    names_result = await db.execute(select(RegisteredAgent.id, RegisteredAgent.name))
-    names = {row[0]: row[1] for row in names_result.all()}
+    seller_rows = seller_agg.all()
+    seller_ids = {row[0] for row in seller_rows if row[0]}
+    names: dict[str, str] = {}
+    if seller_ids:
+        names_result = await db.execute(
+            select(RegisteredAgent.id, RegisteredAgent.name).where(
+                RegisteredAgent.id.in_(seller_ids)
+            )
+        )
+        names = {row[0]: row[1] for row in names_result.all()}
 
     top_sellers = [
         {
-            "agent_id": seller_id,
-            "agent_name": names.get(seller_id, "Unknown"),
-            "money_received_usd": round(amount, 6),
+            "agent_id": row[0] or "unknown",
+            "agent_name": names.get(row[0], "Unknown"),
+            "money_received_usd": round(float(row[1] or 0), 6),
         }
-        for seller_id, amount in sorted(by_seller.items(), key=lambda item: item[1], reverse=True)[:20]
+        for row in seller_rows
     ]
 
+    pending = payout_stats.get("pending", {"count": 0, "usd": 0})
+    processing = payout_stats.get("processing", {"count": 0, "usd": 0})
     return {
         "platform_volume_usd": round(platform_volume, 6),
-        "completed_transaction_count": len(completed_tx),
+        "completed_transaction_count": completed_count,
         "consumer_orders_count": consumer_orders_count,
         "platform_fee_volume_usd": round(platform_fee_volume_usd, 6),
-        "payout_pending_count": len(pending_rows),
-        "payout_pending_usd": round(sum(float(r.amount_usd or 0) for r in pending_rows), 6),
-        "payout_processing_count": len(processing_rows),
-        "payout_processing_usd": round(sum(float(r.amount_usd or 0) for r in processing_rows), 6),
+        "payout_pending_count": pending["count"],
+        "payout_pending_usd": round(pending["usd"], 6),
+        "payout_processing_count": processing["count"],
+        "payout_processing_usd": round(processing["usd"], 6),
         "top_sellers_by_revenue": top_sellers,
         "updated_at": _utcnow(),
     }
