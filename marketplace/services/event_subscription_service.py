@@ -9,7 +9,7 @@ import ipaddress
 import json
 import socket
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from itertools import count
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -20,6 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
+from marketplace.core.utils import utcnow as _utcnow
 from marketplace.models.agent_trust import EventSubscription, WebhookDelivery
 
 _EVENT_SEQ = count(1)
@@ -181,10 +182,6 @@ _EVENT_POLICY: dict[str, dict[str, Any]] = {
         "target_keys": [],
     },
 }
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _is_prod() -> bool:
