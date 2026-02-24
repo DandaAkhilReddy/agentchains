@@ -241,6 +241,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from marketplace.config import settings
     from marketplace.database import async_session
 
+    # Register the event broadcaster so services can import from core.events
+    from marketplace.core.events import register_broadcaster
+    register_broadcaster(broadcast_event)
+
     # Start background demand aggregation (initial delay avoids lock contention at startup)
     async def _demand_loop() -> None:
         await asyncio.sleep(30)  # Wait 30s before first run
