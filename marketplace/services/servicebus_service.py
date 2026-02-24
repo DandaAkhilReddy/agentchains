@@ -281,14 +281,14 @@ class ServiceBusService:
             try:
                 sender.close()
             except Exception:
-                pass
+                logger.warning("Failed to close Service Bus sender", exc_info=True)
         self._senders.clear()
 
         if self._client:
             try:
                 self._client.close()
             except Exception:
-                pass
+                logger.warning("Failed to close Service Bus client", exc_info=True)
             self._client = None
         logger.info("Service Bus client closed.")
 
