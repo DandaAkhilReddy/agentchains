@@ -18,12 +18,25 @@ class MCPSession:
 class SessionManager:
     """Manage MCP sessions with rate limiting."""
 
+    MAX_SESSIONS = 10_000
+    MAX_SESSIONS_PER_AGENT = 5
+
     def __init__(self, rate_limit_per_minute: int = 60, session_timeout: float = 3600):
         self._sessions: dict[str, MCPSession] = {}
         self._rate_limit = rate_limit_per_minute
         self._timeout = session_timeout
 
     def create_session(self, agent_id: str) -> MCPSession:
+        # Cleanup expired sessions before creating new ones
+        self.cleanup_expired()
+
+        if len(self._sessions) >= self.MAX_SESSIONS:
+            raise RuntimeError("Maximum MCP sessions reached")
+
+        agent_sessions = sum(1 for s in self._sessions.values() if s.agent_id == agent_id)
+        if agent_sessions >= self.MAX_SESSIONS_PER_AGENT:
+            raise RuntimeError(f"Maximum sessions per agent ({self.MAX_SESSIONS_PER_AGENT}) reached")
+
         session_id = str(uuid.uuid4())
         session = MCPSession(session_id=session_id, agent_id=agent_id)
         self._sessions[session_id] = session
