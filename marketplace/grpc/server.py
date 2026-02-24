@@ -54,7 +54,7 @@ class AgentServiceServicer:
                 return {
                     "task_id": request.task_id,
                     "status": "error",
-                    "error_message": f"Invalid task type: {request.task_type}",
+                    "error_message": "Invalid task type",
                 }
 
             # Parse and validate input
