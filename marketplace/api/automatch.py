@@ -14,12 +14,12 @@ router = APIRouter(prefix="/agents", tags=["auto-match"])
 
 class AutoMatchRequest(BaseModel):
     description: str = Field(..., min_length=1, max_length=500)
-    category: str | None = None
-    max_price: float | None = Field(default=None, ge=0)
+    category: str | None = Field(default=None, max_length=100)
+    max_price: float | None = Field(default=None, ge=0, le=100_000)
     auto_buy: bool = False
-    auto_buy_max_price: float | None = Field(default=None, ge=0)
-    routing_strategy: str | None = None  # cheapest | fastest | highest_quality | best_value | round_robin | weighted_random | locality
-    buyer_region: str | None = None
+    auto_buy_max_price: float | None = Field(default=None, ge=0.001, le=10_000)
+    routing_strategy: str | None = Field(default=None, pattern="^(cheapest|fastest|highest_quality|best_value|round_robin|weighted_random|locality)$")
+    buyer_region: str | None = Field(default=None, max_length=50)
 
 
 @router.post("/auto-match")
