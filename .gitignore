@@ -13,6 +13,7 @@ env/
 # Environment
 .env
 .env.production
+.env.small-launch
 
 # Runtime data
 data/marketplace.db
