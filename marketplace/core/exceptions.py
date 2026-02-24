@@ -1,5 +1,60 @@
+"""Domain exception hierarchy for AgentChains marketplace.
+
+DomainError subclasses are pure Python exceptions (no FastAPI coupling).
+A global exception handler in main.py maps them to HTTP responses.
+Legacy HTTPException subclasses are kept for backward compatibility.
+"""
+
 from fastapi import HTTPException, status
 
+
+# ---------------------------------------------------------------------------
+# Domain base class (FastAPI-agnostic)
+# ---------------------------------------------------------------------------
+
+class DomainError(Exception):
+    """Base class for all domain-layer exceptions.
+
+    Subclasses set ``code`` to a semantic error code that the global
+    exception handler maps to an HTTP status.
+    """
+
+    code: str = "INTERNAL"
+    http_status: int = 500
+
+    def __init__(self, detail: str = ""):
+        self.detail = detail
+        super().__init__(detail)
+
+
+class NotFoundError(DomainError):
+    code = "NOT_FOUND"
+    http_status = 404
+
+
+class AuthorizationError(DomainError):
+    code = "FORBIDDEN"
+    http_status = 403
+
+
+class ConflictError(DomainError):
+    code = "CONFLICT"
+    http_status = 409
+
+
+class ValidationError(DomainError):
+    code = "VALIDATION"
+    http_status = 400
+
+
+class InsufficientBalanceError(DomainError):
+    code = "INSUFFICIENT_BALANCE"
+    http_status = 402
+
+
+# ---------------------------------------------------------------------------
+# Legacy HTTPException subclasses (existing code depends on these)
+# ---------------------------------------------------------------------------
 
 class AgentNotFoundError(HTTPException):
     def __init__(self, agent_id: str):
