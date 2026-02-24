@@ -397,6 +397,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 def create_app() -> FastAPI:
+    from marketplace.config import settings as _boot_settings
+
+    _is_prod = _boot_settings.environment.lower() in {"production", "prod"}
+
     app = FastAPI(
         title="AgentChains — AI Agent Marketplace",
         description=(
@@ -427,6 +431,9 @@ def create_app() -> FastAPI:
         ],
         license_info={"name": "MIT", "url": "https://opensource.org/licenses/MIT"},
         contact={"name": "AgentChains", "url": "https://github.com/DandaAkhilReddy/agentchains"},
+        docs_url=None if _is_prod else "/docs",
+        redoc_url=None if _is_prod else "/redoc",
+        openapi_url=None if _is_prod else "/openapi.json",
     )
 
     # Global exception handler: suppress stack traces in production
