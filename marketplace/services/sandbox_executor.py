@@ -86,19 +86,27 @@ def _build_execution_script(
     """Build an execution script from the action configuration.
 
     Maps action types to their corresponding execution scripts.
+    All user-supplied values are serialised via json.dumps() to prevent
+    code injection through crafted URLs, selectors, or field values.
     """
+    import json as _json
+
     if action_type == "web_scrape":
         url = input_data.get("url", action_config.get("url", ""))
         selector = action_config.get("selector", "body")
+        url_literal = _json.dumps(url)
+        selector_literal = _json.dumps(selector)
         return f"""
-import json
+import json, sys
 from playwright.sync_api import sync_playwright
 
+_url = {url_literal}
+_selector = {selector_literal}
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     page = browser.new_page()
-    page.goto("{url}", timeout=30000)
-    content = page.query_selector("{selector}")
+    page.goto(_url, timeout=30000)
+    content = page.query_selector(_selector)
     result = content.inner_text() if content else ""
     browser.close()
     print(json.dumps({{"result": result}}))
@@ -106,14 +114,16 @@ with sync_playwright() as p:
 
     elif action_type == "screenshot":
         url = input_data.get("url", action_config.get("url", ""))
+        url_literal = _json.dumps(url)
         return f"""
 import json, base64
 from playwright.sync_api import sync_playwright
 
+_url = {url_literal}
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     page = browser.new_page()
-    page.goto("{url}", timeout=30000)
+    page.goto(_url, timeout=30000)
     screenshot = page.screenshot()
     browser.close()
     print(json.dumps({{"screenshot_base64": base64.b64encode(screenshot).decode()}}))
@@ -122,24 +132,28 @@ with sync_playwright() as p:
     elif action_type == "form_fill":
         url = input_data.get("url", action_config.get("url", ""))
         fields = input_data.get("fields", {})
+        url_literal = _json.dumps(url)
+        fields_literal = _json.dumps(fields)
         return f"""
 import json
 from playwright.sync_api import sync_playwright
 
+_url = {url_literal}
+_fields = json.loads({_json.dumps(fields_literal)})
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     page = browser.new_page()
-    page.goto("{url}", timeout=30000)
-    fields = {fields}
-    for selector, value in fields.items():
+    page.goto(_url, timeout=30000)
+    for selector, value in _fields.items():
         page.fill(selector, str(value))
     browser.close()
-    print(json.dumps({{"filled_fields": len(fields)}}))
+    print(json.dumps({{"filled_fields": len(_fields)}}))
 """
 
     else:
-        # Generic script execution
+        # Generic action — no user input interpolated
+        action_literal = _json.dumps(action_type)
         return f"""
 import json
-print(json.dumps({{"action_type": "{action_type}", "status": "executed"}}))
+print(json.dumps({{"action_type": {action_literal}, "status": "executed"}}))
 """
