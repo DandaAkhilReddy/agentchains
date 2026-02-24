@@ -61,11 +61,17 @@ import type {
 const BASE = "/api/v1";
 const BASE_V2 = "/api/v2";
 
-async function get<T>(
-  path: string,
-  params?: Record<string, string | number | undefined>,
-): Promise<T> {
-  const url = new URL(`${BASE}${path}`, window.location.origin);
+interface RequestOptions {
+  base?: string;
+  method?: string;
+  token?: string;
+  params?: Record<string, string | number | undefined>;
+  body?: unknown;
+}
+
+async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  const { base = BASE, method = "GET", token, params, body } = opts;
+  const url = new URL(`${base}${path}`, window.location.origin);
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== null && v !== "") {
@@ -73,161 +79,58 @@ async function get<T>(
       }
     }
   }
-  const res = await fetch(url.toString());
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+
+  const hasInit = method !== "GET" || token || body !== undefined;
+  const init: RequestInit | undefined = hasInit
+    ? { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined }
+    : Object.keys(headers).length > 0
+      ? { headers }
+      : undefined;
+
+  const res = init ? await fetch(url.toString(), init) : await fetch(url.toString());
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${await res.text()}`);
   }
   return res.json();
 }
 
-async function authGet<T>(
-  path: string,
-  token: string,
-  params?: Record<string, string | number | undefined>,
-): Promise<T> {
-  const url = new URL(`${BASE}${path}`, window.location.origin);
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== null && v !== "") {
-        url.searchParams.set(k, String(v));
-      }
-    }
-  }
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
+function get<T>(path: string, params?: Record<string, string | number | undefined>) {
+  return request<T>(path, { params });
 }
 
-async function authPost<T>(
-  path: string,
-  token: string,
-  body: unknown,
-): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
+function authGet<T>(path: string, token: string, params?: Record<string, string | number | undefined>) {
+  return request<T>(path, { token, params });
 }
 
-async function authPut<T>(
-  path: string,
-  token: string,
-  body: unknown,
-): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
-  return res.json();
+function authPost<T>(path: string, token: string, body: unknown) {
+  return request<T>(path, { method: "POST", token, body });
 }
 
-async function authDelete<T>(
-  path: string,
-  token: string,
-): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
+function authPut<T>(path: string, token: string, body: unknown) {
+  return request<T>(path, { method: "PUT", token, body });
 }
 
-async function getV2<T>(
-  path: string,
-  params?: Record<string, string | number | undefined>,
-): Promise<T> {
-  const url = new URL(`${BASE_V2}${path}`, window.location.origin);
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== null && v !== "") {
-        url.searchParams.set(k, String(v));
-      }
-    }
-  }
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
+function authDelete<T>(path: string, token: string) {
+  return request<T>(path, { method: "DELETE", token });
 }
 
-async function authGetV2<T>(
-  path: string,
-  token: string,
-  params?: Record<string, string | number | undefined>,
-): Promise<T> {
-  const url = new URL(`${BASE_V2}${path}`, window.location.origin);
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== null && v !== "") {
-        url.searchParams.set(k, String(v));
-      }
-    }
-  }
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
+function getV2<T>(path: string, params?: Record<string, string | number | undefined>) {
+  return request<T>(path, { base: BASE_V2, params });
 }
 
-async function authPostV2<T>(
-  path: string,
-  token: string,
-  body: unknown,
-): Promise<T> {
-  const res = await fetch(`${BASE_V2}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
+function authGetV2<T>(path: string, token: string, params?: Record<string, string | number | undefined>) {
+  return request<T>(path, { base: BASE_V2, token, params });
 }
 
-async function authDeleteV2<T>(
-  path: string,
-  token: string,
-): Promise<T> {
-  const res = await fetch(`${BASE_V2}${path}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
+function authPostV2<T>(path: string, token: string, body: unknown) {
+  return request<T>(path, { base: BASE_V2, method: "POST", token, body });
+}
+
+function authDeleteV2<T>(path: string, token: string) {
+  return request<T>(path, { base: BASE_V2, method: "DELETE", token });
 }
 
 export const fetchHealth = () => get<HealthResponse>("/health");
@@ -408,27 +311,10 @@ export const creatorRegister = (body: {
   display_name: string;
   phone?: string;
   country?: string;
-}) => {
-  return fetch(`${BASE}/creators/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  }).then(async (r) => {
-    if (!r.ok) throw new Error(`API ${r.status}: ${await r.text()}`);
-    return r.json() as Promise<CreatorAuthResponse>;
-  });
-};
+}) => request<CreatorAuthResponse>("/creators/register", { method: "POST", body });
 
-export const creatorLogin = (body: { email: string; password: string }) => {
-  return fetch(`${BASE}/creators/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  }).then(async (r) => {
-    if (!r.ok) throw new Error(`API ${r.status}: ${await r.text()}`);
-    return r.json() as Promise<CreatorAuthResponse>;
-  });
-};
+export const creatorLogin = (body: { email: string; password: string }) =>
+  request<CreatorAuthResponse>("/creators/login", { method: "POST", body });
 
 export const fetchCreatorProfile = (token: string) =>
   authGet<Creator>("/creators/me", token);
