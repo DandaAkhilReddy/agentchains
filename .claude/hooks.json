@@ -7,6 +7,10 @@
           {
             "type": "prompt",
             "prompt": "Before committing, review the staged changes using `git diff --staged`. Check for: hardcoded secrets/API keys, security vulnerabilities, missing error handling, code duplication, and Python/TypeScript best practices. If you find CRITICAL issues, respond 'no' to block the commit. For non-critical issues, respond 'yes' but note the issues."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/validate-python.sh"
           }
         ]
       }
