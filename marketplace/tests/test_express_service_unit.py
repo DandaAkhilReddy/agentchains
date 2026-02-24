@@ -21,8 +21,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 import pytest
-from fastapi import HTTPException
 
+from marketplace.core.exceptions import (
+    InsufficientBalanceError,
+    ListingNotFoundError,
+    NotFoundError,
+    ValidationError,
+)
 from marketplace.services.express_service import express_buy
 
 
@@ -144,15 +149,15 @@ class TestExpressDeliveryWorkflow:
     async def test_cancel_inactive_listing_rejected(
         self, mock_get_listing, mock_cdn
     ):
-        """Attempting to buy an inactive listing raises HTTPException 400."""
+        """Attempting to buy an inactive listing raises ValidationError 400."""
         listing = _make_listing(status="inactive")
         mock_get_listing.return_value = listing
 
         db = _mock_db()
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ValidationError) as exc_info:
             await express_buy(db, listing.id, _uid(), payment_method="simulated")
 
-        assert exc_info.value.status_code == 400
+        assert exc_info.value.http_status == 400
         assert "not active" in exc_info.value.detail.lower()
 
     @pytest.mark.asyncio
@@ -252,10 +257,10 @@ class TestSLAEnforcement:
         mock_get_listing.return_value = listing
 
         db = _mock_db()
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(NotFoundError) as exc_info:
             await express_buy(db, listing.id, _uid(), payment_method="simulated")
 
-        assert exc_info.value.status_code == 404
+        assert exc_info.value.http_status == 404
         assert "content not found" in exc_info.value.detail.lower()
 
     @pytest.mark.asyncio
@@ -418,10 +423,10 @@ class TestTimeoutHandling:
         mock_get_listing.return_value = listing
 
         db = _mock_db()
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(NotFoundError) as exc_info:
             await express_buy(db, listing.id, _uid(), payment_method="simulated")
 
-        assert exc_info.value.status_code == 404
+        assert exc_info.value.http_status == 404
         # Transaction should NOT have been committed
         db.commit.assert_not_awaited()
 
@@ -437,10 +442,10 @@ class TestTimeoutHandling:
         mock_get_listing.return_value = listing
 
         db = _mock_db()
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ValidationError) as exc_info:
             await express_buy(db, listing.id, seller_id, payment_method="simulated")
 
-        assert exc_info.value.status_code == 400
+        assert exc_info.value.http_status == 400
         db.add.assert_not_called()
         db.commit.assert_not_awaited()
 
@@ -460,10 +465,10 @@ class TestTimeoutHandling:
             new_callable=AsyncMock,
             side_effect=Exception("Insufficient balance"),
         ):
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(InsufficientBalanceError) as exc_info:
                 await express_buy(db, listing.id, _uid(), payment_method="token")
 
-        assert exc_info.value.status_code == 402
+        assert exc_info.value.http_status == 402
         assert "insufficient" in exc_info.value.detail.lower()
 
     @pytest.mark.asyncio
@@ -515,12 +520,10 @@ class TestErrorHandling:
         self, mock_get_listing, mock_cdn
     ):
         """When get_listing raises ListingNotFoundError, it propagates as 404."""
-        from marketplace.core.exceptions import ListingNotFoundError
-
         mock_get_listing.side_effect = ListingNotFoundError("nonexistent-id")
 
         db = _mock_db()
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ListingNotFoundError) as exc_info:
             await express_buy(db, "nonexistent-id", _uid(), payment_method="simulated")
 
         assert exc_info.value.status_code == 404
@@ -536,10 +539,10 @@ class TestErrorHandling:
         mock_get_listing.return_value = listing
 
         db = _mock_db()
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ValidationError) as exc_info:
             await express_buy(db, listing.id, _uid(), payment_method="simulated")
 
-        assert exc_info.value.status_code == 400
+        assert exc_info.value.http_status == 400
         assert "not active" in exc_info.value.detail.lower()
 
     @pytest.mark.asyncio
