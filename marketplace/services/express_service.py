@@ -10,10 +10,11 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from marketplace.core.exceptions import InsufficientBalanceError, NotFoundError, ValidationError
 
 from marketplace.core.async_tasks import fire_and_forget
 from marketplace.models.listing import DataListing
@@ -31,9 +32,9 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
     listing = await get_listing(db, listing_id)
 
     if listing.status != "active":
-        raise HTTPException(status_code=400, detail="Listing is not active")
+        raise ValidationError("Listing is not active")
     if listing.seller_id == buyer_id:
-        raise HTTPException(status_code=400, detail="Cannot buy your own listing")
+        raise ValidationError("Cannot buy your own listing")
 
     # 2. Capture scalar values (safe even if listing is detached/cached)
     lid = listing.id
@@ -48,7 +49,7 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
     # 4. Get content via CDN (hot -> warm -> cold)
     content_bytes = await cdn_get_content(content_hash)
     if content_bytes is None:
-        raise HTTPException(status_code=404, detail="Content not found in storage")
+        raise NotFoundError("Content not found in storage")
 
     # 5. Balance payment — pre-generate tx_id for idempotency
     tx_id = str(uuid.uuid4())
@@ -62,7 +63,7 @@ async def express_buy(db: AsyncSession, listing_id: str, buyer_id: str, payment_
             )
             cost_usd = token_result["amount_usd"]
         except Exception as e:
-            raise HTTPException(status_code=402, detail=f"Insufficient balance: {e}")
+            raise InsufficientBalanceError(f"Insufficient balance: {e}")
 
     # 6. Create completed transaction record (collapsed state machine)
     now = datetime.now(timezone.utc)
