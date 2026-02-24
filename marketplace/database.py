@@ -70,8 +70,21 @@ def _sqlite_has_column(sync_conn, table: str, column: str) -> bool:
     if table not in _ALLOWED_MIGRATION_TABLES:
         raise ValueError(f"Table {table!r} not in allowed migration tables")
     _validate_identifier(table, "table name")
-    rows = sync_conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
-    return any(row[1] == column for row in rows)
+    _validate_identifier(column, "column name")
+    # Use parameterized sqlite_master query instead of PRAGMA to avoid any
+    # SQL injection risk from string interpolation in PRAGMA statements.
+    row = sync_conn.exec_driver_sql(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name = ?",
+        (table,),
+    ).fetchone()
+    if not row or not row[0]:
+        return False
+    # Parse the CREATE TABLE statement to check for column presence
+    create_sql = row[0]
+    # Match column name as a word boundary in the schema definition
+    import re as _re
+    pattern = rf'\b{_re.escape(column)}\b'
+    return bool(_re.search(pattern, create_sql))
 
 
 def _apply_sqlite_compat_migrations(sync_conn) -> None:
