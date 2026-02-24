@@ -13,6 +13,10 @@ class Settings(BaseSettings):
 
     # Database (sqlite for local dev, postgresql+asyncpg for production)
     database_url: str = "sqlite+aiosqlite:///./data/marketplace.db"
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 1800
 
     # Content storage — local HashFS path
     content_store_path: str = "./data/content_store"

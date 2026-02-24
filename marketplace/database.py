@@ -12,10 +12,10 @@ _is_sqlite = settings.database_url.startswith("sqlite")
 _engine_kwargs: dict = {"echo": False}
 if not _is_sqlite:
     _engine_kwargs.update({
-        "pool_size": 5,
-        "max_overflow": 10,
-        "pool_timeout": 30,
-        "pool_recycle": 1800,  # Recycle connections every 30 min (prevent stale connections)
+        "pool_size": settings.db_pool_size,
+        "max_overflow": settings.db_max_overflow,
+        "pool_timeout": settings.db_pool_timeout,
+        "pool_recycle": settings.db_pool_recycle,
     })
 
 engine = create_async_engine(settings.database_url, **_engine_kwargs)
