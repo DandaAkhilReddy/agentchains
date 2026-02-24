@@ -7,10 +7,10 @@ broadcast_event is imported lazily inside try/except blocks so no mocking needed
 from datetime import datetime, timezone
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.exceptions import (
+    AuthorizationError,
     InvalidTransactionStateError,
     TransactionNotFoundError,
 )
@@ -196,12 +196,12 @@ async def test_deliver_content_non_seller_403(
     tx_id = result["transaction_id"]
     await transaction_service.confirm_payment(db, tx_id)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthorizationError) as exc_info:
         await transaction_service.deliver_content(
             db, tx_id, "content", other.id
         )
 
-    assert exc_info.value.status_code == 403
+    assert exc_info.value.http_status == 403
     assert "Not the seller" in exc_info.value.detail
 
 
@@ -317,10 +317,10 @@ async def test_verify_delivery_buyer_only(
     await transaction_service.confirm_payment(db, tx_id)
     await transaction_service.deliver_content(db, tx_id, "content", seller.id)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthorizationError) as exc_info:
         await transaction_service.verify_delivery(db, tx_id, other.id)
 
-    assert exc_info.value.status_code == 403
+    assert exc_info.value.http_status == 403
     assert "Not the buyer" in exc_info.value.detail
 
 
