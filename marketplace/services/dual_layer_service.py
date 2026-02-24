@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 from marketplace.core.async_tasks import fire_and_forget
 from marketplace.core.user_auth import create_user_token, hash_password, verify_password
+from marketplace.core.utils import load_json as _load_json, to_decimal as _to_decimal, utcnow as _utcnow
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.creator import Creator
 from marketplace.models.dual_layer import (
@@ -81,31 +82,11 @@ _BUILDER_TEMPLATES: list[dict[str, object]] = [
 ]
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _to_decimal(value: float | int | str | Decimal) -> Decimal:
-    if isinstance(value, Decimal):
-        return value.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
-    return Decimal(str(value)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
-
-
 def _to_float(value: object, default: float = 0.0) -> float:
     try:
         return float(value)
     except (TypeError, ValueError):
         return default
-
-
-def _load_json(value: str | None, fallback: object) -> object:
-    if not value:
-        return fallback
-    try:
-        parsed = json.loads(value)
-    except Exception:
-        return fallback
-    return parsed
 
 
 def _safe_listing_category(value: object) -> str:
