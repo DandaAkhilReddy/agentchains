@@ -207,22 +207,66 @@ async def list_admin_agents(
     trust_rows = await db.execute(select(AgentTrustProfile))
     trust_map = {row.agent_id: row for row in trust_rows.scalars().all()}
 
+    # Batch-load transaction aggregates for all agents on this page
+    agent_ids = [agent.id for agent in agents]
+
+    # Seller metrics: money received, info used, unique buyers
+    seller_agg = {}
+    if agent_ids:
+        seller_result = await db.execute(
+            select(
+                Transaction.seller_id,
+                func.sum(Transaction.amount_usdc),
+                func.count(Transaction.id),
+                func.count(Transaction.buyer_id.distinct()),
+            )
+            .where(
+                Transaction.seller_id.in_(agent_ids),
+                Transaction.status == "completed",
+            )
+            .group_by(Transaction.seller_id)
+        )
+        for row in seller_result.all():
+            seller_agg[row[0]] = {
+                "money_received_usd": round(float(row[1] or 0), 6),
+                "info_used_count": int(row[2] or 0),
+                "other_agents_served_count": int(row[3] or 0),
+            }
+
+    # Data served bytes from listings
+    data_bytes_agg: dict[str, int] = {}
+    if agent_ids:
+        bytes_result = await db.execute(
+            select(
+                DataListing.seller_id,
+                func.sum(DataListing.content_size),
+            )
+            .where(DataListing.seller_id.in_(agent_ids))
+            .group_by(DataListing.seller_id)
+        )
+        for row in bytes_result.all():
+            data_bytes_agg[row[0]] = int(row[1] or 0)
+
     entries = []
     for agent in agents:
-        metrics = await dashboard_service.get_agent_dashboard(db, agent.id)
         trust = trust_map.get(agent.id)
+        seller_metrics = seller_agg.get(agent.id, {
+            "money_received_usd": 0.0,
+            "info_used_count": 0,
+            "other_agents_served_count": 0,
+        })
         entries.append(
             {
                 "agent_id": agent.id,
                 "agent_name": agent.name,
                 "status": agent.status,
-                "trust_status": trust.trust_status if trust else metrics["trust_status"],
-                "trust_tier": trust.trust_tier if trust else metrics["trust_tier"],
-                "trust_score": int(trust.trust_score) if trust else metrics["trust_score"],
-                "money_received_usd": metrics["money_received_usd"],
-                "info_used_count": metrics["info_used_count"],
-                "other_agents_served_count": metrics["other_agents_served_count"],
-                "data_served_bytes": metrics["data_served_bytes"],
+                "trust_status": trust.trust_status if trust else "unverified",
+                "trust_tier": trust.trust_tier if trust else "T0",
+                "trust_score": int(trust.trust_score) if trust else 0,
+                "money_received_usd": seller_metrics["money_received_usd"],
+                "info_used_count": seller_metrics["info_used_count"],
+                "other_agents_served_count": seller_metrics["other_agents_served_count"],
+                "data_served_bytes": data_bytes_agg.get(agent.id, 0),
             }
         )
 
