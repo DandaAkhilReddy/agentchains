@@ -320,7 +320,11 @@ async def list_chain_executions(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
-    """List executions for a specific chain template."""
+    """List executions for a specific chain template.
+
+    Only the template author or execution initiator can see executions.
+    Authors see all executions; other agents see only their own.
+    """
     template = await chain_registry_service.get_chain_template(db, template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Chain template not found")
@@ -328,6 +332,9 @@ async def list_chain_executions(
     base = select(ChainExecution).where(
         ChainExecution.chain_template_id == template_id
     )
+    # Non-authors can only see their own executions
+    if template.author_id != agent_id:
+        base = base.where(ChainExecution.initiated_by == agent_id)
     if status:
         base = base.where(ChainExecution.status == status)
 
