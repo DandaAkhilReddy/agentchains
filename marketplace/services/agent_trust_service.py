@@ -6,7 +6,7 @@ import hashlib
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.core.utils import utcnow as _utcnow
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.agent_trust import (
     AgentIdentityAttestation,
@@ -34,10 +35,6 @@ INJECTION_PATTERNS = (
     "drop table",
     "prompt injection",
 )
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _safe_json_load(value: Any, fallback: Any) -> Any:
