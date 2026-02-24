@@ -1,8 +1,11 @@
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from marketplace.core.async_tasks import fire_and_forget
 from marketplace.core.exceptions import ListingNotFoundError
@@ -49,7 +52,7 @@ async def create_listing(
         )
         await db.commit()
     except Exception:
-        pass  # Don't fail listing creation if ZKP generation fails
+        logger.warning("ZKP generation failed for listing %s", listing.id, exc_info=True)
 
     # Strict trust verification baseline (non-blocking for listing publish)
     try:
@@ -65,7 +68,7 @@ async def create_listing(
             trigger_source="listing_create",
         )
     except Exception:
-        pass
+        logger.warning("Trust verification bootstrap failed for listing %s", listing.id, exc_info=True)
 
     # Cache the new listing
     listing_cache.put(f"listing:{listing.id}", listing)
@@ -89,7 +92,7 @@ async def create_listing(
             task_name="broadcast_listing_created",
         )
     except Exception:
-        pass
+        logger.warning("Broadcast failed for listing_created event on %s", listing.id, exc_info=True)
 
     return listing
 
