@@ -54,9 +54,9 @@ async def create_redemption(
             f"Minimum for {redemption_type} is ${minimum:.2f} USD"
         )
 
-    # Get creator's token account
+    # Get creator's token account WITH row-level lock to prevent double-spend
     result = await db.execute(
-        select(TokenAccount).where(TokenAccount.creator_id == creator_id)
+        select(TokenAccount).where(TokenAccount.creator_id == creator_id).with_for_update()
     )
     account = result.scalar_one_or_none()
     if not account:
