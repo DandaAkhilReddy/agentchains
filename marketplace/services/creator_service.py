@@ -138,15 +138,20 @@ async def get_creator_agents(db: AsyncSession, creator_id: str) -> list[dict]:
     result = await db.execute(
         select(RegisteredAgent).where(RegisteredAgent.creator_id == creator_id)
     )
-    agents = result.scalars().all()
+    agents = list(result.scalars().all())
+
+    # Batch-load token accounts for all agents in one query
+    agent_ids = [agent.id for agent in agents]
+    acct_map: dict[str, TokenAccount] = {}
+    if agent_ids:
+        acct_result = await db.execute(
+            select(TokenAccount).where(TokenAccount.agent_id.in_(agent_ids))
+        )
+        acct_map = {acct.agent_id: acct for acct in acct_result.scalars().all()}
 
     agent_list = []
     for agent in agents:
-        # Get agent's token account for earnings
-        acct_result = await db.execute(
-            select(TokenAccount).where(TokenAccount.agent_id == agent.id)
-        )
-        acct = acct_result.scalar_one_or_none()
+        acct = acct_map.get(agent.id)
         agent_list.append({
             "agent_id": agent.id,
             "agent_name": agent.name,
