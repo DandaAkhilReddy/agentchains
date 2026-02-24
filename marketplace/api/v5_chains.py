@@ -569,6 +569,11 @@ async def evaluate_chain_policies(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Dry-run policy evaluation against a chain template."""
+    template = await chain_registry_service.get_chain_template(db, chain_template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Chain template not found")
+    if template.author_id != agent_id:
+        raise HTTPException(status_code=403, detail="Only the template author can evaluate policies")
     try:
         result = await chain_policy_service.evaluate_chain_policies(
             db, chain_template_id, req.policy_ids
