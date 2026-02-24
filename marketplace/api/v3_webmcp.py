@@ -20,32 +20,32 @@ class ToolRegisterRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     name: str = Field(..., min_length=1, max_length=200)
-    description: str = ""
+    description: str = Field(default="", max_length=5000)
     domain: str = Field(..., min_length=1, max_length=500)
     endpoint_url: str = Field(..., min_length=1, max_length=1000)
     category: str = Field(..., min_length=1, max_length=50)
     input_schema: dict | None = None
     output_schema: dict | None = None
-    agent_id: str | None = None
-    version: str = "1.0.0"
+    agent_id: str | None = Field(default=None, max_length=255)
+    version: str = Field(default="1.0.0", max_length=20)
 
 
 class ToolApproveRequest(BaseModel):
-    notes: str = ""
+    notes: str = Field(default="", max_length=2000)
 
 
 class ActionCreateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    tool_id: str = Field(..., min_length=1)
+    tool_id: str = Field(..., min_length=1, max_length=255)
     title: str = Field(..., min_length=1, max_length=255)
-    description: str = ""
-    price_per_execution: float = Field(..., gt=0)
+    description: str = Field(default="", max_length=5000)
+    price_per_execution: float = Field(..., gt=0, le=10_000)
     default_parameters: dict | None = None
     max_executions_per_hour: int = Field(default=60, ge=1, le=10000)
     requires_consent: bool = True
-    domain_lock: list[str] | None = None
-    tags: list[str] | None = None
+    domain_lock: list[str] | None = Field(default=None, max_length=20)
+    tags: list[str] | None = Field(default=None, max_length=50)
 
 
 class ExecuteRequest(BaseModel):
@@ -90,6 +90,8 @@ async def list_tools(
     db: AsyncSession = Depends(get_db),
 ):
     """Discover available WebMCP tools (public)."""
+    if q and len(q) > 500:
+        raise HTTPException(status_code=400, detail="Query too long (max 500)")
     tools, total = await webmcp_service.list_tools(
         db, q=q, category=category, domain=domain,
         status=status, page=page, page_size=page_size,
@@ -162,6 +164,8 @@ async def list_actions(
     db: AsyncSession = Depends(get_db),
 ):
     """Browse available action listings (public)."""
+    if q and len(q) > 500:
+        raise HTTPException(status_code=400, detail="Query too long (max 500)")
     listings, total = await webmcp_service.list_action_listings(
         db, q=q, category=category, max_price=max_price,
         page=page, page_size=page_size,
