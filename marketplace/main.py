@@ -385,7 +385,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "style-src 'self'; "
-            "img-src 'self' data: https:; "
+            "img-src 'self' https:; "
             "connect-src 'self' wss: ws:; "
             "script-src 'self'; "
             "frame-ancestors 'none'; "
