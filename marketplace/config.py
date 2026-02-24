@@ -196,6 +196,13 @@ def validate_security_posture(cfg: Settings) -> None:
             raise RuntimeError(
                 "FATAL: MEMORY_ENCRYPTION_KEY must be set to a strong random value in production."
             )
+        # Reject localhost origins in production
+        for origin in cfg.cors_origins.split(","):
+            if "localhost" in origin.strip().lower() or "127.0.0.1" in origin.strip():
+                raise RuntimeError(
+                    f"FATAL: CORS_ORIGINS contains localhost origin '{origin.strip()}' "
+                    "which is not allowed in production."
+                )
 
 
 validate_security_posture(settings)
