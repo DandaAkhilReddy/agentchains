@@ -29,7 +29,9 @@ def _admin_ids() -> set[str]:
 def _require_admin_creator(authorization: str | None) -> str:
     creator_id = get_current_creator_id(authorization)
     admin_ids = _admin_ids()
-    if admin_ids and creator_id not in admin_ids:
+    if not admin_ids:
+        raise HTTPException(status_code=403, detail="No admin accounts configured")
+    if creator_id not in admin_ids:
         raise HTTPException(status_code=403, detail="Admin access required")
     return creator_id
 
