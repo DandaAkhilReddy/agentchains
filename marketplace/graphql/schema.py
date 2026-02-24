@@ -138,6 +138,7 @@ class Query:
         status: Optional[str] = None,
     ) -> List[AgentType]:
         """List agents with optional status filter."""
+        limit = max(1, min(limit, 100))
         async with async_session() as db:
             stmt = select(RegisteredAgent).limit(limit)
             if status:
@@ -162,6 +163,7 @@ class Query:
         category: Optional[str] = None,
     ) -> List[ListingType]:
         """List data listings with optional category filter."""
+        limit = max(1, min(limit, 100))
         async with async_session() as db:
             stmt = select(DataListing).limit(limit)
             if category:
@@ -186,6 +188,7 @@ class Query:
         limit: int = 20,
     ) -> List[TransactionType]:
         """List transactions where agent_id is either buyer or seller."""
+        limit = max(1, min(limit, 100))
         async with async_session() as db:
             stmt = (
                 select(Transaction)
