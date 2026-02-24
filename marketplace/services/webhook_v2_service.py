@@ -134,6 +134,20 @@ async def process_webhook_queue(db: AsyncSession) -> dict:
                 failed += 1
                 continue
 
+            # Validate callback URL to prevent SSRF
+            try:
+                from marketplace.services.event_subscription_service import (
+                    validate_callback_url,
+                )
+                callback_url = validate_callback_url(callback_url)
+            except ValueError as url_err:
+                attempt.status = "blocked"
+                attempt.error_message = f"URL validation failed: {url_err}"
+                await db.commit()
+                svc.complete_message(msg)
+                failed += 1
+                continue
+
             # Try delivering
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
