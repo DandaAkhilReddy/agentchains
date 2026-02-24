@@ -19,17 +19,17 @@ router = APIRouter(prefix="/redemptions", tags=["redemptions"])
 
 class RedemptionCreateRequest(BaseModel):
     redemption_type: str = Field(..., pattern="^(api_credits|gift_card|bank_withdrawal|upi)$")
-    amount_usd: float = Field(..., gt=0)
+    amount_usd: float = Field(..., gt=0, le=100_000)
     currency: str = Field(default="USD", max_length=10)
     payout_details: Optional[dict] = None  # UPI ID, bank details, etc.
 
 
 class AdminApproveRequest(BaseModel):
-    admin_notes: str = ""
+    admin_notes: str = Field(default="", max_length=5000)
 
 
 class AdminRejectRequest(BaseModel):
-    reason: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1, max_length=5000)
 
 
 # ---------------------------------------------------------------------------
