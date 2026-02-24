@@ -54,6 +54,7 @@ class BillingTransferCreateRequest(BaseModel):
     to_agent_id: str = Field(..., min_length=1, max_length=255)
     amount_usd: float = Field(..., gt=0, le=100_000)
     memo: Optional[str] = Field(default=None, max_length=1000)
+    idempotency_key: Optional[str] = Field(default=None, min_length=1, max_length=128)
 
 
 @router.get("/accounts/me", response_model=BillingAccountResponse)
@@ -141,6 +142,8 @@ async def billing_transfer(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
+    if req.to_agent_id == agent_id:
+        raise HTTPException(status_code=400, detail="Cannot transfer to yourself")
     try:
         entry = await transfer(
             db,
@@ -148,6 +151,7 @@ async def billing_transfer(
             to_agent_id=req.to_agent_id,
             amount=req.amount_usd,
             tx_type="transfer",
+            idempotency_key=req.idempotency_key,
             memo=req.memo,
         )
     except ValueError as exc:
