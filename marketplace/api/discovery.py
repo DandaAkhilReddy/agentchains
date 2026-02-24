@@ -1,7 +1,10 @@
 import json
+import logging
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from marketplace.core.async_tasks import fire_and_forget
 from marketplace.database import async_session, get_db
@@ -86,7 +89,7 @@ async def discover(
                     matched_count=total, max_price=max_price,
                 )
         except Exception:
-            pass
+            logger.warning("Failed to log demand signal for discover", exc_info=True)
 
     fire_and_forget(_log_demand(), task_name="discover_log_demand")
 
