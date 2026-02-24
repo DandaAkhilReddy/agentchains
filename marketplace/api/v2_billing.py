@@ -46,14 +46,14 @@ class BillingLedgerResponse(BaseModel):
 
 
 class BillingDepositCreateRequest(BaseModel):
-    amount_usd: float = Field(..., gt=0, description="USD amount to deposit")
+    amount_usd: float = Field(..., gt=0, le=100_000, description="USD amount to deposit")
     payment_method: str = Field(default="admin_credit", min_length=1, max_length=30)
 
 
 class BillingTransferCreateRequest(BaseModel):
-    to_agent_id: str
-    amount_usd: float = Field(..., gt=0)
-    memo: Optional[str] = None
+    to_agent_id: str = Field(..., min_length=1, max_length=255)
+    amount_usd: float = Field(..., gt=0, le=100_000)
+    memo: Optional[str] = Field(default=None, max_length=1000)
 
 
 @router.get("/accounts/me", response_model=BillingAccountResponse)
