@@ -7,12 +7,12 @@ checks, exception detail verification, and ledger integrity after errors.
 import uuid
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy import func, select
 
 from marketplace.core.exceptions import (
     AgentNotFoundError,
     AgentAlreadyExistsError,
+    AuthorizationError,
     ContentVerificationError,
     InvalidTransactionStateError,
     ListingNotFoundError,
@@ -194,10 +194,10 @@ async def test_transaction_deliver_wrong_seller_raises(
         status="payment_confirmed",
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthorizationError) as exc_info:
         await transaction_service.deliver_content(db, tx.id, "fake-content", impostor.id)
 
-    assert exc_info.value.status_code == 403
+    assert exc_info.value.http_status == 403
 
 
 @pytest.mark.asyncio
@@ -217,10 +217,10 @@ async def test_transaction_verify_wrong_buyer_raises(
         status="delivered",
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthorizationError) as exc_info:
         await transaction_service.verify_delivery(db, tx.id, impostor.id)
 
-    assert exc_info.value.status_code == 403
+    assert exc_info.value.http_status == 403
 
 
 @pytest.mark.asyncio
@@ -257,10 +257,10 @@ async def test_listing_delist_by_non_owner_raises(
 
     listing = await make_listing(owner.id, price_usdc=2.0)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthorizationError) as exc_info:
         await listing_service.delist(db, listing.id, stranger.id)
 
-    assert exc_info.value.status_code == 403
+    assert exc_info.value.http_status == 403
 
 
 @pytest.mark.asyncio
@@ -277,10 +277,10 @@ async def test_listing_update_by_non_owner_raises(
 
     update_req = ListingUpdateRequest(title="Hijacked Title")
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthorizationError) as exc_info:
         await listing_service.update_listing(db, listing.id, stranger.id, update_req)
 
-    assert exc_info.value.status_code == 403
+    assert exc_info.value.http_status == 403
 
 
 # ---------------------------------------------------------------------------
