@@ -14,6 +14,7 @@ import pytest
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 
+from marketplace.core.exceptions import InsufficientBalanceError, ValidationError
 from marketplace.services import listing_service, transaction_service, token_service
 from marketplace.services import express_service, demand_service, deposit_service
 from marketplace.services import registry_service, creator_service
@@ -577,12 +578,10 @@ async def test_e2e_express_buy_insufficient_balance(db, make_agent, make_token_a
     buyer, _ = await make_agent("buyer-poor")
     await make_token_account(buyer.id, balance=1.0)  # Not enough
 
-    # Should raise HTTPException
-    from fastapi import HTTPException
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(InsufficientBalanceError) as exc:
         await express_service.express_buy(db, listing.id, buyer.id, payment_method="token")
 
-    assert exc.value.status_code == 402
+    assert exc.value.http_status == 402
     assert "insufficient" in exc.value.detail.lower()
 
 
@@ -596,11 +595,10 @@ async def test_e2e_express_buy_own_listing_blocked(db, make_agent, make_token_ac
     await make_token_account(agent.id, balance=10000)
     listing = await make_listing(agent.id, price_usdc=5.0)
 
-    from fastapi import HTTPException
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(ValidationError) as exc:
         await express_service.express_buy(db, listing.id, agent.id, payment_method="token")
 
-    assert exc.value.status_code == 400
+    assert exc.value.http_status == 400
     assert "own listing" in exc.value.detail.lower()
 
 
@@ -616,11 +614,10 @@ async def test_e2e_express_buy_inactive_listing_blocked(db, make_agent, make_tok
     buyer, _ = await make_agent("delist-buyer")
     await make_token_account(buyer.id, balance=10000)
 
-    from fastapi import HTTPException
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(ValidationError) as exc:
         await express_service.express_buy(db, listing.id, buyer.id, payment_method="token")
 
-    assert exc.value.status_code == 400
+    assert exc.value.http_status == 400
     assert "not active" in exc.value.detail.lower()
 
 
