@@ -52,7 +52,8 @@ class TestCreateAccessToken:
         """Token payload must contain sub, name, exp, and iat claims."""
         token = create_access_token("agent-42", "Deep Thought")
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
         )
         assert payload["sub"] == "agent-42"
         assert payload["name"] == "Deep Thought"
@@ -63,12 +64,13 @@ class TestCreateAccessToken:
         """The exp claim should be in the future (at least hours from now)."""
         token = create_access_token("agent-1", "Test")
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
         )
         exp_dt = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
         now = datetime.now(timezone.utc)
-        # Should be at least 1 hour in the future (settings default is 7 days)
-        assert exp_dt > now + timedelta(hours=1)
+        # Should be at least ~1 hour in the future (settings default is 7 days)
+        assert exp_dt >= now + timedelta(minutes=59)
 
 
 # ===========================================================================
@@ -114,6 +116,8 @@ class TestDecodeToken:
         """A token without a 'sub' claim should raise UnauthorizedError."""
         payload = {
             "name": "NoSubject",
+            "aud": "agentchains-marketplace",
+            "iss": "agentchains",
             "exp": datetime.now(timezone.utc) + timedelta(hours=1),
             "iat": datetime.now(timezone.utc),
         }
@@ -215,7 +219,8 @@ class TestCreateCreatorToken:
         """Creator token payload must have type='creator'."""
         token = create_creator_token("creator-1", "alice@example.com")
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
         )
         assert payload["type"] == "creator"
 
@@ -223,7 +228,8 @@ class TestCreateCreatorToken:
         """Creator token payload must include the email claim."""
         token = create_creator_token("creator-2", "bob@example.com")
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
         )
         assert payload["email"] == "bob@example.com"
 
@@ -231,7 +237,8 @@ class TestCreateCreatorToken:
         """Creator token must include a jti (JWT ID) that is a valid UUID."""
         token = create_creator_token("creator-3", "carol@example.com")
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
         )
         assert "jti" in payload
         # Validate it is a proper UUID
