@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # OpenAI (for AI agents)
     openai_api_key: str = ""
-    openai_model: str = "gpt-4o"
+    openai_model: str = "gpt-4o-mini"
 
     # Billing
     platform_fee_pct: float = 0.02  # 2% fee on purchases
