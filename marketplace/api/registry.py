@@ -1,7 +1,10 @@
 import json
+import logging
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from marketplace.core.auth import get_current_agent_id
 from marketplace.database import get_db
@@ -32,7 +35,7 @@ async def register_agent(
         await create_account(db, result.id)
         await credit_signup_bonus(db, result.id)
     except Exception:
-        pass  # Don't fail registration if token setup fails
+        logger.warning("Token setup failed for agent %s during registration", result.id, exc_info=True)
 
     return result
 
