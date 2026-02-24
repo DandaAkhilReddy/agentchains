@@ -99,9 +99,9 @@ class GrpcAgentClient:
         import httpx
 
         timeout = timeout_seconds or self._timeout
-        # Extract HTTP endpoint from gRPC target
+        # Extract HTTP endpoint from gRPC target — always use HTTPS
         host = self._target.split(":")[0]
-        url = f"http://{host}:8000/api/v1/tasks"
+        url = f"https://{host}:8000/api/v1/tasks"
 
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
