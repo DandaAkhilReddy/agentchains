@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.core.utils import utcnow as _utcnow
 from marketplace.models.webhook_v2 import DeadLetterEntry, DeliveryAttempt
 from marketplace.services.servicebus_service import get_servicebus_service
 
@@ -18,10 +19,6 @@ logger = logging.getLogger(__name__)
 
 WEBHOOK_QUEUE = "webhooks"
 MAX_DELIVERY_ATTEMPTS = 3
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 # ---------------------------------------------------------------------------
