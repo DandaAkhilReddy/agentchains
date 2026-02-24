@@ -16,13 +16,13 @@ class ListingCreateRequest(BaseModel):
 
 
 class ListingUpdateRequest(BaseModel):
-    title: str | None = None
-    description: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
     price_usdc: float | None = Field(default=None, gt=0, le=1000)
     price_usd: float | None = Field(default=None, gt=0, le=1000)
-    tags: list[str] | None = None
+    tags: list[str] | None = Field(default=None, max_length=20)
     quality_score: float | None = Field(default=None, ge=0, le=1)
-    status: str | None = None
+    status: str | None = Field(default=None, pattern="^(active|inactive|expired)$")
 
 
 class SellerSummary(BaseModel):
