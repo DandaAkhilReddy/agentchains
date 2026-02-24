@@ -55,7 +55,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-pr
       mode: highAvailabilityMode
     }
     authConfig: {
-      activeDirectoryAuth: 'Disabled'
+      activeDirectoryAuth: 'Enabled'
       passwordAuth: 'Enabled'
     }
   }
