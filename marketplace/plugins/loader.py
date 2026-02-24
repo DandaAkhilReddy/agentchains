@@ -118,8 +118,18 @@ def initialize_plugin(manifest: PluginManifest) -> Any:
     if ".." in module_path:
         raise ValueError(f"Invalid module path (path traversal detected): '{module_path}'")
 
+    # Validate class name is a safe identifier (no dunders, no builtins)
+    if not class_name.isidentifier():
+        raise ValueError(f"Invalid class name: '{class_name}'")
+    if class_name.startswith("_"):
+        raise ValueError(f"Plugin class name must not start with underscore: '{class_name}'")
+
     module = importlib.import_module(module_path)
     cls = getattr(module, class_name)
+
+    # Verify the class is actually a class (not a function, module, or other callable)
+    if not isinstance(cls, type):
+        raise ValueError(f"Entry point '{class_name}' is not a class")
 
     instance = cls()
     logger.info("Initialized plugin: %s (%s)", manifest.name, class_name)
