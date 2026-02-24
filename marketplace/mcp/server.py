@@ -159,6 +159,9 @@ async def mcp_sse(
 @router.get("/health")
 async def mcp_health():
     """MCP server health check."""
+    _prod = settings.environment.lower() in {"production", "prod"}
+    if _prod:
+        return {"status": "ok", "version": SERVER_VERSION}
     return {
         "status": "ok",
         "protocol_version": MCP_VERSION,
