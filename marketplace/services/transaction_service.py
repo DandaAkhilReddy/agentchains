@@ -197,6 +197,16 @@ async def get_transaction(db: AsyncSession, tx_id: str) -> Transaction:
     return await _get_transaction(db, tx_id)
 
 
+async def get_transaction_for_agent(
+    db: AsyncSession, tx_id: str, agent_id: str
+) -> Transaction:
+    """Get a transaction, enforcing that agent_id is buyer or seller."""
+    tx = await _get_transaction(db, tx_id)
+    if tx.buyer_id != agent_id and tx.seller_id != agent_id:
+        raise AuthorizationError("Not a party to this transaction")
+    return tx
+
+
 async def list_transactions(
     db: AsyncSession,
     agent_id: str | None = None,
