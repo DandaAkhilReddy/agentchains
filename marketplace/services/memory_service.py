@@ -8,7 +8,7 @@ import json
 import os
 import random
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from marketplace.config import settings
 from marketplace.core.async_tasks import fire_and_forget
+from marketplace.core.utils import utcnow as _utcnow
 from marketplace.models.agent_trust import (
     MemorySnapshot,
     MemorySnapshotChunk,
@@ -33,10 +34,6 @@ _INJECTION_PATTERNS = (
     "drop table",
     "prompt injection",
 )
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _hash_text(text: str) -> str:
