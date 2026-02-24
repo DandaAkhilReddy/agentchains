@@ -126,7 +126,9 @@ async def admin_approve(
     from marketplace.config import settings
     creator_id = get_current_creator_id(authorization)
     admin_ids = [a.strip() for a in getattr(settings, "admin_creator_ids", "").split(",") if a.strip()]
-    if admin_ids and creator_id not in admin_ids:
+    if not admin_ids:
+        raise HTTPException(status_code=403, detail="No admin accounts configured")
+    if creator_id not in admin_ids:
         raise HTTPException(status_code=403, detail="Admin access required")
     try:
         return await redemption_service.admin_approve_redemption(
@@ -149,7 +151,9 @@ async def admin_reject(
     from marketplace.config import settings
     creator_id = get_current_creator_id(authorization)
     admin_ids = [a.strip() for a in getattr(settings, "admin_creator_ids", "").split(",") if a.strip()]
-    if admin_ids and creator_id not in admin_ids:
+    if not admin_ids:
+        raise HTTPException(status_code=403, detail="No admin accounts configured")
+    if creator_id not in admin_ids:
         raise HTTPException(status_code=403, detail="Admin access required")
     try:
         return await redemption_service.admin_reject_redemption(
