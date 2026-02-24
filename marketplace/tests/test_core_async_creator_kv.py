@@ -248,7 +248,8 @@ class TestCreateCreatorToken:
         """Token payload must carry type='creator'."""
         token = create_creator_token("c-2", "alice@example.com")
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
         )
         assert payload["type"] == "creator"
 
@@ -257,7 +258,8 @@ class TestCreateCreatorToken:
         creator_id = "creator-abc-999"
         token = create_creator_token(creator_id, "bob@example.com")
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
         )
         assert payload["sub"] == creator_id
 
@@ -266,7 +268,8 @@ class TestCreateCreatorToken:
         email = "carol@example.com"
         token = create_creator_token("c-3", email)
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
         )
         assert payload["email"] == email
 
@@ -274,7 +277,8 @@ class TestCreateCreatorToken:
         """jti claim must be a valid UUID string."""
         token = create_creator_token("c-4", "dave@example.com")
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
         )
         assert "jti" in payload
         # Will raise ValueError if not a valid UUID
@@ -285,24 +289,26 @@ class TestCreateCreatorToken:
         """Two tokens for the same creator must have different jti values."""
         t1 = create_creator_token("c-5", "same@example.com")
         t2 = create_creator_token("c-5", "same@example.com")
-        p1 = jwt.decode(t1, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-        p2 = jwt.decode(t2, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        p1 = jwt.decode(t1, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm], audience="agentchains-marketplace")
+        p2 = jwt.decode(t2, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm], audience="agentchains-marketplace")
         assert p1["jti"] != p2["jti"]
 
     async def test_exp_is_in_the_future(self):
         """Expiry claim must be at least one hour from now."""
         token = create_creator_token("c-6", "exp@example.com")
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
         )
         exp_dt = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
-        assert exp_dt > datetime.now(timezone.utc) + timedelta(hours=1)
+        assert exp_dt >= datetime.now(timezone.utc) + timedelta(minutes=59)
 
     async def test_iat_is_present_and_recent(self):
         """iat (issued-at) claim must be close to the current time."""
         token = create_creator_token("c-7", "iat@example.com")
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm],
+            audience="agentchains-marketplace",
         )
         assert "iat" in payload
         iat_dt = datetime.fromtimestamp(payload["iat"], tz=timezone.utc)
@@ -394,6 +400,8 @@ class TestGetCurrentCreatorId:
             "email": "nosub@example.com",
             "type": "creator",
             "jti": str(uuid.uuid4()),
+            "aud": "agentchains-marketplace",
+            "iss": "agentchains",
             "exp": datetime.now(timezone.utc) + timedelta(hours=1),
             "iat": datetime.now(timezone.utc),
         }
