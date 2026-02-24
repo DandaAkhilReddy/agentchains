@@ -52,13 +52,13 @@ class HistoryResponse(BaseModel):
 
 
 class DepositRequest(BaseModel):
-    amount_usd: float = Field(..., gt=0, description="USD amount to deposit")
+    amount_usd: float = Field(..., gt=0, le=100_000, description="USD amount to deposit")
 
 
 class TransferRequest(BaseModel):
-    to_agent_id: str
-    amount: float = Field(..., gt=0)
-    memo: Optional[str] = None
+    to_agent_id: str = Field(..., min_length=1, max_length=255)
+    amount: float = Field(..., gt=0, le=1_000_000)
+    memo: Optional[str] = Field(default=None, max_length=500)
 
 
 # ---------------------------------------------------------------------------
