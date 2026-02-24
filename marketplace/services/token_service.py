@@ -29,7 +29,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
-from marketplace.core.async_tasks import fire_and_forget
+from marketplace.core.events import broadcast_event
 from marketplace.core.hashing import compute_ledger_hash
 from marketplace.core.utils import to_decimal as _to_decimal, utcnow as _utcnow
 from marketplace.models.token_account import (
@@ -385,18 +385,14 @@ async def transfer(
     await db.refresh(ledger)
 
     # Broadcast payment event
-    try:
-        from marketplace.main import broadcast_event
-        fire_and_forget(broadcast_event("payment", {
-            "from_agent_id": from_agent_id,
-            "to_agent_id": to_agent_id,
-            "amount": float(amount_d),
-            "fee": float(fee_d),
-            "tx_type": tx_type,
-            "creator_royalty": float(royalty_ledger.amount) if royalty_ledger else 0,
-        }), task_name="broadcast_payment")
-    except Exception:
-        logger.warning("Broadcast failed for payment event (ledger %s)", ledger.id, exc_info=True)
+    broadcast_event("payment", {
+        "from_agent_id": from_agent_id,
+        "to_agent_id": to_agent_id,
+        "amount": float(amount_d),
+        "fee": float(fee_d),
+        "tx_type": tx_type,
+        "creator_royalty": float(royalty_ledger.amount) if royalty_ledger else 0,
+    })
 
     logger.info(
         "Transfer %s: $%s USD from %s -> %s (fee=$%s) [%s]",
@@ -484,14 +480,10 @@ async def deposit(
     await db.refresh(ledger)
 
     # Broadcast deposit event
-    try:
-        from marketplace.main import broadcast_event
-        fire_and_forget(broadcast_event("deposit", {
-            "agent_id": agent_id,
-            "amount_usd": float(amount_d),
-        }), task_name="broadcast_deposit")
-    except Exception:
-        logger.warning("Broadcast failed for deposit event (agent %s)", agent_id, exc_info=True)
+    broadcast_event("deposit", {
+        "agent_id": agent_id,
+        "amount_usd": float(amount_d),
+    })
 
     logger.info(
         "Deposit %s: +$%s USD to agent %s (%s)",
