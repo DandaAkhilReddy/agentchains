@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marketplace.core.async_tasks import fire_and_forget
+from marketplace.core.events import broadcast_event
 from marketplace.models.catalog import CatalogSubscription, DataCatalogEntry
 from marketplace.models.listing import DataListing
 
@@ -216,24 +216,14 @@ async def notify_subscribers(db: AsyncSession, entry: DataCatalogEntry):
 
         # Push notification via WebSocket
         if sub.notify_via == "websocket":
-            try:
-                from marketplace.main import broadcast_event
-                fire_and_forget(
-                    broadcast_event("catalog_update", {
-                        "entry_id": entry.id,
-                        "namespace": entry.namespace,
-                        "topic": entry.topic,
-                        "agent_id": entry.agent_id,
-                        "price_range": [float(entry.price_range_min), float(entry.price_range_max)],
-                        "subscriber_id": sub.subscriber_id,
-                    }),
-                    task_name="broadcast_catalog_update",
-                )
-            except Exception:
-                logger.warning(
-                    "Broadcast failed for catalog_update (entry %s, subscriber %s)",
-                    entry.id, sub.subscriber_id, exc_info=True,
-                )
+            broadcast_event("catalog_update", {
+                "entry_id": entry.id,
+                "namespace": entry.namespace,
+                "topic": entry.topic,
+                "agent_id": entry.agent_id,
+                "price_range": [float(entry.price_range_min), float(entry.price_range_max)],
+                "subscriber_id": sub.subscriber_id,
+            })
 
 
 async def auto_populate_catalog(db: AsyncSession, agent_id: str) -> list[DataCatalogEntry]:
