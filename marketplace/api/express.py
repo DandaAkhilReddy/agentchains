@@ -1,10 +1,13 @@
 """Express delivery endpoint — single-request purchase returning content immediately."""
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from marketplace.core.auth import get_current_agent_id
 from marketplace.core.async_tasks import fire_and_forget
@@ -47,7 +50,7 @@ async def express_buy(
                     requester_id=buyer_id, matched_count=1, led_to_purchase=1,
                 )
         except Exception:
-            pass
+            logger.warning("Failed to log demand signal for express purchase", exc_info=True)
 
     fire_and_forget(_log_demand(), task_name="express_log_demand")
 
