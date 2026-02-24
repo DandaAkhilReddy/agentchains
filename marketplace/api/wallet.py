@@ -16,8 +16,12 @@ from marketplace.services.deposit_service import (
     confirm_deposit,
     create_deposit,
 )
+from marketplace.core.rate_limiter import SlidingWindowRateLimiter
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
+
+# Dedicated rate limiter for financial transfers (stricter than global)
+_transfer_limiter = SlidingWindowRateLimiter()
 
 
 # ---------------------------------------------------------------------------
@@ -127,8 +131,21 @@ async def wallet_transfer(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
-    """Transfer USD to another agent."""
+    """Transfer USD to another agent (rate-limited to 10 transfers/minute)."""
     apply_legacy_v1_deprecation_headers(response)
+
+    # Per-agent transfer rate limiting (stricter than global rate limit)
+    allowed, headers = _transfer_limiter.check(f"wallet_transfer:{agent_id}", authenticated=True)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Transfer rate limit exceeded. Please wait before retrying.",
+            headers={"Retry-After": headers.get("Retry-After", "60")},
+        )
+
+    if req.to_agent_id == agent_id:
+        raise HTTPException(status_code=400, detail="Cannot transfer to yourself")
+
     try:
         entry = await transfer(
             db,
