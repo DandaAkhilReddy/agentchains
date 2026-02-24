@@ -64,14 +64,28 @@ class RevokeRequest(BaseModel):
 async def register_client(
     request: ClientCreateRequest,
     db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
-    """Register a new OAuth2 client application."""
+    """Register a new OAuth2 client application. Requires authentication."""
+    from marketplace.core.auth import decode_token
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization required")
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Bearer token required")
+    try:
+        payload = decode_token(parts[1])
+        authenticated_id = payload.get("sub")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
     result = await server.register_client(
         db=db,
         name=request.name,
         redirect_uris=request.redirect_uris,
         scopes=request.scopes,
-        owner_id=request.owner_id,
+        owner_id=authenticated_id or request.owner_id,
     )
 
     return ClientCreateResponse(
