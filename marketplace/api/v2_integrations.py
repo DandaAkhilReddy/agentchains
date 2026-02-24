@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
@@ -14,8 +14,8 @@ router = APIRouter(prefix="/integrations", tags=["integrations-v2"])
 
 
 class WebhookSubscriptionRequest(BaseModel):
-    callback_url: str = Field(..., min_length=8, max_length=500)
-    event_types: list[str] = Field(default_factory=lambda: ["*"])
+    callback_url: HttpUrl = Field(..., description="HTTPS callback URL for webhook delivery")
+    event_types: list[str] = Field(default_factory=lambda: ["*"], max_length=20)
 
 
 @router.post("/webhooks", status_code=201)
@@ -28,7 +28,7 @@ async def create_webhook_subscription_v2(
         return await event_subscription_service.register_subscription(
             db,
             agent_id=agent_id,
-            callback_url=req.callback_url,
+            callback_url=str(req.callback_url),
             event_types=req.event_types,
         )
     except ValueError as exc:
