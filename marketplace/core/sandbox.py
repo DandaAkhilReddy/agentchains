@@ -30,7 +30,7 @@ class SandboxConfig:
     memory_limit_mb: int = 512
     cpu_limit: float = 0.5
     timeout_seconds: int = 120
-    network_enabled: bool = True
+    network_enabled: bool = False  # Disabled by default for security
     allowed_domains: list[str] = field(default_factory=list)
     environment: dict[str, str] = field(default_factory=dict)
 
