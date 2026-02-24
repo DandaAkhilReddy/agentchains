@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -12,6 +12,7 @@ from marketplace.core.exceptions import (
     InvalidTransactionStateError,
     TransactionNotFoundError,
 )
+from marketplace.models.listing import DataListing
 from marketplace.models.transaction import Transaction
 from marketplace.services.listing_service import get_listing
 from marketplace.services.payment_service import payment_service
@@ -166,9 +167,12 @@ async def verify_delivery(db: AsyncSession, tx_id: str, buyer_id: str) -> Transa
         tx.verified_at = datetime.now(timezone.utc)
         tx.completed_at = datetime.now(timezone.utc)
 
-        # Increment listing access count
-        listing = await get_listing(db, tx.listing_id)
-        listing.access_count += 1
+        # Atomic increment — avoids race condition under concurrent deliveries
+        await db.execute(
+            update(DataListing)
+            .where(DataListing.id == tx.listing_id)
+            .values(access_count=DataListing.access_count + 1)
+        )
     else:
         tx.verification_status = "failed"
         tx.status = "disputed"
