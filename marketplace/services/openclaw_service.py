@@ -10,6 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
+from marketplace.core.url_validation import validate_url
 from marketplace.models.openclaw_webhook import OpenClawWebhook
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,9 @@ async def register_webhook(
     filters: dict | None = None,
 ) -> OpenClawWebhook:
     """Register an OpenClaw gateway to receive marketplace events."""
+    # Validate URL for SSRF protection
+    gateway_url = validate_url(gateway_url, require_https_in_prod=True)
+
     # Check for existing active webhook for this agent
     result = await db.execute(
         select(OpenClawWebhook).where(
