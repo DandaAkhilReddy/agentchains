@@ -58,8 +58,8 @@ async def confirm_deposit(db: AsyncSession, deposit_id: str, agent_id: str | Non
     """
     deposit = await _get_deposit(db, deposit_id, for_update=True)
     if agent_id and deposit.agent_id != agent_id:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Not the owner of this deposit")
+        from marketplace.core.exceptions import AuthorizationError
+        raise AuthorizationError("Not the owner of this deposit")
     if deposit.status != "pending":
         raise ValueError(
             f"Deposit {deposit_id} is '{deposit.status}', expected 'pending'"
@@ -92,8 +92,8 @@ async def cancel_deposit(db: AsyncSession, deposit_id: str, agent_id: str | None
     """Mark a deposit as failed (uses row-level lock to prevent race conditions)."""
     deposit = await _get_deposit(db, deposit_id, for_update=True)
     if agent_id and deposit.agent_id != agent_id:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Not the owner of this deposit")
+        from marketplace.core.exceptions import AuthorizationError
+        raise AuthorizationError("Not the owner of this deposit")
     if deposit.status != "pending":
         raise ValueError(
             f"Deposit {deposit_id} is '{deposit.status}', only pending deposits can be cancelled"
@@ -177,11 +177,8 @@ async def _get_deposit(db: AsyncSession, deposit_id: str, *, for_update: bool = 
     result = await db.execute(query)
     deposit = result.scalar_one_or_none()
     if deposit is None:
-        from fastapi import HTTPException, status
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Deposit {deposit_id} not found",
-        )
+        from marketplace.core.exceptions import NotFoundError
+        raise NotFoundError(f"Deposit {deposit_id} not found")
     return deposit
 
 
