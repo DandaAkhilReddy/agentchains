@@ -140,6 +140,124 @@ For all platforms, set the required environment variables (see [Production Check
 
 ---
 
+## Cost-Optimized Small Launch (~$25-50/month)
+
+For launching with a few hundred users on a tight budget. Skips Redis, Service Bus, AI Search, Blob Storage, and Azure OpenAI — uses built-in fallbacks and direct OpenAI API instead.
+
+### What You Get
+
+| Service | Tier | Monthly Cost |
+|---------|------|-------------|
+| Azure Container Apps | Consumption (0-2 replicas) | $0-15 |
+| Azure PostgreSQL | Burstable B1ms (1 vCore, 32GB) | $13-25 |
+| Azure Container Registry | Basic | $5 |
+| Azure Key Vault | Standard | ~$0.50 |
+| Azure App Insights | Free tier (5GB/mo) | $0 |
+| Netlify | Free tier (frontend SPA) | $0 |
+| OpenAI API | Pay-per-use (GPT-4o-mini) | $5-20 |
+| **Total** | | **~$25-50/mo** |
+
+### What's Skipped (with fallbacks)
+
+| Skipped Service | Fallback | Add Later When... |
+|----------------|----------|-------------------|
+| Redis | In-memory rate limiting | >500 concurrent users |
+| Azure AI Search | SQL queries | >1000 listings |
+| Service Bus | Synchronous webhooks | Need async processing |
+| Blob Storage | Container filesystem | Need persistent file storage |
+| Azure OpenAI | Direct OpenAI API | Need Azure SLA guarantees |
+
+### Step 1: Deploy Azure Infrastructure
+
+```bash
+# Login to Azure
+az login
+
+# Deploy with the small-launch parameter file
+az deployment sub create \
+  --location eastus \
+  --template-file infra/main.bicep \
+  --parameters @infra/parameters.small-launch.json \
+  --parameters tenantId=<YOUR_TENANT_ID> \
+               postgresAdminLogin=agentchainsadmin \
+               postgresAdminPassword=<STRONG_PASSWORD> \
+               jwtSecretKey=$(python -c "import secrets; print(secrets.token_urlsafe(48))") \
+               eventSigningSecret=$(python -c "import secrets; print(secrets.token_urlsafe(48))") \
+               memoryEncryptionKey=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+```
+
+### Step 2: Build and Deploy Backend
+
+```bash
+# Build Docker image in ACR
+az acr build --registry agentchainsacrdev --image agentchains:latest .
+
+# Deploy to Container Apps
+az containerapp update \
+  --name agentchains-app-dev \
+  --resource-group rg-agentchains-dev \
+  --image agentchainsacrdev.azurecr.io/agentchains:latest
+
+# Set the OpenAI API key (not in Bicep for security)
+az containerapp update \
+  --name agentchains-app-dev \
+  --resource-group rg-agentchains-dev \
+  --set-env-vars "OPENAI_API_KEY=sk-YOUR_KEY" "OPENAI_MODEL=gpt-4o-mini"
+```
+
+### Step 3: Deploy Frontend to Netlify
+
+```bash
+cd frontend
+npm ci && npm run build
+
+# Option A: Netlify CLI
+npx netlify-cli deploy --prod --dir=dist
+
+# Option B: Connect GitHub repo via Netlify dashboard
+# Build command: cd frontend && npm ci && npm run build
+# Publish directory: frontend/dist
+```
+
+Set the `VITE_API_URL` environment variable in Netlify to your Container App URL.
+
+### Step 4: Verify
+
+```bash
+# Backend health
+curl https://<app-name>.azurecontainerapps.io/api/v1/health
+
+# Frontend loads
+curl -I https://<your-app>.netlify.app
+```
+
+### Cost Monitoring
+
+Set up Azure billing alerts:
+```bash
+# Alert at $30 and $60
+az monitor metrics alert create \
+  --name "agentchains-cost-alert" \
+  --resource-group rg-agentchains-dev \
+  --condition "total Cost > 30" \
+  --description "AgentChains spend exceeded $30"
+```
+
+Also set an OpenAI API spending limit at [platform.openai.com/settings](https://platform.openai.com/settings).
+
+### Scaling Path
+
+| Trigger | Action | Extra Cost |
+|---------|--------|-----------|
+| >500 concurrent users | Add Redis (`deployRedis=true`) | +$15/mo |
+| >1000 agent listings | Add AI Search (`deploySearch=true`) | +$75/mo |
+| Need async webhooks | Add Service Bus (`deployServiceBus=true`) | +$0.05/mo |
+| Need file storage | Add Blob Storage (`deployStorage=true`) | +$2-5/mo |
+| High AI volume | Switch to Azure OpenAI (`deployOpenAi=true`) | Similar cost, better SLA |
+| Real payments | Configure Stripe/Razorpay env vars | Transaction fees only |
+
+---
+
 ## Azure Container Apps (CLI-first)
 
 Current production target in this repository uses:
