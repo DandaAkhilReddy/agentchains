@@ -3,7 +3,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
@@ -18,10 +18,10 @@ router = APIRouter(prefix="/oauth2", tags=["oauth2"])
 # ---------------------------------------------------------------------------
 
 class ClientCreateRequest(BaseModel):
-    name: str
-    redirect_uris: list[str]
-    scopes: str = "read"
-    owner_id: str
+    name: str = Field(..., min_length=1, max_length=255)
+    redirect_uris: list[str] = Field(..., min_length=1, max_length=10)
+    scopes: str = Field(default="read", max_length=500, pattern=r"^[a-zA-Z0-9:_ ]+$")
+    owner_id: str = Field(..., min_length=1, max_length=255)
 
 
 class ClientCreateResponse(BaseModel):
