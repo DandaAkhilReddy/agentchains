@@ -36,14 +36,17 @@ async def get_earnings_breakdown(db: AsyncSession, agent_id: str) -> dict:
     total_earned = sum(float(t.amount_usdc) for t in seller_list)
     total_spent = sum(float(t.amount_usdc) for t in buyer_list)
 
-    # Earnings by category — join with listing
+    # Earnings by category — batch-load listing categories
     earnings_by_cat: dict[str, float] = defaultdict(float)
-    for t in seller_list:
-        listing_result = await db.execute(
-            select(Listing.category).where(Listing.id == t.listing_id)
+    listing_ids = {t.listing_id for t in seller_list if t.listing_id}
+    category_map: dict[str, str] = {}
+    if listing_ids:
+        cat_result = await db.execute(
+            select(Listing.id, Listing.category).where(Listing.id.in_(listing_ids))
         )
-        row = listing_result.first()
-        cat = row[0] if row else "unknown"
+        category_map = {row[0]: row[1] for row in cat_result.all()}
+    for t in seller_list:
+        cat = category_map.get(t.listing_id, "unknown")
         earnings_by_cat[cat] += float(t.amount_usdc)
 
     # Timeline (grouped by date)
@@ -148,30 +151,41 @@ async def get_multi_leaderboard(
     db: AsyncSession, board_type: str, limit: int = 20
 ) -> list[dict]:
     """Get multi-dimensional leaderboard entries."""
+    # Shared helper: batch-load agent names for a list of stats
+    async def _build_leaderboard(stats_list: list, build_entry) -> list[dict]:
+        agent_ids = [s.agent_id for s in stats_list]
+        name_map: dict[str, str] = {}
+        if agent_ids:
+            names_result = await db.execute(
+                select(RegisteredAgent.id, RegisteredAgent.name).where(
+                    RegisteredAgent.id.in_(agent_ids)
+                )
+            )
+            name_map = {row[0]: row[1] for row in names_result.all()}
+        return [
+            build_entry(rank, s, name_map.get(s.agent_id, "Unknown"))
+            for rank, s in enumerate(stats_list, 1)
+        ]
+
     if board_type == "helpfulness":
         stats_result = await db.execute(
             select(AgentStats)
             .order_by(AgentStats.helpfulness_score.desc())
             .limit(limit)
         )
-        stats_list = list(stats_result.scalars().all())
-        entries = []
-        for rank, s in enumerate(stats_list, 1):
-            agent_result = await db.execute(
-                select(RegisteredAgent.name).where(RegisteredAgent.id == s.agent_id)
-            )
-            row = agent_result.first()
-            entries.append({
+        return await _build_leaderboard(
+            list(stats_result.scalars().all()),
+            lambda rank, s, name: {
                 "rank": rank,
                 "agent_id": s.agent_id,
-                "agent_name": row[0] if row else "Unknown",
+                "agent_name": name,
                 "primary_score": float(s.helpfulness_score),
                 "secondary_label": f"{s.unique_buyers_served} buyers served",
                 "total_transactions": s.unique_buyers_served + s.total_cache_hits,
                 "helpfulness_score": float(s.helpfulness_score),
                 "total_earned_usdc": float(s.total_earned_usdc),
-            })
-        return entries
+            },
+        )
 
     elif board_type == "earnings":
         stats_result = await db.execute(
@@ -179,24 +193,19 @@ async def get_multi_leaderboard(
             .order_by(AgentStats.total_earned_usdc.desc())
             .limit(limit)
         )
-        stats_list = list(stats_result.scalars().all())
-        entries = []
-        for rank, s in enumerate(stats_list, 1):
-            agent_result = await db.execute(
-                select(RegisteredAgent.name).where(RegisteredAgent.id == s.agent_id)
-            )
-            row = agent_result.first()
-            entries.append({
+        return await _build_leaderboard(
+            list(stats_result.scalars().all()),
+            lambda rank, s, name: {
                 "rank": rank,
                 "agent_id": s.agent_id,
-                "agent_name": row[0] if row else "Unknown",
+                "agent_name": name,
                 "primary_score": float(s.total_earned_usdc),
                 "secondary_label": f"${float(s.total_earned_usdc):.4f} earned",
                 "total_transactions": s.total_listings_created,
                 "helpfulness_score": float(s.helpfulness_score),
                 "total_earned_usdc": float(s.total_earned_usdc),
-            })
-        return entries
+            },
+        )
 
     elif board_type == "contributors":
         stats_result = await db.execute(
@@ -204,24 +213,19 @@ async def get_multi_leaderboard(
             .order_by(AgentStats.total_data_bytes_contributed.desc())
             .limit(limit)
         )
-        stats_list = list(stats_result.scalars().all())
-        entries = []
-        for rank, s in enumerate(stats_list, 1):
-            agent_result = await db.execute(
-                select(RegisteredAgent.name).where(RegisteredAgent.id == s.agent_id)
-            )
-            row = agent_result.first()
-            entries.append({
+        return await _build_leaderboard(
+            list(stats_result.scalars().all()),
+            lambda rank, s, name: {
                 "rank": rank,
                 "agent_id": s.agent_id,
-                "agent_name": row[0] if row else "Unknown",
+                "agent_name": name,
                 "primary_score": s.total_data_bytes_contributed,
                 "secondary_label": f"{s.total_data_bytes_contributed} bytes",
                 "total_transactions": s.total_listings_created,
                 "helpfulness_score": float(s.helpfulness_score),
                 "total_earned_usdc": float(s.total_earned_usdc),
-            })
-        return entries
+            },
+        )
 
     else:
         # category:<name> or fallback
