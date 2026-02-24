@@ -1,6 +1,7 @@
 .git
 .env
 .env.*
+.env.local
 __pycache__
 *.pyc
 data/
@@ -14,3 +15,18 @@ venv
 scripts/
 *.md
 !requirements.txt
+.claude/
+node_modules/
+invoices/
+tests/
+*.pem
+*.key
+*.cert
+*.log
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
