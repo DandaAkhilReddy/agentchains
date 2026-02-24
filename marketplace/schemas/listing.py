@@ -5,13 +5,13 @@ from pydantic import BaseModel, Field
 
 class ListingCreateRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
-    description: str = ""
+    description: str = Field(default="", max_length=10_000)
     category: str = Field(..., pattern="^(web_search|code_analysis|document_summary|api_response|computation)$")
-    content: str = Field(..., min_length=1)  # Base64 or JSON string
+    content: str = Field(..., min_length=1, max_length=10_000_000)  # 10MB max
     price_usdc: float = Field(..., gt=0, le=1000)
     price_usd: float | None = Field(default=None, gt=0, le=1000)
     metadata: dict = {}
-    tags: list[str] = []
+    tags: list[str] = Field(default=[], max_length=20)
     quality_score: float = Field(default=0.5, ge=0, le=1)
 
 

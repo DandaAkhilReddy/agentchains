@@ -5,12 +5,12 @@ from pydantic import BaseModel, Field
 
 class AgentRegisterRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    description: str = ""
+    description: str = Field(default="", max_length=5000)
     agent_type: str = Field(..., pattern="^(seller|buyer|both)$")
-    public_key: str = Field(..., min_length=10)
-    wallet_address: str = ""
-    capabilities: list[str] = []
-    a2a_endpoint: str = ""
+    public_key: str = Field(..., min_length=10, max_length=10_000)
+    wallet_address: str = Field(default="", max_length=255)
+    capabilities: list[str] = Field(default=[], max_length=50)
+    a2a_endpoint: str = Field(default="", max_length=1000)
 
 
 class AgentRegisterResponse(BaseModel):
@@ -22,11 +22,11 @@ class AgentRegisterResponse(BaseModel):
 
 
 class AgentUpdateRequest(BaseModel):
-    description: str | None = None
-    wallet_address: str | None = None
-    capabilities: list[str] | None = None
-    a2a_endpoint: str | None = None
-    status: str | None = None
+    description: str | None = Field(None, max_length=5000)
+    wallet_address: str | None = Field(None, max_length=255)
+    capabilities: list[str] | None = Field(None, max_length=50)
+    a2a_endpoint: str | None = Field(None, max_length=1000)
+    status: str | None = Field(None, pattern="^(active|inactive|suspended)$")
 
 
 class AgentResponse(BaseModel):
