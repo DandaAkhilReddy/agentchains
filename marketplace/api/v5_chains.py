@@ -32,18 +32,18 @@ class ChainTemplateCreateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     name: str = Field(..., min_length=1, max_length=200)
-    description: str = ""
+    description: str = Field(default="", max_length=10_000)
     category: str = Field(default="general", max_length=50)
-    graph_json: str = Field(..., min_length=2, description="JSON DAG definition")
-    tags: list[str] = Field(default_factory=list)
-    max_budget_usd: float | None = Field(default=None, ge=0)
+    graph_json: str = Field(..., min_length=2, max_length=1_000_000, description="JSON DAG definition")
+    tags: list[str] = Field(default_factory=list, max_length=50)
+    max_budget_usd: float | None = Field(default=None, ge=0, le=1_000_000)
 
 
 class ChainTemplateForkRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
-    graph_json: str | None = Field(default=None, min_length=2)
+    graph_json: str | None = Field(default=None, min_length=2, max_length=1_000_000)
 
 
 class ChainExecuteRequest(BaseModel):
@@ -74,11 +74,11 @@ class ChainPolicyCreateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     name: str = Field(..., min_length=1, max_length=200)
-    description: str = ""
-    policy_type: str = Field(..., max_length=30)
-    rules_json: str = Field(..., min_length=2)
-    enforcement: str = Field(default="block", max_length=20)
-    scope: str = Field(default="chain", max_length=20)
+    description: str = Field(default="", max_length=5000)
+    policy_type: str = Field(..., max_length=30, pattern="^[a-zA-Z_][a-zA-Z0-9_-]*$")
+    rules_json: str = Field(..., min_length=2, max_length=100_000)
+    enforcement: str = Field(default="block", pattern="^(block|warn|log)$")
+    scope: str = Field(default="chain", pattern="^(chain|node|global)$")
 
 
 class EvaluatePoliciesRequest(BaseModel):
@@ -282,6 +282,8 @@ async def get_chain_execution(
     execution = await chain_registry_service.get_chain_execution(db, execution_id)
     if not execution:
         raise HTTPException(status_code=404, detail="Chain execution not found")
+    if execution.initiated_by != agent_id:
+        raise HTTPException(status_code=403, detail="Only the execution initiator can view this execution")
     return _execution_to_dict(execution)
 
 
@@ -510,6 +512,10 @@ async def create_chain_policy(
 ):
     """Create a new chain policy."""
     try:
+        json.loads(req.rules_json)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="rules_json must be valid JSON")
+    try:
         policy = await chain_policy_service.create_policy(
             db,
             name=req.name,
@@ -575,6 +581,11 @@ async def get_chain_settlement(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Get settlement report for a chain execution."""
+    execution = await chain_registry_service.get_chain_execution(db, execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail="Chain execution not found")
+    if execution.initiated_by != agent_id:
+        raise HTTPException(status_code=403, detail="Only the execution initiator can view settlement")
     try:
         report = await chain_settlement_service.get_settlement_report(
             db, execution_id

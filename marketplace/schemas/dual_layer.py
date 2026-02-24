@@ -93,8 +93,8 @@ class MarketOrderListResponse(BaseModel):
 
 class DeveloperProfileUpdateRequest(BaseModel):
     bio: str = Field(default="", max_length=5000)
-    links: list[str] = Field(default_factory=list)
-    specialties: list[str] = Field(default_factory=list)
+    links: list[str] = Field(default_factory=list, max_length=20)
+    specialties: list[str] = Field(default_factory=list, max_length=50)
     featured_flag: bool = False
 
 
