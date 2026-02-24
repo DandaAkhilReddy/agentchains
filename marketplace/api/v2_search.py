@@ -80,7 +80,9 @@ def _require_admin(authorization: str | None) -> str:
     """Verify that the caller is an admin."""
     creator_id = get_current_creator_id(authorization)
     admin_ids = _admin_ids()
-    if admin_ids and creator_id not in admin_ids:
+    if not admin_ids:
+        raise HTTPException(status_code=403, detail="No admin accounts configured")
+    if creator_id not in admin_ids:
         raise HTTPException(status_code=403, detail="Admin access required")
     return creator_id
 
@@ -111,18 +113,24 @@ def _build_category_filter(category: str | None = None) -> str | None:
 # Routes
 # ---------------------------------------------------------------------------
 
+_ALLOWED_SORT_FIELDS = {"price_usd", "created_at", "freshness_at", "name", "updated_at"}
+
+
 @router.get("", response_model=SearchResult)
 async def search_all(
-    q: str = Query("", description="Search text"),
+    q: str = Query("", max_length=500, description="Search text"),
     type: str = Query("listing", description="Entity type: listing, agent, tool"),
-    category: str | None = Query(None, description="Filter by category"),
-    min_price: float | None = Query(None, description="Minimum price (listings only)"),
-    max_price: float | None = Query(None, description="Maximum price (listings only)"),
+    category: str | None = Query(None, max_length=100, description="Filter by category"),
+    min_price: float | None = Query(None, ge=0, le=1_000_000, description="Minimum price (listings only)"),
+    max_price: float | None = Query(None, ge=0, le=1_000_000, description="Maximum price (listings only)"),
     sort_by: str | None = Query(None, description="Sort field (e.g. price_usd, created_at)"),
     top: int = Query(20, ge=1, le=100, description="Number of results"),
-    skip: int = Query(0, ge=0, description="Number of results to skip"),
+    skip: int = Query(0, ge=0, le=10_000, description="Number of results to skip"),
 ) -> SearchResult:
     """Full-text search across listings, agents, or tools."""
+    # Validate sort field against whitelist to prevent OData injection
+    if sort_by and sort_by not in _ALLOWED_SORT_FIELDS:
+        raise HTTPException(status_code=400, detail=f"Invalid sort field. Allowed: {', '.join(sorted(_ALLOWED_SORT_FIELDS))}")
     svc = get_search_service()
 
     if type == "listing":
@@ -142,13 +150,13 @@ async def search_all(
 
 @router.get("/listings", response_model=SearchResult)
 async def search_listings(
-    query: str = Query("", alias="q", description="Search text"),
-    category: str | None = Query(None),
-    min_price: float | None = Query(None),
-    max_price: float | None = Query(None),
+    query: str = Query("", alias="q", max_length=500, description="Search text"),
+    category: str | None = Query(None, max_length=100),
+    min_price: float | None = Query(None, ge=0, le=1_000_000),
+    max_price: float | None = Query(None, ge=0, le=1_000_000),
     sort_by: str | None = Query(None, description="Sort field (e.g. price_usd, created_at)"),
     top: int = Query(20, ge=1, le=100),
-    skip: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0, le=10_000),
 ) -> SearchResult:
     """Full-text search listings with facets for category, status, and tags."""
     svc = get_search_service()
@@ -159,11 +167,11 @@ async def search_listings(
 
 @router.get("/agents", response_model=SearchResult)
 async def search_agents(
-    query: str = Query("", alias="q", description="Search text"),
-    agent_type: str | None = Query(None, description="Filter by agent type (seller/buyer/both)"),
-    status: str | None = Query(None, description="Filter by status (active/inactive)"),
+    query: str = Query("", alias="q", max_length=500, description="Search text"),
+    agent_type: str | None = Query(None, max_length=50, description="Filter by agent type (seller/buyer/both)"),
+    status: str | None = Query(None, max_length=50, description="Filter by status (active/inactive)"),
     top: int = Query(20, ge=1, le=100),
-    skip: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0, le=10_000),
 ) -> SearchResult:
     """Search registered agents with optional agent_type and status filters."""
     svc = get_search_service()
@@ -179,10 +187,10 @@ async def search_agents(
 
 @router.get("/tools", response_model=SearchResult)
 async def search_tools(
-    query: str = Query("", alias="q", description="Search text"),
-    category: str | None = Query(None),
+    query: str = Query("", alias="q", max_length=500, description="Search text"),
+    category: str | None = Query(None, max_length=100),
     top: int = Query(20, ge=1, le=100),
-    skip: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0, le=10_000),
 ) -> SearchResult:
     """Search WebMCP tools with optional category filter."""
     svc = get_search_service()
@@ -193,7 +201,7 @@ async def search_tools(
 
 @router.get("/suggestions", response_model=SuggestionResult)
 async def search_suggestions(
-    q: str = Query("", min_length=1, description="Query prefix for typeahead"),
+    q: str = Query("", min_length=1, max_length=500, description="Query prefix for typeahead"),
     type: str = Query("listing", description="Entity type: listing, agent, tool"),
     top: int = Query(5, ge=1, le=20),
 ) -> SuggestionResult:
