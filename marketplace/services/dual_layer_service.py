@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from marketplace.core.async_tasks import fire_and_forget
 from marketplace.core.user_auth import create_user_token, hash_password, verify_password
@@ -600,7 +603,7 @@ async def create_market_order(
             task_name="broadcast_market_order_public",
         )
     except Exception:
-        pass
+        logger.warning("Broadcast failed for market order %s", order.id, exc_info=True)
 
     return _order_payload(order, include_content=payload.get("content"))
 
