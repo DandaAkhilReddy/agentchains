@@ -285,4 +285,4 @@ def _broadcast_execution_event(event_type: str, execution: ActionExecution) -> N
             task_name=f"broadcast_{event_type}",
         )
     except Exception:
-        pass
+        logger.warning("Broadcast failed for %s (execution %s)", event_type, execution.id, exc_info=True)
