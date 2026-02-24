@@ -88,9 +88,12 @@ async def confirm_deposit(db: AsyncSession, deposit_id: str, agent_id: str | Non
     return _deposit_to_dict(deposit)
 
 
-async def cancel_deposit(db: AsyncSession, deposit_id: str) -> dict:
+async def cancel_deposit(db: AsyncSession, deposit_id: str, agent_id: str | None = None) -> dict:
     """Mark a deposit as failed (uses row-level lock to prevent race conditions)."""
     deposit = await _get_deposit(db, deposit_id, for_update=True)
+    if agent_id and deposit.agent_id != agent_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Not the owner of this deposit")
     if deposit.status != "pending":
         raise ValueError(
             f"Deposit {deposit_id} is '{deposit.status}', only pending deposits can be cancelled"
