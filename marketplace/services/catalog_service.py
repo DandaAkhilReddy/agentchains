@@ -2,7 +2,10 @@
 
 import fnmatch
 import json
+import logging
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -227,7 +230,10 @@ async def notify_subscribers(db: AsyncSession, entry: DataCatalogEntry):
                     task_name="broadcast_catalog_update",
                 )
             except Exception:
-                pass
+                logger.warning(
+                    "Broadcast failed for catalog_update (entry %s, subscriber %s)",
+                    entry.id, sub.subscriber_id, exc_info=True,
+                )
 
 
 async def auto_populate_catalog(db: AsyncSession, agent_id: str) -> list[DataCatalogEntry]:
