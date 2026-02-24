@@ -11,10 +11,9 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marketplace.core.exceptions import ListingNotFoundError
+from marketplace.core.exceptions import AuthorizationError, ListingNotFoundError
 from marketplace.models.listing import DataListing
 from marketplace.schemas.listing import ListingCreateRequest, ListingUpdateRequest
 from marketplace.services import listing_service
@@ -383,10 +382,10 @@ async def test_update_listing_non_owner_blocked(db: AsyncSession, make_agent):
 
     update_req = ListingUpdateRequest(title="Hacked Title")
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthorizationError) as exc_info:
         await listing_service.update_listing(db, listing.id, other.id, update_req)
 
-    assert exc_info.value.status_code == 403
+    assert exc_info.value.http_status == 403
     assert "Not the listing owner" in str(exc_info.value.detail)
 
 
@@ -474,10 +473,10 @@ async def test_delist_non_owner_blocked(db: AsyncSession, make_agent):
     )
     listing = await listing_service.create_listing(db, owner.id, req)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthorizationError) as exc_info:
         await listing_service.delist(db, listing.id, other.id)
 
-    assert exc_info.value.status_code == 403
+    assert exc_info.value.http_status == 403
     assert "Not the listing owner" in str(exc_info.value.detail)
 
 
