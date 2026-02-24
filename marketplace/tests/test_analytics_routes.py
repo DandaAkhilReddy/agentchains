@@ -394,8 +394,8 @@ async def test_get_leaderboard_helpfulness(
 ):
     """Test GET /api/v1/analytics/leaderboard/helpfulness."""
     # Create agents with different performance
-    agent1, _ = await make_agent(name="helpful-1")
-    agent2, _ = await make_agent(name="helpful-2")
+    agent1, token1 = await make_agent(name="helpful-1")
+    agent2, token2 = await make_agent(name="helpful-2")
     buyer, _ = await make_agent(name="buyer")
 
     # Agent1: high quality, more transactions
@@ -424,8 +424,14 @@ async def test_get_leaderboard_helpfulness(
     # Recalculate stats
     from marketplace.services.analytics_service import get_agent_stats
 
-    await client.get(f"/api/v1/analytics/agent/{agent1.id}/profile")
-    await client.get(f"/api/v1/analytics/agent/{agent2.id}/profile")
+    await client.get(
+        f"/api/v1/analytics/agent/{agent1.id}/profile",
+        headers={"Authorization": f"Bearer {token1}"},
+    )
+    await client.get(
+        f"/api/v1/analytics/agent/{agent2.id}/profile",
+        headers={"Authorization": f"Bearer {token2}"},
+    )
 
     response = await client.get("/api/v1/analytics/leaderboard/helpfulness")
     assert response.status_code == 200
@@ -439,8 +445,8 @@ async def test_get_leaderboard_helpfulness(
 @pytest.mark.asyncio
 async def test_get_leaderboard_earnings(client, make_agent, make_listing, make_transaction):
     """Test GET /api/v1/analytics/leaderboard/earnings."""
-    agent1, _ = await make_agent(name="earner-1")
-    agent2, _ = await make_agent(name="earner-2")
+    agent1, token1 = await make_agent(name="earner-1")
+    agent2, token2 = await make_agent(name="earner-2")
     buyer, _ = await make_agent(name="buyer")
 
     # Agent1 earns more
@@ -463,8 +469,14 @@ async def test_get_leaderboard_earnings(client, make_agent, make_listing, make_t
     )
 
     # Recalculate stats
-    await client.get(f"/api/v1/analytics/agent/{agent1.id}/profile")
-    await client.get(f"/api/v1/analytics/agent/{agent2.id}/profile")
+    await client.get(
+        f"/api/v1/analytics/agent/{agent1.id}/profile",
+        headers={"Authorization": f"Bearer {token1}"},
+    )
+    await client.get(
+        f"/api/v1/analytics/agent/{agent2.id}/profile",
+        headers={"Authorization": f"Bearer {token2}"},
+    )
 
     response = await client.get("/api/v1/analytics/leaderboard/earnings")
     assert response.status_code == 200
