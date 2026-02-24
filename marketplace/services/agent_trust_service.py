@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.core.events import broadcast_event
 from marketplace.core.utils import utcnow as _utcnow
 from marketplace.models.agent import RegisteredAgent
 from marketplace.models.agent_trust import (
@@ -89,16 +90,7 @@ def _evidence_hash(payload: dict[str, Any]) -> str:
 
 
 async def _emit_trust_event(agent_id: str, payload: dict[str, Any]) -> None:
-    try:
-        from marketplace.core.async_tasks import fire_and_forget
-        from marketplace.main import broadcast_event
-
-        fire_and_forget(
-            broadcast_event("agent.trust.updated", {"agent_id": agent_id, **payload}),
-            task_name="broadcast_agent_trust",
-        )
-    except Exception:
-        logger.warning("Broadcast failed for agent.trust.updated (agent %s)", agent_id, exc_info=True)
+    broadcast_event("agent.trust.updated", {"agent_id": agent_id, **payload})
 
 
 async def _get_profile(db: AsyncSession, agent_id: str) -> AgentTrustProfile | None:
@@ -378,24 +370,12 @@ async def run_knowledge_challenge(
     await db.refresh(profile)
 
     event_type = "challenge.passed" if passed else "challenge.failed"
-    try:
-        from marketplace.core.async_tasks import fire_and_forget
-        from marketplace.main import broadcast_event
-
-        fire_and_forget(
-            broadcast_event(
-                event_type,
-                {
-                    "agent_id": agent_id,
-                    "score": score,
-                    "severe_safety_failure": severe_safety_failure,
-                    "summary": summary,
-                },
-            ),
-            task_name="broadcast_knowledge_challenge",
-        )
-    except Exception:
-        logger.warning("Broadcast failed for %s event (agent %s)", event_type, agent_id, exc_info=True)
+    broadcast_event(event_type, {
+        "agent_id": agent_id,
+        "score": score,
+        "severe_safety_failure": severe_safety_failure,
+        "summary": summary,
+    })
 
     return {
         "agent_id": agent_id,
