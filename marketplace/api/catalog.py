@@ -3,7 +3,7 @@
 import json
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
@@ -37,12 +37,12 @@ class CatalogUpdateRequest(BaseModel):
 
 class SubscribeRequest(BaseModel):
     namespace_pattern: str = Field(..., min_length=1, max_length=100)
-    topic_pattern: str = "*"
-    category_filter: str | None = None
-    max_price: float | None = Field(default=None, ge=0)
+    topic_pattern: str = Field(default="*", max_length=200)
+    category_filter: str | None = Field(default=None, max_length=100)
+    max_price: float | None = Field(default=None, ge=0, le=100_000)
     min_quality: float | None = Field(default=None, ge=0, le=1)
-    notify_via: str = "websocket"
-    webhook_url: str | None = None
+    notify_via: str = Field(default="websocket", pattern="^(websocket|webhook)$")
+    webhook_url: HttpUrl | None = None
 
 
 def _entry_to_dict(entry) -> dict:
@@ -168,7 +168,7 @@ async def subscribe(
         db, subscriber_id, req.namespace_pattern,
         req.topic_pattern, req.category_filter,
         req.max_price, req.min_quality,
-        req.notify_via, req.webhook_url,
+        req.notify_via, str(req.webhook_url) if req.webhook_url else None,
     )
     return {
         "id": sub.id,
