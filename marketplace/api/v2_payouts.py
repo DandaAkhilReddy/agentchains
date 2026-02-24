@@ -31,8 +31,8 @@ def _normalize_payout_method(method: str) -> str:
 
 class PayoutRequestCreate(BaseModel):
     payout_method: str = Field(..., min_length=1, max_length=30)
-    amount_usd: float = Field(..., gt=0)
-    currency: str = Field(default="USD", max_length=10)
+    amount_usd: float = Field(..., gt=0, le=100_000)
+    currency: str = Field(default="USD", max_length=10, pattern="^[A-Z]{3}$")
     payout_details: Optional[dict] = None
 
 
