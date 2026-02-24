@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.core.utils import utcnow as _utcnow
 from marketplace.models.listing import DataListing
 from marketplace.models.trust_verification import (
     ArtifactManifest,
@@ -41,10 +42,6 @@ _INJECTION_PATTERNS = (
     "drop table",
     "prompt injection",
 )
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _as_utc(value: datetime | None) -> datetime:
