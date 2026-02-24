@@ -230,3 +230,52 @@ async def get_listing_content(content_hash: str) -> bytes | None:
     """Retrieve the raw content via CDN (hot → warm → cold)."""
     from marketplace.services.cdn_service import get_content as cdn_get_content
     return await cdn_get_content(content_hash)
+
+
+def listing_to_response_dict(listing) -> dict:
+    """Convert a DataListing ORM model to a serialisable dict.
+
+    Centralises JSON parsing, seller summary building, and trust
+    payload assembly so API routes stay thin.
+    """
+    metadata = listing.metadata_json
+    if isinstance(metadata, str):
+        metadata = json.loads(metadata)
+    tags = listing.tags
+    if isinstance(tags, str):
+        tags = json.loads(tags)
+
+    seller_summary = None
+    if listing.seller:
+        seller_summary = {"id": listing.seller.id, "name": listing.seller.name}
+
+    trust_payload = trust_verification_service.build_trust_payload(listing)
+    price_usd = float(listing.price_usdc)
+
+    return {
+        "id": listing.id,
+        "seller_id": listing.seller_id,
+        "seller": seller_summary,
+        "title": listing.title,
+        "description": listing.description,
+        "category": listing.category,
+        "content_hash": listing.content_hash,
+        "content_size": listing.content_size,
+        "content_type": listing.content_type,
+        "price_usdc": price_usd,
+        "price_usd": price_usd,
+        "currency": listing.currency,
+        "metadata": metadata,
+        "tags": tags,
+        "quality_score": float(listing.quality_score) if listing.quality_score else 0.5,
+        "freshness_at": listing.freshness_at,
+        "expires_at": listing.expires_at,
+        "status": listing.status,
+        "trust_status": trust_payload["trust_status"],
+        "trust_score": trust_payload["trust_score"],
+        "verification_summary": trust_payload["verification_summary"],
+        "provenance": trust_payload["provenance"],
+        "access_count": listing.access_count,
+        "created_at": listing.created_at,
+        "updated_at": listing.updated_at,
+    }
