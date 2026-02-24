@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-from marketplace.core.async_tasks import fire_and_forget
+from marketplace.core.events import broadcast_event
 from marketplace.core.exceptions import (
     AuthorizationError,
     InvalidTransactionStateError,
@@ -20,12 +20,7 @@ from marketplace.services.storage_service import get_storage
 
 def _broadcast(event_type: str, data: dict):
     """Fire-and-forget WebSocket broadcast."""
-    try:
-        from marketplace.main import broadcast_event
-
-        fire_and_forget(broadcast_event(event_type, data), task_name=f"broadcast_{event_type}")
-    except Exception:
-        logger.warning("Broadcast failed for %s event", event_type, exc_info=True)
+    broadcast_event(event_type, data)
 
 
 async def initiate_transaction(
