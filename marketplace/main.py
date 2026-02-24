@@ -429,6 +429,17 @@ def create_app() -> FastAPI:
         contact={"name": "AgentChains", "url": "https://github.com/DandaAkhilReddy/agentchains"},
     )
 
+    # Global exception handler: suppress stack traces in production
+    from fastapi.responses import JSONResponse as _JSONResponse
+
+    @app.exception_handler(Exception)
+    async def _global_exception_handler(request: Request, exc: Exception):
+        from marketplace.config import settings as _cfg
+        _is_prod = _cfg.environment.lower() in {"production", "prod"}
+        logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+        detail = "Internal server error" if _is_prod else str(exc)
+        return _JSONResponse(status_code=500, content={"detail": detail})
+
     # CORS configurable via CORS_ORIGINS env var
     from marketplace.config import settings
 
