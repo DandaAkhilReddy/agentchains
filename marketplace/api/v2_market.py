@@ -22,8 +22,8 @@ router = APIRouter(prefix="/market", tags=["market-v2"])
 
 @router.get("/listings", response_model=MarketListingListResponse)
 async def list_market_listings_v2(
-    q: str | None = Query(default=None),
-    category: str | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=500),
+    category: str | None = Query(default=None, max_length=100),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -50,8 +50,10 @@ async def get_market_listing_v2(
 ):
     try:
         return await dual_layer_service.get_market_listing(db, listing_id=listing_id)
-    except Exception as exc:
+    except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception:
+        raise HTTPException(status_code=404, detail="Listing not found")
 
 
 @router.post("/orders", response_model=MarketOrderResponse, status_code=201)
