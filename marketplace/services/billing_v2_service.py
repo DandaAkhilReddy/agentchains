@@ -2,18 +2,15 @@
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.core.utils import utcnow as _utcnow
 from marketplace.models.billing import BillingPlan, Invoice, Subscription, UsageMeter
 
 logger = logging.getLogger(__name__)
-
-
-def _utcnow():
-    return datetime.now(timezone.utc)
 
 
 # ---------------------------------------------------------------------------
