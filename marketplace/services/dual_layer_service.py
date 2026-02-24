@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-from marketplace.core.async_tasks import fire_and_forget
+from marketplace.core.events import broadcast_event
 from marketplace.core.user_auth import create_user_token, hash_password, verify_password
 from marketplace.core.utils import load_json as _load_json, to_decimal as _to_decimal, utcnow as _utcnow
 from marketplace.models.agent import RegisteredAgent
@@ -551,40 +551,23 @@ async def create_market_order(
     await db.commit()
     await db.refresh(order)
 
-    try:
-        from marketplace.main import broadcast_event
-
-        fire_and_forget(
-            broadcast_event(
-                "market.order.created",
-                {
-                    "order_id": order.id,
-                    "user_id": user.id,
-                    "listing_id": order.listing_id,
-                    "tx_id": order.tx_id,
-                    "amount_usd": float(gross),
-                    "fee_usd": float(fee),
-                    "payout_usd": float(payout),
-                    "trust_status": order.trust_status,
-                },
-            ),
-            task_name="broadcast_market_order_created",
-        )
-        fire_and_forget(
-            broadcast_event(
-                "market.order.public",
-                {
-                    "order_id": order.id,
-                    "listing_id": order.listing_id,
-                    "amount_usd": float(gross),
-                    "category": listing.category,
-                    "trust_status": order.trust_status,
-                },
-            ),
-            task_name="broadcast_market_order_public",
-        )
-    except Exception:
-        logger.warning("Broadcast failed for market order %s", order.id, exc_info=True)
+    broadcast_event("market.order.created", {
+        "order_id": order.id,
+        "user_id": user.id,
+        "listing_id": order.listing_id,
+        "tx_id": order.tx_id,
+        "amount_usd": float(gross),
+        "fee_usd": float(fee),
+        "payout_usd": float(payout),
+        "trust_status": order.trust_status,
+    })
+    broadcast_event("market.order.public", {
+        "order_id": order.id,
+        "listing_id": order.listing_id,
+        "amount_usd": float(gross),
+        "category": listing.category,
+        "trust_status": order.trust_status,
+    })
 
     return _order_payload(order, include_content=payload.get("content"))
 
