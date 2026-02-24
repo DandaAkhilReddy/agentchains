@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "dev-secret-change-in-production"
     jwt_algorithm: str = "HS256"
     admin_creator_ids: str = ""  # Comma-separated creator IDs with admin access
-    jwt_expire_hours: int = 24 * 7  # 7 days
+    jwt_expire_hours: int = 1  # 1 hour — short-lived access tokens
 
     # Payments
     payment_mode: str = "simulated"  # simulated | testnet | mainnet
