@@ -44,10 +44,10 @@ class ServerRegisterRequest(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100)
     base_url: str = Field(..., min_length=1, max_length=500)
-    namespace: str = Field(..., min_length=1, max_length=100)
-    description: str = ""
+    namespace: str = Field(..., min_length=1, max_length=100, pattern="^[a-zA-Z][a-zA-Z0-9_-]*$")
+    description: str = Field(default="", max_length=5000)
     auth_type: str = Field(default="none", pattern="^(none|bearer|api_key)$")
-    auth_credential_ref: str = ""
+    auth_credential_ref: str = Field(default="", max_length=500)
 
 
 class ServerUpdateRequest(BaseModel):
@@ -56,18 +56,18 @@ class ServerUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     base_url: str | None = Field(default=None, min_length=1, max_length=500)
     namespace: str | None = Field(default=None, min_length=1, max_length=100)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=5000)
     auth_type: str | None = Field(default=None, pattern="^(none|bearer|api_key)$")
-    auth_credential_ref: str | None = None
+    auth_credential_ref: str | None = Field(default=None, max_length=500)
 
 
 class ToolCallRequest(BaseModel):
-    tool_name: str = Field(..., min_length=1, description="Namespaced tool name, e.g. 'weather.get_forecast'")
+    tool_name: str = Field(..., min_length=1, max_length=200, description="Namespaced tool name, e.g. 'weather.get_forecast'")
     arguments: dict = Field(default_factory=dict)
 
 
 class ResourceReadRequest(BaseModel):
-    uri: str = Field(..., min_length=1, description="Resource URI to read from a federated server")
+    uri: str = Field(..., min_length=1, max_length=2000, description="Resource URI to read from a federated server")
 
 
 # ── Server CRUD Endpoints ──────────────────────────────────────────
@@ -80,11 +80,16 @@ async def register_server(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Register a new federated MCP server."""
+    from marketplace.core.url_validation import validate_url
+    try:
+        validated_url = validate_url(req.base_url, require_https_in_prod=True)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     try:
         server = await mcp_federation_service.register_server(
             db,
             name=req.name,
-            base_url=req.base_url,
+            base_url=validated_url,
             namespace=req.namespace,
             description=req.description,
             auth_type=req.auth_type,
