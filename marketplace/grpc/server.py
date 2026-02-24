@@ -14,6 +14,27 @@ logger = logging.getLogger(__name__)
 # Port for gRPC sidecar
 GRPC_PORT = 50051
 
+# Allowed task types (whitelist)
+_ALLOWED_TASK_TYPES = {"agent_call", "tool_call", "query"}
+
+# Maximum input JSON size (bytes)
+_MAX_INPUT_SIZE = 65_536  # 64 KB
+
+
+def _validate_and_parse_input(input_json: str) -> dict:
+    """Validate and parse input JSON with size and type checks."""
+    if not input_json:
+        return {}
+    if len(input_json) > _MAX_INPUT_SIZE:
+        raise ValueError(f"Input exceeds maximum size of {_MAX_INPUT_SIZE} bytes")
+    try:
+        data = json.loads(input_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON input: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("Input must be a JSON object")
+    return data
+
 
 class AgentServiceServicer:
     """Implements the AgentService gRPC interface."""
@@ -28,8 +49,16 @@ class AgentServiceServicer:
             self._active_tasks += 1
             start = time.time()
 
-            # Parse input
-            input_data = json.loads(request.input_json) if request.input_json else {}
+            # Validate task type against whitelist
+            if request.task_type not in _ALLOWED_TASK_TYPES:
+                return {
+                    "task_id": request.task_id,
+                    "status": "error",
+                    "error_message": f"Invalid task type: {request.task_type}",
+                }
+
+            # Parse and validate input
+            input_data = _validate_and_parse_input(request.input_json)
 
             # Dispatch to appropriate handler based on task_type
             result = await self._dispatch_task(
@@ -44,12 +73,19 @@ class AgentServiceServicer:
                 "cost_usd": 0.0,
                 "execution_time_ms": execution_time,
             }
+        except ValueError as ve:
+            logger.warning("gRPC task validation failed: %s", ve)
+            return {
+                "task_id": request.task_id,
+                "status": "error",
+                "error_message": str(ve),
+            }
         except Exception as e:
             logger.error("gRPC task execution failed: %s", e)
             return {
                 "task_id": request.task_id,
                 "status": "error",
-                "error_message": str(e),
+                "error_message": "Internal execution error",
             }
         finally:
             self._active_tasks -= 1
@@ -70,12 +106,10 @@ class AgentServiceServicer:
             await asyncio.sleep(0.1)
 
     async def HealthCheck(self, request, context):
-        """Return server health status."""
+        """Return server health status (minimal info to avoid information disclosure)."""
         return {
             "status": "ok",
             "version": "1.0.0",
-            "active_tasks": self._active_tasks,
-            "uptime_seconds": time.time() - self._start_time,
         }
 
     async def GetCapabilities(self, request, context):
@@ -100,12 +134,14 @@ class AgentServiceServicer:
         """Dispatch a task to the appropriate handler."""
         if task_type == "agent_call":
             # Forward to A2A client
-            return {"result": f"Agent call completed for {agent_id}", "input": input_data}
+            return {"result": f"Agent call completed for {agent_id}"}
         elif task_type == "tool_call":
             # Forward to MCP tools
-            return {"result": "Tool call completed", "input": input_data}
+            return {"result": "Tool call completed"}
+        elif task_type == "query":
+            return {"result": "Query completed"}
         else:
-            return {"result": f"Unknown task type: {task_type}", "input": input_data}
+            return {"result": "Unsupported task type"}
 
 
 class OrchestrationServiceServicer:
@@ -117,13 +153,22 @@ class OrchestrationServiceServicer:
             "gRPC node execution: exec=%s node=%s type=%s",
             request.execution_id, request.node_id, request.node_type,
         )
-        input_data = json.loads(request.input_json) if request.input_json else {}
+        try:
+            input_data = _validate_and_parse_input(request.input_json)
+        except ValueError as ve:
+            return {
+                "execution_id": request.execution_id,
+                "node_id": request.node_id,
+                "status": "error",
+                "output_json": json.dumps({"error": str(ve)}),
+                "cost_usd": 0.0,
+            }
 
         return {
             "execution_id": request.execution_id,
             "node_id": request.node_id,
             "status": "completed",
-            "output_json": json.dumps({"result": "Node executed", "input": input_data}),
+            "output_json": json.dumps({"result": "Node executed"}),
             "cost_usd": 0.001,
         }
 
