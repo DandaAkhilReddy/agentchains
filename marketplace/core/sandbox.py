@@ -152,6 +152,12 @@ class SandboxManager:
                 remove=True,
                 stdout=True,
                 stderr=True,
+                read_only=True,
+                user="65534:65534",  # nobody:nogroup
+                security_opt=["no-new-privileges:true"],
+                cap_drop=["ALL"],
+                pids_limit=256,
+                tmpfs={"/tmp": "rw,noexec,nosuid,size=64m"},
             )
             return {
                 "status": "success",
