@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marketplace.config import settings
 from marketplace.core.async_tasks import fire_and_forget
 from marketplace.core.hashing import compute_ledger_hash
+from marketplace.core.utils import to_decimal as _to_decimal, utcnow as _utcnow
 from marketplace.models.token_account import (
     TokenAccount,
     TokenLedger,
@@ -46,17 +47,6 @@ _is_sqlite: bool = settings.database_url.startswith("sqlite")
 
 # Canonical platform account marker — agent_id is NULL for the treasury.
 _PLATFORM_AGENT_ID: None = None
-
-
-def _to_decimal(value: float | int | str | Decimal) -> Decimal:
-    """Coerce a value to Decimal with 6 decimal places."""
-    if isinstance(value, Decimal):
-        return value.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
-    return Decimal(str(value)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _new_id() -> str:
