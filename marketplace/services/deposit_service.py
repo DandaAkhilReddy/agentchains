@@ -89,8 +89,12 @@ async def confirm_deposit(db: AsyncSession, deposit_id: str, agent_id: str | Non
 
 
 async def cancel_deposit(db: AsyncSession, deposit_id: str) -> dict:
-    """Mark a deposit as failed."""
-    deposit = await _get_deposit(db, deposit_id)
+    """Mark a deposit as failed (uses row-level lock to prevent race conditions)."""
+    deposit = await _get_deposit(db, deposit_id, for_update=True)
+    if deposit.status != "pending":
+        raise ValueError(
+            f"Deposit {deposit_id} is '{deposit.status}', only pending deposits can be cancelled"
+        )
     deposit.status = "failed"
     await db.commit()
     await db.refresh(deposit)
