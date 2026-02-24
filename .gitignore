@@ -59,6 +59,12 @@ test_manual.py
 fix_e2e_tests.py
 vertex_agent.py
 
+# Claude Code local overrides
+CLAUDE.local.md
+
+# Planning ephemeral plans
+.planning/plans/
+
 # Keys (never commit private keys)
 *.pem
 !*.pem.example
