@@ -6,6 +6,7 @@ Extracted from 11+ service files where these were duplicated as private helpers.
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -37,7 +38,10 @@ def load_json(value: str | None, fallback: object = None) -> object:
 def safe_float(value: object, default: float = 0.0) -> float:
     """Convert a value to float, returning default on failure."""
     try:
-        return float(value)
+        result = float(value)
+        if math.isnan(result) or math.isinf(result):
+            return default
+        return result
     except (TypeError, ValueError):
         return default
 
