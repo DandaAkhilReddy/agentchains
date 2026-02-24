@@ -138,6 +138,8 @@ async def update_server(
     server = await mcp_federation_service.get_server(db, server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
+    if server.registered_by and server.registered_by != agent_id:
+        raise HTTPException(status_code=403, detail="Only the registrant can update this server")
 
     if req.name is not None:
         server.name = req.name
@@ -170,6 +172,11 @@ async def unregister_server(
     agent_id: str = Depends(get_current_agent_id),
 ):
     """Unregister (delete) a federated MCP server."""
+    server = await mcp_federation_service.get_server(db, server_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    if server.registered_by and server.registered_by != agent_id:
+        raise HTTPException(status_code=403, detail="Only the registrant can delete this server")
     deleted = await mcp_federation_service.unregister_server(db, server_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Server not found")
