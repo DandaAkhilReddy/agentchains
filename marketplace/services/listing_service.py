@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 from marketplace.core.async_tasks import fire_and_forget
-from marketplace.core.exceptions import ListingNotFoundError
+from marketplace.core.exceptions import AuthorizationError, ListingNotFoundError
 from marketplace.models.listing import DataListing
 from marketplace.schemas.listing import ListingCreateRequest, ListingUpdateRequest
 from marketplace.services.cache_service import listing_cache
@@ -145,8 +145,7 @@ async def update_listing(
     """Update listing fields (only by the owner)."""
     listing = await get_listing(db, listing_id)
     if listing.seller_id != seller_id:
-        from fastapi import HTTPException, status
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not the listing owner")
+        raise AuthorizationError("Not the listing owner")
 
     update_data = req.model_dump(exclude_unset=True)
     if "tags" in update_data and update_data["tags"] is not None:
@@ -166,8 +165,7 @@ async def delist(db: AsyncSession, listing_id: str, seller_id: str) -> DataListi
     """Soft-delete a listing."""
     listing = await get_listing(db, listing_id)
     if listing.seller_id != seller_id:
-        from fastapi import HTTPException, status
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not the listing owner")
+        raise AuthorizationError("Not the listing owner")
 
     listing.status = "delisted"
     listing.updated_at = datetime.now(timezone.utc)
