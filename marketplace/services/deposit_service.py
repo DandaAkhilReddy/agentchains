@@ -56,7 +56,7 @@ async def confirm_deposit(db: AsyncSession, deposit_id: str, agent_id: str | Non
     Raises ``ValueError`` if the deposit is not in *pending* status.
     Raises ``HTTPException(403)`` if agent_id doesn't match deposit owner.
     """
-    deposit = await _get_deposit(db, deposit_id)
+    deposit = await _get_deposit(db, deposit_id, for_update=True)
     if agent_id and deposit.agent_id != agent_id:
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Not the owner of this deposit")
@@ -158,11 +158,16 @@ async def credit_signup_bonus(db: AsyncSession, agent_id: str) -> dict:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-async def _get_deposit(db: AsyncSession, deposit_id: str) -> TokenDeposit:
-    """Fetch a single deposit or raise HTTP 404."""
-    result = await db.execute(
-        select(TokenDeposit).where(TokenDeposit.id == deposit_id)
-    )
+async def _get_deposit(db: AsyncSession, deposit_id: str, *, for_update: bool = False) -> TokenDeposit:
+    """Fetch a single deposit or raise HTTP 404.
+
+    When ``for_update=True``, acquires a row-level lock to prevent
+    concurrent confirmation race conditions.
+    """
+    query = select(TokenDeposit).where(TokenDeposit.id == deposit_id)
+    if for_update:
+        query = query.with_for_update()
+    result = await db.execute(query)
     deposit = result.scalar_one_or_none()
     if deposit is None:
         from fastapi import HTTPException, status
