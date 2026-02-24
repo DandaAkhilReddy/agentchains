@@ -17,11 +17,13 @@ interface FormField {
   default_value?: string | number | boolean;
 }
 
+type FormValue = string | number | boolean;
+
 interface A2UIFormProps {
   componentId: string;
-  data: Record<string, any>;
-  metadata?: Record<string, any>;
-  onSubmit?: (componentId: string, values: Record<string, any>) => void;
+  data: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  onSubmit?: (componentId: string, values: Record<string, FormValue>) => void;
 }
 
 export default function A2UIForm({
@@ -44,8 +46,8 @@ export default function A2UIForm({
   const formFields = fields ?? [];
 
   // Initialise form values from defaults
-  const [values, setValues] = useState<Record<string, any>>(() => {
-    const init: Record<string, any> = {};
+  const [values, setValues] = useState<Record<string, FormValue>>(() => {
+    const init: Record<string, FormValue> = {};
     for (const f of formFields) {
       init[f.name] = f.default_value ?? (f.type === "checkbox" ? false : "");
     }
@@ -54,7 +56,7 @@ export default function A2UIForm({
 
   const [submitted, setSubmitted] = useState(false);
 
-  const handleChange = (name: string, value: any) => {
+  const handleChange = (name: string, value: FormValue) => {
     setValues((prev) => ({ ...prev, [name]: value }));
   };
 
