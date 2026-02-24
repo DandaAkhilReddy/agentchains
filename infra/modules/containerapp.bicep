@@ -43,6 +43,39 @@ param envVars array = []
 @description('CORS allowed origins')
 param corsOrigins array = ['*']
 
+// Secret values — stored in Container Apps secrets, referenced by env vars via secretRef
+@secure()
+@description('Database connection string')
+param databaseUrl string = ''
+
+@secure()
+@description('JWT signing secret')
+param jwtSecretKeyValue string = ''
+
+@secure()
+@description('Event signing secret')
+param eventSigningSecretValue string = ''
+
+@secure()
+@description('Memory encryption key')
+param memoryEncryptionKeyValue string = ''
+
+@secure()
+@description('Redis connection URL')
+param redisUrl string = ''
+
+@secure()
+@description('Azure Storage connection string')
+param storageConnectionString string = ''
+
+@secure()
+@description('Azure AI Search admin key')
+param searchAdminKey string = ''
+
+@secure()
+@description('Azure Service Bus connection string')
+param serviceBusConnectionString string = ''
+
 // Scaling configuration based on environment
 var minReplicas = environment == 'prod' ? 2 : 0
 var maxReplicas = environment == 'prod' ? 10 : 2
@@ -98,8 +131,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         ]
         corsPolicy: {
           allowedOrigins: corsOrigins
-          allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-          allowedHeaders: ['*']
+          allowedMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+          allowedHeaders: ['Content-Type', 'Authorization', 'X-MCP-Session-ID', 'X-Request-ID']
           maxAge: 3600
         }
       }
@@ -110,12 +143,20 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           passwordSecretRef: 'registry-password'
         }
       ]
-      secrets: [
+      secrets: concat([
         {
           name: 'registry-password'
           value: registryPassword
         }
-      ]
+      ], !empty(databaseUrl) ? [{ name: 'database-url', value: databaseUrl }] : [],
+         !empty(jwtSecretKeyValue) ? [{ name: 'jwt-secret-key', value: jwtSecretKeyValue }] : [],
+         !empty(eventSigningSecretValue) ? [{ name: 'event-signing-secret', value: eventSigningSecretValue }] : [],
+         !empty(memoryEncryptionKeyValue) ? [{ name: 'memory-encryption-key', value: memoryEncryptionKeyValue }] : [],
+         !empty(redisUrl) ? [{ name: 'redis-url', value: redisUrl }] : [],
+         !empty(storageConnectionString) ? [{ name: 'storage-connection', value: storageConnectionString }] : [],
+         !empty(searchAdminKey) ? [{ name: 'search-admin-key', value: searchAdminKey }] : [],
+         !empty(serviceBusConnectionString) ? [{ name: 'servicebus-connection', value: serviceBusConnectionString }] : []
+      )
       activeRevisionsMode: environment == 'prod' ? 'Multiple' : 'Single'
     }
     template: {

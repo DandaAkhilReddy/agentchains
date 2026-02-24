@@ -217,27 +217,37 @@ module acr 'modules/acr.bicep' = {
 }
 
 // --- Compute (explicit dependsOn to ensure all infrastructure is ready) ---
-// Build env vars list: always-required vars + conditionally-added service vars
+// SECURITY NOTE: Secrets (JWT_SECRET_KEY, EVENT_SIGNING_SECRET, MEMORY_ENCRYPTION_KEY,
+// DATABASE_URL, REDIS_URL, AZURE_BLOB_CONNECTION, AZURE_SEARCH_KEY, AZURE_SERVICEBUS_CONNECTION)
+// are passed via Container Apps secrets (secretRef) rather than plain-text env vars.
+// The container app module maps these from its secrets array.
+// In production, these should be sourced from Key Vault using managed identity.
+
+// Secret env vars — these use secretRef in the container app module
+var secretEnvVars = [
+  {
+    name: 'DATABASE_URL'
+    secretRef: 'database-url'
+  }
+  {
+    name: 'JWT_SECRET_KEY'
+    secretRef: 'jwt-secret-key'
+  }
+  {
+    name: 'EVENT_SIGNING_SECRET'
+    secretRef: 'event-signing-secret'
+  }
+  {
+    name: 'MEMORY_ENCRYPTION_KEY'
+    secretRef: 'memory-encryption-key'
+  }
+]
+
+// Non-secret env vars
 var coreEnvVars = [
   {
     name: 'ENVIRONMENT'
     value: environment
-  }
-  {
-    name: 'DATABASE_URL'
-    value: 'postgresql+asyncpg://${postgresAdminLogin}:${postgresAdminPassword}@placeholder:5432/agentchains?ssl=require'
-  }
-  {
-    name: 'JWT_SECRET_KEY'
-    value: jwtSecretKey
-  }
-  {
-    name: 'EVENT_SIGNING_SECRET'
-    value: eventSigningSecret
-  }
-  {
-    name: 'MEMORY_ENCRYPTION_KEY'
-    value: memoryEncryptionKey
   }
   {
     name: 'CORS_ORIGINS'
@@ -264,7 +274,7 @@ var coreEnvVars = [
 var redisEnvVars = deployRedis ? [
   {
     name: 'REDIS_URL'
-    value: 'rediss://:${redis.outputs.primaryKey}@${redis.outputs.hostName}:${redis.outputs.sslPort}/0'
+    secretRef: 'redis-url'
   }
   {
     name: 'REDIS_HOST'
@@ -283,7 +293,7 @@ var storageEnvVars = deployStorage ? [
   }
   {
     name: 'AZURE_BLOB_CONNECTION'
-    value: storage.outputs.connectionString
+    secretRef: 'storage-connection'
   }
 ] : []
 
@@ -294,7 +304,7 @@ var searchEnvVars = deploySearch ? [
   }
   {
     name: 'AZURE_SEARCH_KEY'
-    value: search.outputs.adminKey
+    secretRef: 'search-admin-key'
   }
 ] : []
 
@@ -316,7 +326,7 @@ var openAiEnvVars = deployOpenAi ? [
 var serviceBusEnvVars = deployServiceBus ? [
   {
     name: 'AZURE_SERVICEBUS_CONNECTION'
-    value: servicebus.outputs.connectionString
+    secretRef: 'servicebus-connection'
   }
   {
     name: 'SERVICEBUS_NAMESPACE'
@@ -324,7 +334,7 @@ var serviceBusEnvVars = deployServiceBus ? [
   }
 ] : []
 
-var allEnvVars = concat(coreEnvVars, redisEnvVars, storageEnvVars, searchEnvVars, openAiEnvVars, serviceBusEnvVars)
+var allEnvVars = concat(coreEnvVars, secretEnvVars, redisEnvVars, storageEnvVars, searchEnvVars, openAiEnvVars, serviceBusEnvVars)
 
 module containerapp 'modules/containerapp.bicep' = {
   name: 'deploy-containerapp'
@@ -352,6 +362,15 @@ module containerapp 'modules/containerapp.bicep' = {
     ]
     tags: tags
     envVars: allEnvVars
+    // Secret values for Container Apps secrets array
+    databaseUrl: 'postgresql+asyncpg://${postgresAdminLogin}:${postgresAdminPassword}@placeholder:5432/agentchains?ssl=require'
+    jwtSecretKeyValue: jwtSecretKey
+    eventSigningSecretValue: eventSigningSecret
+    memoryEncryptionKeyValue: memoryEncryptionKey
+    redisUrl: deployRedis ? 'rediss://:${redis.outputs.primaryKey}@${redis.outputs.hostName}:${redis.outputs.sslPort}/0' : ''
+    storageConnectionString: deployStorage ? storage.outputs.connectionString : ''
+    searchAdminKey: deploySearch ? search.outputs.adminKey : ''
+    serviceBusConnectionString: deployServiceBus ? servicebus.outputs.connectionString : ''
   }
 }
 
