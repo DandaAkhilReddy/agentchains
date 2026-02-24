@@ -526,8 +526,10 @@ def create_app() -> FastAPI:
         origin = ws.headers.get("origin")
         if not origin:
             return True  # Non-browser clients may not send Origin
-        if not allowed_origins or "*" in allowed_origins:
+        if "*" in allowed_origins:
             return True
+        if not allowed_origins:
+            return False  # Deny browser connections when no origins configured
         return origin in allowed_origins
 
     # WebSocket for live feed (JWT-authenticated)
