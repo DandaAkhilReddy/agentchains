@@ -84,8 +84,10 @@ async def handle_a2ui_message(
     if method == "user.respond":
         request_id = params.get("request_id", "")
         value = params.get("value")
-        if not request_id:
-            return _jsonrpc_error(msg_id, -32602, "Missing request_id in params")
+        if not request_id or not isinstance(request_id, str) or len(request_id) > 255:
+            return _jsonrpc_error(msg_id, -32602, "Missing or invalid request_id in params")
+        if isinstance(value, str) and len(value) > 10_000:
+            return _jsonrpc_error(msg_id, -32602, "Value too large (max 10000 chars)")
         resolved = a2ui_session_manager.resolve_pending_input(
             session.session_id, request_id, value,
         )
@@ -101,8 +103,12 @@ async def handle_a2ui_message(
         request_id = params.get("request_id", "")
         approved = params.get("approved", False)
         reason = params.get("reason")
-        if not request_id:
-            return _jsonrpc_error(msg_id, -32602, "Missing request_id in params")
+        if not request_id or not isinstance(request_id, str) or len(request_id) > 255:
+            return _jsonrpc_error(msg_id, -32602, "Missing or invalid request_id in params")
+        if not isinstance(approved, bool):
+            return _jsonrpc_error(msg_id, -32602, "approved must be a boolean")
+        if reason is not None and (not isinstance(reason, str) or len(reason) > 1000):
+            return _jsonrpc_error(msg_id, -32602, "reason must be a string (max 1000 chars)")
         result_value = {"approved": approved, "reason": reason}
         resolved = a2ui_session_manager.resolve_pending_input(
             session.session_id, request_id, result_value,
@@ -117,7 +123,7 @@ async def handle_a2ui_message(
     # ── user.cancel ──
     elif method == "user.cancel":
         task_id = params.get("task_id", "")
-        if not task_id:
+        if not task_id or not isinstance(task_id, str) or len(task_id) > 255:
             return _jsonrpc_error(msg_id, -32602, "Missing task_id in params")
         # Cancel any pending input futures for this task
         cancelled = False
