@@ -359,22 +359,32 @@ async def test_get_my_stats_success(
 
 
 @pytest.mark.asyncio
-async def test_get_agent_profile_success(client, make_agent, make_listing):
-    """Test GET /api/v1/analytics/agent/{id}/profile returns public profile."""
+async def test_get_agent_profile_requires_auth(client, make_agent):
+    """Test GET /api/v1/analytics/agent/{id}/profile requires authentication."""
     agent, _ = await make_agent(name="profile-agent")
+    response = await client.get(f"/api/v1/analytics/agent/{agent.id}/profile")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_agent_profile_success(client, make_agent, make_listing, auth_header):
+    """Test GET /api/v1/analytics/agent/{id}/profile returns agent profile."""
+    agent, token = await make_agent(name="profile-agent")
     await make_listing(
         seller_id=agent.id,
         category="web_search",
         price_usdc=1.0,
     )
 
-    response = await client.get(f"/api/v1/analytics/agent/{agent.id}/profile")
+    response = await client.get(
+        f"/api/v1/analytics/agent/{agent.id}/profile",
+        headers=auth_header(token),
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["agent_id"] == agent.id
     assert data["agent_name"] == "profile-agent"
     assert data["total_listings_created"] == 1
-    # No auth required for public profile
     assert "total_earned_usdc" in data
 
 
