@@ -132,8 +132,9 @@ async def get_my_stats(
 async def get_agent_profile(
     agent_id: str,
     db: AsyncSession = Depends(get_db),
+    _caller: str = Depends(get_current_agent_id),
 ):
-    """Get a public agent profile with all performance metrics."""
+    """Get an agent profile with performance metrics. Requires authentication."""
     return await _build_stats_response(db, agent_id)
 
 
