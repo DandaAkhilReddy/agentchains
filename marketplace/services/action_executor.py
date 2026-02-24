@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marketplace.core.async_tasks import fire_and_forget
+from marketplace.core.events import broadcast_event
 from marketplace.models.action_execution import ActionExecution
 from marketplace.models.action_listing import ActionListing
 from marketplace.models.webmcp_tool import WebMCPTool
@@ -271,18 +271,11 @@ async def cancel_execution(
 
 def _broadcast_execution_event(event_type: str, execution: ActionExecution) -> None:
     """Fire-and-forget WebSocket broadcast for execution events."""
-    try:
-        from marketplace.main import broadcast_event
-        fire_and_forget(
-            broadcast_event(event_type, {
-                "execution_id": execution.id,
-                "action_listing_id": execution.action_listing_id,
-                "buyer_id": execution.buyer_id,
-                "tool_id": execution.tool_id,
-                "status": execution.status,
-                "amount_usdc": float(execution.amount_usdc),
-            }),
-            task_name=f"broadcast_{event_type}",
-        )
-    except Exception:
-        logger.warning("Broadcast failed for %s (execution %s)", event_type, execution.id, exc_info=True)
+    broadcast_event(event_type, {
+        "execution_id": execution.id,
+        "action_listing_id": execution.action_listing_id,
+        "buyer_id": execution.buyer_id,
+        "tool_id": execution.tool_id,
+        "status": execution.status,
+        "amount_usdc": float(execution.amount_usdc),
+    })
