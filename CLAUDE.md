@@ -4,35 +4,42 @@
 Author must always be: Danda Akhil Reddy <akhilreddydanda3@gmail.com>
 NEVER use a placeholder or wrong email. Always verify `git config user.email` matches.
 
-## Git Workflow — Commit AND PUSH Everything
+## Git Workflow — Feature Branches + Push After Every Commit
 
-**CRITICAL: `git push origin master` MUST run immediately after EVERY `git commit`. NEVER batch pushes.**
+**CRITICAL: NEVER commit directly to master. All work happens on feature branches.**
 
-After EVERY code change — no matter how small (even a single word, line, or letter) — always run all 3 steps together:
-1. `git add` the changed files
-2. `git commit` with a descriptive message
-3. **`git push origin master`** ← THIS IS MANDATORY AFTER EVERY SINGLE COMMIT
+### Branch naming
+- Features: `feat/<name>`
+- Fixes: `fix/<name>`
+- Chores: `chore/<name>`
+
+### Workflow for every change
+1. Create or switch to a feature branch: `git checkout -b feat/<name>`
+2. `git add` the changed files
+3. `git commit` with a conventional commit message
+4. `git push origin <branch>` immediately after each commit
+5. When done, merge to master with `--no-ff` to preserve history
 
 Rules:
 - One commit per logical change (don't batch multiple changes into one commit)
 - Even fixing a typo, updating a comment, or changing one config value = its own commit
 - Never skip committing. Every change = one contribution on GitHub.
-- This applies to every change — no exceptions.
-- **NEVER run multiple `git commit` commands before pushing. Each commit gets its own push.**
+- **Push after every commit. NEVER batch multiple commits before pushing.**
+- The PreToolUse hook will BLOCK edits on master — this is enforced automatically
 
-### WRONG (batched push — DO NOT DO THIS):
+### WRONG (committing on master — BLOCKED BY HOOK):
 ```
-git add file1 && git commit -m "change 1"
-git add file2 && git commit -m "change 2"
-git add file3 && git commit -m "change 3"
-git push origin master   # ← BAD: 3 commits pushed at once
+git checkout master
+git add file1 && git commit -m "change 1"  # ← BLOCKED
 ```
 
-### RIGHT (push after every commit):
+### RIGHT (feature branch, push after every commit):
 ```
-git add file1 && git commit -m "change 1" && git push origin master
-git add file2 && git commit -m "change 2" && git push origin master
-git add file3 && git commit -m "change 3" && git push origin master
+git checkout -b feat/my-feature
+git add file1 && git commit -m "feat: add feature" && git push origin feat/my-feature
+git add file2 && git commit -m "fix: correct typo" && git push origin feat/my-feature
+# When done:
+git checkout master && git merge --no-ff feat/my-feature && git push origin master
 ```
 
 ## Commits — CRITICAL RULES
