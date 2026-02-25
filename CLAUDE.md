@@ -65,4 +65,4 @@ Before every commit, you MUST review the changes for:
 
 If you find CRITICAL issues (security vulnerabilities, data leaks, broken error handling), fix them before committing.
 
-To run a full code review at any time: `/agents/code-reviewer`
+To run a full code review at any time: `/review-code`
