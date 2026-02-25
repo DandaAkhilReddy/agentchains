@@ -148,6 +148,43 @@ async def test_get_platform_price_from_catalog_entry(db: AsyncSession, make_agen
     assert price == Decimal("0.005")
 
 
+async def test_get_platform_price_from_action_listing(db: AsyncSession, make_agent, make_creator):
+    """_get_platform_price falls back to ActionListing price_per_execution."""
+    from marketplace.models.action_listing import ActionListing
+    from marketplace.models.webmcp_tool import WebMCPTool
+
+    agent, _ = await make_agent()
+    creator, _ = await make_creator()
+
+    # Create a WebMCPTool (required FK for ActionListing)
+    tool = WebMCPTool(
+        id=_uid(),
+        name="test-tool",
+        domain="example.com",
+        endpoint_url="https://example.com/tool",
+        creator_id=creator.id,
+        category="data_extraction",
+        status="active",
+    )
+    db.add(tool)
+    await db.flush()
+
+    # Create an ActionListing for the agent with no DataListing
+    action = ActionListing(
+        id=_uid(),
+        tool_id=tool.id,
+        seller_id=agent.id,
+        title="Test Action",
+        price_per_execution=Decimal("7.50"),
+        status="active",
+    )
+    db.add(action)
+    await db.commit()
+
+    price = await svc._get_platform_price(db, agent.id)
+    assert price == Decimal("7.5")
+
+
 # ---------------------------------------------------------------------------
 # settle_chain_execution
 # ---------------------------------------------------------------------------
@@ -342,6 +379,67 @@ async def test_settle_chain_execution_agent_from_template_graph(
     assert result["total_settled_usd"] == 3.00
 
 
+async def test_settle_chain_execution_bad_input_json(db: AsyncSession, make_agent, make_listing):
+    """Node with invalid input_json falls back to template graph for agent_id."""
+    buyer, _ = await make_agent()
+    seller, _ = await make_agent()
+    await make_listing(seller.id, price_usdc=2.00)
+
+    graph = {
+        "nodes": {
+            "bad-json-node": {
+                "type": "agent_call",
+                "config": {"agent_id": seller.id},
+            },
+        },
+    }
+    wf = await _create_workflow(db, buyer.id)
+    we = await _create_workflow_execution(db, wf.id, buyer.id)
+    ct = await _create_chain_template(db, buyer.id, graph=graph, workflow_id=wf.id)
+    ce = await _create_chain_execution(db, ct.id, buyer.id, workflow_execution_id=we.id)
+
+    # Node with invalid JSON input
+    await _create_node_execution(db, we.id, "bad-json-node", input_json="not-valid-json")
+    await db.commit()
+
+    mock_ledger = MagicMock()
+    mock_ledger.id = "ledger-badjson"
+
+    with patch("marketplace.services.chain_settlement_service.transfer", new_callable=AsyncMock) as mock_transfer:
+        mock_transfer.return_value = mock_ledger
+        result = await svc.settle_chain_execution(db, ce.id)
+
+    assert result["status"] == "settled"
+    assert result["total_settled_usd"] == 2.00
+
+
+async def test_settle_chain_execution_no_agent_id_skips(db: AsyncSession, make_agent):
+    """Node with no agent_id in input or template graph is skipped."""
+    buyer, _ = await make_agent()
+
+    graph = {
+        "nodes": {
+            "orphan-node": {
+                "type": "agent_call",
+                "config": {},  # No agent_id
+            },
+        },
+    }
+    wf = await _create_workflow(db, buyer.id)
+    we = await _create_workflow_execution(db, wf.id, buyer.id)
+    ct = await _create_chain_template(db, buyer.id, graph=graph, workflow_id=wf.id)
+    ce = await _create_chain_execution(db, ct.id, buyer.id, workflow_execution_id=we.id)
+
+    # Node with empty input and template has no agent_id in config
+    await _create_node_execution(db, we.id, "orphan-node", input_json="{}")
+    await db.commit()
+
+    result = await svc.settle_chain_execution(db, ce.id)
+
+    assert result["total_settled_usd"] == 0
+    assert result["transfers"] == []
+
+
 async def test_settle_chain_execution_skips_non_completed_nodes(db: AsyncSession, make_agent, make_listing):
     """Nodes with status != 'completed' are skipped during settlement."""
     buyer, _ = await make_agent()
@@ -461,6 +559,24 @@ async def test_estimate_chain_cost_skips_non_agent_nodes(db: AsyncSession, make_
         "nodes": {
             "t1": {"type": "transform", "config": {}},
             "m1": {"type": "merge", "config": {}},
+        },
+    }
+    ct = await _create_chain_template(db, agent.id, graph=graph)
+    await db.commit()
+
+    result = await svc.estimate_chain_cost(db, ct.id)
+
+    assert result["estimated_total_usd"] == 0
+    assert result["agent_costs"] == []
+
+
+async def test_estimate_chain_cost_skips_nodes_without_agent_id(db: AsyncSession, make_agent):
+    """estimate_chain_cost skips agent_call nodes with no agent_id in config."""
+    agent, _ = await make_agent()
+    graph = {
+        "nodes": {
+            "n1": {"type": "agent_call", "config": {}},  # No agent_id
+            "n2": {"type": "agent_call", "config": {"agent_id": None}},
         },
     }
     ct = await _create_chain_template(db, agent.id, graph=graph)

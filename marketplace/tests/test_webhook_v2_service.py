@@ -348,6 +348,55 @@ async def test_process_webhook_queue_invalid_json(
     assert result["failed"] == 1
 
 
+@patch("marketplace.services.webhook_v2_service.get_servicebus_service")
+async def test_process_webhook_queue_ssrf_blocked(
+    mock_get_sbs: MagicMock, db: AsyncSession,
+):
+    """A callback URL that fails SSRF validation is blocked and marked failed."""
+    mock_sbs = _mock_servicebus()
+    mock_get_sbs.return_value = mock_sbs
+
+    msg_body = {
+        "subscription_id": "sub-ssrf",
+        "event": {"callback_url": "http://169.254.169.254/metadata", "type": "test"},
+        "attempt": 1,
+    }
+    mock_msg = MagicMock()
+    mock_msg.__str__ = lambda self: json.dumps(msg_body)
+    mock_sbs.receive_messages.return_value = [mock_msg]
+
+    result = await svc.process_webhook_queue(db)
+
+    assert result["failed"] == 1
+    assert result["delivered"] == 0
+    mock_sbs.complete_message.assert_called_once()
+
+    # Verify the attempt was marked as blocked
+    stmt = select(DeliveryAttempt).where(DeliveryAttempt.status == "blocked")
+    rows = (await db.execute(stmt)).scalars().all()
+    assert len(rows) == 1
+    assert "URL validation failed" in rows[0].error_message
+
+
+@patch("marketplace.services.webhook_v2_service.get_servicebus_service")
+async def test_process_webhook_queue_outer_exception(
+    mock_get_sbs: MagicMock, db: AsyncSession,
+):
+    """Unexpected exception in outer try block increments failed count."""
+    mock_sbs = _mock_servicebus()
+    mock_get_sbs.return_value = mock_sbs
+
+    # Create a message that will cause an exception when str() is called
+    mock_msg = MagicMock()
+    mock_msg.__str__ = MagicMock(side_effect=RuntimeError("unexpected crash"))
+    mock_sbs.receive_messages.return_value = [mock_msg]
+
+    result = await svc.process_webhook_queue(db)
+
+    assert result["failed"] == 1
+    assert result["delivered"] == 0
+
+
 # ---------------------------------------------------------------------------
 # retry_dead_letters (bulk)
 # ---------------------------------------------------------------------------

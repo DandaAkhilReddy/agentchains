@@ -496,3 +496,19 @@ async def test_check_limits_bandwidth_uses_storage_limit(db: AsyncSession, make_
     result = await svc.check_limits(db, agent.id, "bandwidth")
     assert result["limit"] == 200
     assert result["allowed"] is True
+
+
+async def test_check_limits_missing_plan(db: AsyncSession, make_agent):
+    """check_limits returns allowed=False when subscription references a deleted plan."""
+    agent, _ = await make_agent()
+    plan = await svc.create_plan(db, name="Ghost Plan", price_monthly=10)
+    sub = await svc.subscribe(db, agent_id=agent.id, plan_id=plan.id)
+
+    # Delete the plan to create an orphaned subscription
+    await db.delete(plan)
+    await db.commit()
+
+    result = await svc.check_limits(db, agent.id, "api_calls")
+    assert result["allowed"] is False
+    assert result["current"] == 0
+    assert result["limit"] == 0
