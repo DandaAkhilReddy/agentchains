@@ -330,11 +330,8 @@ def test_extract_json_fence_no_fence(tmp_path):
 def test_extract_json_fence_invalid_json(tmp_path):
     p = tmp_path / 'bad_json.md'
     fence = chr(96) * 3
-    p.write_text(f'# Report
-{fence}json
-{{{{bad json}}}}
-{fence}
-', encoding='utf-8')
+    content_str = f"# Report" + chr(10) + f"{fence}json" + chr(10) + "{{bad json}}" + chr(10) + f"{fence}" + chr(10)
+    p.write_text(content_str, encoding="utf-8")
     with pytest.raises(ValueError, match='invalid JSON'):
         _extract_json_fence(p)
 
@@ -342,11 +339,8 @@ def test_extract_json_fence_invalid_json(tmp_path):
 def test_load_report_invalid_json_in_fence(tmp_path):
     p = tmp_path / 'bad_fence.md'
     fence = chr(96) * 3
-    p.write_text(f'# Machine-Readable Evidence
-{fence}json
-{{{{not valid}}}}
-{fence}
-', encoding='utf-8')
+    content_str = f"# Machine-Readable Evidence" + chr(10) + f"{fence}json" + chr(10) + "{{not valid}}" + chr(10) + f"{fence}" + chr(10)
+    p.write_text(content_str, encoding="utf-8")
     payload, errors = _load_report(p, ('Machine-Readable Evidence',))
     assert len(errors) == 1
     assert 'invalid JSON' in errors[0]
@@ -555,14 +549,7 @@ def test_merge_gate_redundancy_budget(report_dir):
     import json as _json
     rp = {'ci_budget': {'within_budget': False}}
     fence = chr(96) * 3
-    txt = f'# Redundancy Audit Report
-
-## Machine-Readable Evidence
-
-{fence}json
-' + _json.dumps(rp) + f'
-{fence}
-'
+    txt = f"# Redundancy Audit Report" + chr(10)*2 + "## Machine-Readable Evidence" + chr(10)*2 + f"{fence}json" + chr(10) + _json.dumps(rp) + chr(10) + f"{fence}" + chr(10)
     (report_dir / 'redundancy_audit_report.md').write_text(txt, encoding='utf-8')
     r = evaluate_merge_gate(report_dir)
     assert any('CI budget' in i for i in r.issues)
