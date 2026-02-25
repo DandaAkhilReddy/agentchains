@@ -68,3 +68,138 @@ class TestExecuteTool:
         with patch("marketplace.database.async_session", return_value=mock_cm):
             r=await execute_tool("nonexistent_tool",{},"a1",db=None)
             assert "error" in r
+
+    async def test_express_buy(self, db, make_agent):
+        from unittest.mock import AsyncMock as AM, MagicMock
+        agent, _ = await make_agent()
+        mock_resp = MagicMock()
+        mock_resp.body = b'{"transaction_id": "tx1", "content": "data"}'
+        with patch("marketplace.services.express_service.express_buy",
+                   new_callable=AM, return_value=mock_resp):
+            r = await execute_tool(
+                "marketplace_express_buy",
+                {"listing_id": "lst-1"},
+                agent.id,
+                db=db,
+            )
+            assert "transaction_id" in r
+
+    async def test_auto_match(self, db, make_agent):
+        from unittest.mock import AsyncMock as AM
+        agent, _ = await make_agent()
+        with patch("marketplace.services.match_service.auto_match",
+                   new_callable=AM,
+                   return_value={"matches": [], "total": 0}):
+            r = await execute_tool(
+                "marketplace_auto_match",
+                {"description": "weather data"},
+                agent.id,
+                db=db,
+            )
+            assert "matches" in r
+
+    async def test_register_catalog(self, db, make_agent):
+        from unittest.mock import AsyncMock as AM, MagicMock
+        agent, _ = await make_agent()
+        mock_entry = MagicMock()
+        mock_entry.id = 1
+        mock_entry.namespace = "web_search.python"
+        mock_entry.topic = "search"
+        with patch("marketplace.services.catalog_service.register_catalog_entry",
+                   new_callable=AM, return_value=mock_entry):
+            r = await execute_tool(
+                "marketplace_register_catalog",
+                {"namespace": "web_search.python", "topic": "search"},
+                agent.id,
+                db=db,
+            )
+            assert "entry_id" in r
+            assert r["namespace"] == "web_search.python"
+
+    async def test_reputation_found(self, db, make_agent):
+        from unittest.mock import MagicMock
+        agent, _ = await make_agent()
+        # Create an AgentStats record
+        from marketplace.models.agent_stats import AgentStats
+        from decimal import Decimal
+        stats = AgentStats(
+            agent_id=agent.id,
+            helpfulness_score=Decimal("0.95"),
+            total_earned_usdc=Decimal("100.00"),
+            unique_buyers_served=5,
+            primary_specialization="web_search",
+        )
+        db.add(stats)
+        await db.commit()
+        r = await execute_tool(
+            "marketplace_reputation",
+            {"agent_id": agent.id},
+            agent.id,
+            db=db,
+        )
+        assert "helpfulness_score" in r
+        assert r["agent_id"] == agent.id
+
+    async def test_verify_zkp(self, db, make_agent):
+        from unittest.mock import AsyncMock as AM
+        agent, _ = await make_agent()
+        with patch("marketplace.services.zkp_service.verify_listing",
+                   new_callable=AM,
+                   return_value={"valid": True, "proofs": []}):
+            r = await execute_tool(
+                "marketplace_verify_zkp",
+                {"listing_id": "lst-1"},
+                agent.id,
+                db=db,
+            )
+            assert "valid" in r
+
+    async def test_webmcp_execute_action(self, db, make_agent):
+        from unittest.mock import AsyncMock as AM
+        agent, _ = await make_agent()
+        with patch("marketplace.services.action_executor.execute_action",
+                   new_callable=AM,
+                   return_value={"execution_id": "exec-1", "status": "completed"}):
+            r = await execute_tool(
+                "webmcp_execute_action",
+                {"action_id": "act-1"},
+                agent.id,
+                db=db,
+            )
+            assert "execution_id" in r
+
+    async def test_webmcp_verify_execution_with_proof(self, db, make_agent):
+        from unittest.mock import AsyncMock as AM
+        agent, _ = await make_agent()
+        mock_execution = {
+            "id": "exec-1",
+            "proof_of_execution": {"hash": "abc", "timestamp": "2024-01-01"},
+        }
+        mock_proof_result = {"valid": True, "claims": {"data_delivered": True}}
+        with patch("marketplace.services.action_executor.get_execution",
+                   new_callable=AM, return_value=mock_execution),              patch("marketplace.services.proof_of_execution_service.verify_proof",
+                   return_value=mock_proof_result):
+            r = await execute_tool(
+                "webmcp_verify_execution",
+                {"execution_id": "exec-1"},
+                agent.id,
+                db=db,
+            )
+            assert r["verified"] is True
+            assert "claims" in r
+
+    async def test_webmcp_verify_execution_no_proof(self, db, make_agent):
+        from unittest.mock import AsyncMock as AM
+        agent, _ = await make_agent()
+        mock_execution = {"id": "exec-1", "proof_of_execution": None}
+        with patch("marketplace.services.action_executor.get_execution",
+                   new_callable=AM, return_value=mock_execution):
+            r = await execute_tool(
+                "webmcp_verify_execution",
+                {"execution_id": "exec-1"},
+                agent.id,
+                db=db,
+            )
+            assert r["verified"] is False
+            assert "error" in r
+

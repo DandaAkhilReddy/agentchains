@@ -94,6 +94,52 @@ class TestHandleMessage:
         parsed=json.loads(r["result"]["content"][0]["text"])
         assert "error" in parsed
 
+
+    async def test_initialize_bad_auth(self):
+        r = await handle_message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        assert r["error"]["code"] == -32000
+
+    async def test_tools_call_exception(self, db):
+        from unittest.mock import AsyncMock as AM
+        ir = await handle_message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"_auth": _jwt()}})
+        sid = ir["result"]["_session_id"]
+        with patch("marketplace.mcp.server.execute_tool", new_callable=AM, side_effect=RuntimeError("boom")):
+            r = await handle_message(
+                {"jsonrpc": "2.0", "id": 20, "method": "tools/call", "params": {"name": "marketplace_discover", "arguments": {}}},
+                session_id=sid,
+                db=db,
+            )
+            assert "error" in r
+            assert r["error"]["code"] == -32000
+            assert "Tool execution error" in r["error"]["message"]
+
+    async def test_resources_read_success(self, db):
+        from unittest.mock import AsyncMock as AM
+        ir = await handle_message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"_auth": _jwt()}})
+        sid = ir["result"]["_session_id"]
+        with patch("marketplace.mcp.server.read_resource", new_callable=AM, return_value={"entries": [], "total": 0}):
+            r = await handle_message(
+                {"jsonrpc": "2.0", "id": 30, "method": "resources/read", "params": {"uri": "marketplace://catalog"}},
+                session_id=sid,
+                db=db,
+            )
+            assert "result" in r
+            assert "contents" in r["result"]
+            assert r["result"]["contents"][0]["uri"] == "marketplace://catalog"
+
+    async def test_resources_read_exception(self, db):
+        from unittest.mock import AsyncMock as AM
+        ir = await handle_message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"_auth": _jwt()}})
+        sid = ir["result"]["_session_id"]
+        with patch("marketplace.mcp.server.read_resource", new_callable=AM, side_effect=RuntimeError("fail")):
+            r = await handle_message(
+                {"jsonrpc": "2.0", "id": 31, "method": "resources/read", "params": {"uri": "marketplace://catalog"}},
+                session_id=sid,
+                db=db,
+            )
+            assert "error" in r
+            assert "Resource read error" in r["error"]["message"]
+
 class TestMCPEndpoints:
     async def test_health(self, client):
         r=await client.get("/mcp/health")
@@ -111,3 +157,13 @@ class TestMCPEndpoints:
         r=await client.post("/mcp/sse",json=body)
         assert r.status_code==200
         assert "text/event-stream" in r.headers.get("content-type","")
+
+class TestMCPHealthProd:
+    async def test_health_prod_mode(self, client):
+        with patch("marketplace.mcp.server.settings") as ms:
+            ms.environment = "production"
+            r = await client.get("/mcp/health")
+            assert r.status_code == 200
+            body = r.json()
+            assert body["status"] == "ok"
+

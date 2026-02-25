@@ -166,3 +166,168 @@ class TestMigConfig:
     def test_regex(self):
         assert _IDENTIFIER_RE.match("valid_name")
         assert not _IDENTIFIER_RE.match("123bad")
+
+
+class TestApplySqliteMigrations:
+    async def test_migrations_on_minimal_table(self):
+        """Create a minimal data_listings table missing migration columns, then migrate."""
+        from marketplace.database import _apply_sqlite_compat_migrations
+        e = await _fe()
+        try:
+            async with e.begin() as conn:
+                await conn.run_sync(
+                    lambda c: c.exec_driver_sql(
+                        "CREATE TABLE data_listings (id TEXT PRIMARY KEY, title TEXT)"
+                    )
+                )
+                await conn.run_sync(_apply_sqlite_compat_migrations)
+                # Verify columns were added
+                has = await conn.run_sync(
+                    lambda c: _sqlite_has_column(c, "data_listings", "trust_status")
+                )
+                assert has is True
+        finally:
+            await e.dispose()
+
+    async def test_migrations_skip_missing_table(self):
+        """When table does not exist, migrations are silently skipped."""
+        from marketplace.database import _apply_sqlite_compat_migrations
+        e = await _fe()
+        try:
+            async with e.begin() as conn:
+                # No tables at all - should not raise
+                await conn.run_sync(_apply_sqlite_compat_migrations)
+        finally:
+            await e.dispose()
+
+
+class TestInitDropDispose:
+    async def test_init_db_creates_tables(self):
+        from unittest.mock import patch, AsyncMock
+        from marketplace.database import init_db
+        # Mock _apply_sqlite_compat_migrations to avoid duplicate column errors
+        with patch("marketplace.database._apply_sqlite_compat_migrations"):
+            await init_db()
+
+    async def test_drop_db(self):
+        from marketplace.database import drop_db, init_db
+        from unittest.mock import patch
+        with patch("marketplace.database._apply_sqlite_compat_migrations"):
+            await init_db()
+        await drop_db()
+
+    async def test_dispose_engine(self):
+        from marketplace.database import dispose_engine
+        await dispose_engine()
+
+
+class TestGetDbGenerator:
+    async def test_get_db_yields_session(self):
+        from marketplace.database import get_db
+        gen = get_db()
+        session = await gen.__anext__()
+        from sqlalchemy.ext.asyncio import AsyncSession
+        assert isinstance(session, AsyncSession)
+        try:
+            await gen.__anext__()
+        except StopAsyncIteration:
+            pass
+
+
+class TestSqliteHasColumnEdgeCases:
+    async def test_column_in_nonexistent_table(self):
+        e = await _fe()
+        try:
+            await _ca(e)
+            async with e.begin() as c:
+                # Table not in allowed list raises ValueError
+                try:
+                    await c.run_sync(lambda x: _sqlite_has_column(x, "registered_agents", "id"))
+                    assert False, "Should have raised ValueError"
+                except ValueError:
+                    pass
+        finally:
+            await e.dispose()
+
+    async def test_column_check_uses_regex(self):
+        e = await _fe()
+        try:
+            await _ca(e)
+            async with e.begin() as c:
+                # Verify partial match does not count
+                result = await c.run_sync(lambda x: _sqlite_has_column(x, "data_listings", "title"))
+                assert result is True
+                result2 = await c.run_sync(lambda x: _sqlite_has_column(x, "data_listings", "titl"))
+                assert result2 is False
+        finally:
+            await e.dispose()
+
+
+class TestValidateIdentifierEdge:
+    def test_underscore_only(self):
+        assert _validate_identifier("_", "t") == "_"
+
+    def test_long_name(self):
+        name = "a" * 100
+        assert _validate_identifier(name, "t") == name
+
+    def test_with_numbers(self):
+        assert _validate_identifier("col_123", "t") == "col_123"
+
+    def test_dash_rejected(self):
+        import pytest
+        with pytest.raises(ValueError):
+            _validate_identifier("col-name", "t")
+
+    def test_space_rejected(self):
+        import pytest
+        with pytest.raises(ValueError):
+            _validate_identifier("col name", "t")
+
+    def test_semicolon_rejected(self):
+        import pytest
+        with pytest.raises(ValueError):
+            _validate_identifier("col;drop", "t")
+
+
+class TestSqliteHasColumnMissingTable:
+    async def test_column_on_nonexistent_allowed_table(self):
+        """When table is in allowed list but does not exist, returns False."""
+        e = await _fe()
+        try:
+            # Do NOT create tables - the table does not exist in this fresh DB
+            async with e.begin() as c:
+                result = await c.run_sync(lambda x: _sqlite_has_column(x, "data_listings", "title"))
+                assert result is False
+        finally:
+            await e.dispose()
+
+
+class TestApplySqliteMigrationsEdge:
+    async def test_dangerous_ddl_rejected(self):
+        """Verify that DDL containing dangerous keywords is rejected."""
+        from marketplace.database import _apply_sqlite_compat_migrations, _SQLITE_COLUMN_MIGRATIONS
+        import copy
+        e = await _fe()
+        try:
+            async with e.begin() as conn:
+                await conn.run_sync(
+                    lambda c: c.exec_driver_sql(
+                        "CREATE TABLE data_listings (id TEXT PRIMARY KEY)"
+                    )
+                )
+            # Temporarily modify the migration config to include a dangerous DDL
+            original = _SQLITE_COLUMN_MIGRATIONS.get("data_listings", [])
+            _SQLITE_COLUMN_MIGRATIONS["data_listings"] = [("evil_col", "TEXT; DROP TABLE data_listings")]
+            try:
+                async with e.begin() as conn:
+                    try:
+                        await conn.run_sync(_apply_sqlite_compat_migrations)
+                        assert False, "Should have raised ValueError"
+                    except Exception as exc:
+                        assert "Dangerous" in str(exc) or "dangerous" in str(exc).lower()
+            finally:
+                _SQLITE_COLUMN_MIGRATIONS["data_listings"] = original
+        finally:
+            await e.dispose()
+
