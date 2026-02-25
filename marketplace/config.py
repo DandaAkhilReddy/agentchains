@@ -139,6 +139,7 @@ _INSECURE_SECRETS = {
     "change-me-to-a-random-64-char-string",
     "dev-event-signing-secret-change-in-production",
     "dev-memory-encryption-key-change-in-production",
+    "<GENERATE-64-CHAR-RANDOM-STRING>",
 }
 def validate_security_posture(cfg: Settings) -> None:
     is_prod = cfg.environment.lower() in {"production", "prod"}

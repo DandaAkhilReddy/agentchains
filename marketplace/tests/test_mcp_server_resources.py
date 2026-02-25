@@ -876,8 +876,8 @@ class TestServerHandleMessage:
         sid = await _get_session_id(_make_jwt())
         resp = await handle_message({
             "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            "params": {"_session_id": sid},
-        })
+            "params": {},
+        }, session_id=sid)
         assert "result" in resp
         tools = resp["result"]["tools"]
         assert isinstance(tools, list)
@@ -904,11 +904,10 @@ class TestServerHandleMessage:
             resp = await handle_message({
                 "jsonrpc": "2.0", "id": 3, "method": "tools/call",
                 "params": {
-                    "_session_id": sid,
                     "name": "marketplace_discover",
                     "arguments": {"q": "test"},
                 },
-            })
+            }, session_id=sid)
         assert "result" in resp
         content = resp["result"]["content"]
         assert isinstance(content, list)
@@ -927,11 +926,10 @@ class TestServerHandleMessage:
             resp = await handle_message({
                 "jsonrpc": "2.0", "id": 4, "method": "tools/call",
                 "params": {
-                    "_session_id": sid,
                     "name": "marketplace_discover",
                     "arguments": {},
                 },
-            })
+            }, session_id=sid)
         assert "error" in resp
         assert resp["error"]["code"] == -32000
         assert "Tool execution error" in resp["error"]["message"]
@@ -943,8 +941,8 @@ class TestServerHandleMessage:
         sid = await _get_session_id(_make_jwt())
         resp = await handle_message({
             "jsonrpc": "2.0", "id": 5, "method": "resources/list",
-            "params": {"_session_id": sid},
-        })
+            "params": {},
+        }, session_id=sid)
         assert "result" in resp
         resources = resp["result"]["resources"]
         assert len(resources) == len(RESOURCE_DEFINITIONS)
@@ -970,10 +968,9 @@ class TestServerHandleMessage:
             resp = await handle_message({
                 "jsonrpc": "2.0", "id": 6, "method": "resources/read",
                 "params": {
-                    "_session_id": sid,
                     "uri": "marketplace://trending",
                 },
-            })
+            }, session_id=sid)
         assert "result" in resp
         contents = resp["result"]["contents"]
         assert isinstance(contents, list)
@@ -994,8 +991,8 @@ class TestServerHandleMessage:
         ):
             resp = await handle_message({
                 "jsonrpc": "2.0", "id": 7, "method": "resources/read",
-                "params": {"_session_id": sid, "uri": "marketplace://catalog"},
-            })
+                "params": {"uri": "marketplace://catalog"},
+            }, session_id=sid)
         assert "error" in resp
         assert resp["error"]["code"] == -32000
         assert "Resource read error" in resp["error"]["message"]
@@ -1007,8 +1004,8 @@ class TestServerHandleMessage:
         sid = await _get_session_id(_make_jwt())
         resp = await handle_message({
             "jsonrpc": "2.0", "id": 8, "method": "ping",
-            "params": {"_session_id": sid},
-        })
+            "params": {},
+        }, session_id=sid)
         assert resp.get("result") == {}
 
     # -- notifications/initialized --
@@ -1018,8 +1015,8 @@ class TestServerHandleMessage:
         sid = await _get_session_id(_make_jwt())
         resp = await handle_message({
             "jsonrpc": "2.0", "id": 9, "method": "notifications/initialized",
-            "params": {"_session_id": sid},
-        })
+            "params": {},
+        }, session_id=sid)
         assert resp["result"]["acknowledged"] is True
 
     # -- unknown method --
@@ -1029,8 +1026,8 @@ class TestServerHandleMessage:
         sid = await _get_session_id(_make_jwt())
         resp = await handle_message({
             "jsonrpc": "2.0", "id": 10, "method": "totally/unknown",
-            "params": {"_session_id": sid},
-        })
+            "params": {},
+        }, session_id=sid)
         assert "error" in resp
         assert resp["error"]["code"] == -32601
         assert "totally/unknown" in resp["error"]["message"]
@@ -1048,8 +1045,8 @@ class TestServerHandleMessage:
         ):
             resp = await handle_message({
                 "jsonrpc": "2.0", "id": 11, "method": "ping",
-                "params": {"_session_id": sid},
-            })
+                "params": {},
+            }, session_id=sid)
         assert "error" in resp
         assert resp["error"]["code"] == -32000
         assert "Rate limit" in resp["error"]["message"] or "rate limit" in resp["error"]["message"].lower()
@@ -1145,8 +1142,8 @@ class TestServerHTTPEndpoints:
 
         resp = await client.post("/mcp/message", json={
             "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            "params": {"_session_id": sid},
-        })
+            "params": {},
+        }, headers={"X-MCP-Session-ID": sid})
         assert resp.status_code == 200
         data = resp.json()
         assert "result" in data

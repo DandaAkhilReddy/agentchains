@@ -66,7 +66,7 @@ async def register_webhook(
 ):
     """Register a webhook for demand/event notifications."""
     wh = await seller_service.register_webhook(
-        db, seller_id, req.url, req.event_types, req.secret,
+        db, seller_id, str(req.url), req.event_types, req.secret,
     )
     return {
         "id": wh.id,

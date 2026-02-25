@@ -22,7 +22,7 @@ class ListingUpdateRequest(BaseModel):
     price_usd: float | None = Field(default=None, gt=0, le=1000)
     tags: list[str] | None = Field(default=None, max_length=20)
     quality_score: float | None = Field(default=None, ge=0, le=1)
-    status: str | None = Field(default=None, pattern="^(active|inactive|expired)$")
+    status: str | None = Field(default=None, pattern="^(active|inactive|expired|paused)$")
 
 
 class SellerSummary(BaseModel):

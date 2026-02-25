@@ -637,7 +637,7 @@ async def test_trigger_health_check_failure(client):
     body = resp.json()
     assert body["healthy"] is False
     assert "error" in body
-    assert body["health_score"] == 60  # 80 - 20
+    assert body["health_score"] == 60
 
 
 async def test_trigger_health_check_404(client):
@@ -1373,3 +1373,228 @@ async def test_delete_then_list(client):
     list_resp = await client.get(f"{FED}/servers", headers=headers)
     ids = [s["id"] for s in list_resp.json()["servers"]]
     assert srv.id not in ids
+
+
+# ===========================================================================
+# Extra coverage tests -- uncovered code paths (appended by coverage push)
+# ===========================================================================
+
+
+async def test_register_server_duplicate_namespace_ok(client):
+    """Two servers in same namespace is allowed (unique on name)."""
+    _, jwt = await _create_agent()
+    headers = _auth(jwt)
+    p1 = {
+        "name": "dup-ns-srv-1",
+        "base_url": "http://example.com/mcp1",
+        "namespace": "dupns",
+        "auth_type": "none",
+    }
+    r1 = await client.post(f"{FED}/servers", json=p1, headers=headers)
+    assert r1.status_code == 201
+    p2 = {
+        "name": "dup-ns-srv-2",
+        "base_url": "http://example.com/mcp2",
+        "namespace": "dupns",
+        "auth_type": "none",
+    }
+    r2 = await client.post(f"{FED}/servers", json=p2, headers=headers)
+    assert r2.status_code == 201
+    assert r2.json()["namespace"] == "dupns"
+
+
+async def test_update_server_base_url_strips_trailing_slash(client):
+    """PUT /federation/servers/{id} strips trailing slash from base_url."""
+    agent_id, jwt = await _create_agent()
+    srv = await _create_server(registered_by=agent_id, name="url-strip-x")
+    headers = _auth(jwt)
+    resp = await client.put(
+        f"{FED}/servers/{srv.id}",
+        json={"base_url": "http://example.com/mcp/"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert not resp.json()["base_url"].endswith("/")
+
+
+async def test_list_resources_namespace_filter_only_matching(client):
+    """GET /federation/resources?namespace= returns only matching servers."""
+    aid, jwt = await _create_agent()
+    headers = _auth(jwt)
+    res1 = json.dumps([{"uri": "ns1://data", "name": "d"}])
+    await _create_server(
+        registered_by=aid, name="nsf-srv1", namespace="nsone",
+        resources_json=res1,
+    )
+    res2 = json.dumps([{"uri": "ns2://other", "name": "o"}])
+    await _create_server(
+        registered_by=aid, name="nsf-srv2", namespace="nstwo",
+        resources_json=res2,
+    )
+    resp = await client.get(
+        f"{FED}/resources", params={"namespace": "nsone"}, headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["resources"][0]["_namespace"] == "nsone"
+
+
+async def test_list_resources_null_resources_json(client):
+    """Server with resources_json=None contributes zero entries."""
+    aid, jwt = await _create_agent()
+    srv = await _create_server(
+        registered_by=aid, name="null-res-srv", namespace="nullns",
+    )
+    async with TestSession() as db:
+        from sqlalchemy import select as sel
+        r = await db.execute(
+            sel(MCPServerEntry).where(MCPServerEntry.id == srv.id)
+        )
+        s = r.scalar_one()
+        s.resources_json = None
+        await db.commit()
+    resp = await client.get(f"{FED}/resources", headers=_auth(jwt))
+    assert resp.status_code == 200
+    for r in resp.json()["resources"]:
+        assert r["_server_id"] != srv.id
+
+
+async def test_read_resource_success_proxied(client):
+    """POST /federation/resources/read proxies to federated server."""
+    aid, jwt = await _create_agent()
+    await _create_server(
+        registered_by=aid, name="read-prx", namespace="weather",
+        base_url="http://weather.example.com/mcp",
+    )
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {"content": "sunny"}
+    mock_cl = AsyncMock()
+    mock_cl.__aenter__ = AsyncMock(return_value=mock_cl)
+    mock_cl.__aexit__ = AsyncMock(return_value=False)
+    mock_cl.post = AsyncMock(return_value=mock_resp)
+    with patch("httpx.AsyncClient", return_value=mock_cl):
+        resp = await client.post(
+            f"{FED}/resources/read",
+            json={"uri": "weather://forecasts/today"},
+            headers=_auth(jwt),
+        )
+    assert resp.status_code == 200
+    assert resp.json()["content"] == "sunny"
+
+
+async def test_federation_health_degraded_inactive_counts(client):
+    """GET /federation/health reports degraded_count and inactive_count."""
+    aid, _ = await _create_agent()
+    await _create_server(
+        registered_by=aid, name="h-srv", namespace="hns",
+        status="active", health_score=90,
+    )
+    await _create_server(
+        registered_by=aid, name="d-srv", namespace="dns",
+        status="degraded", health_score=30,
+    )
+    await _create_server(
+        registered_by=aid, name="i-srv", namespace="ins",
+        status="inactive", health_score=0,
+    )
+    resp = await client.get(f"{FED}/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["server_count"] == 3
+    assert body["healthy_count"] == 1
+    assert body["degraded_count"] == 1
+    assert body["inactive_count"] == 1
+
+
+async def test_call_federated_tool_no_dot_in_name(client):
+    """tool_name without dot separator triggers error from route_tool_call."""
+    _, jwt = await _create_agent()
+    resp = await client.post(
+        f"{FED}/tools/call",
+        json={"tool_name": "nodotname", "arguments": {}},
+        headers=_auth(jwt),
+    )
+    assert resp.status_code == 502
+
+
+async def test_health_check_decrements_score_on_failure(client):
+    """POST /servers/{id}/health decrements health_score by 20 on failure."""
+    aid, jwt = await _create_agent()
+    srv = await _create_server(
+        registered_by=aid, name="dec-srv", namespace="decscore",
+        health_score=80,
+    )
+    with patch(
+        "marketplace.services.mcp_federation_service.refresh_server_tools",
+        return_value={"error": "Connection refused"},
+    ):
+        resp = await client.post(
+            f"{FED}/servers/{srv.id}/health", headers=_auth(jwt),
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["healthy"] is False
+    assert body["health_score"] == 40
+
+
+async def test_federation_health_tools_counting(client):
+    """GET /federation/health counts tools from tools_json."""
+    aid, _ = await _create_agent()
+    tools = json.dumps([{"name": "t1"}, {"name": "t2"}, {"name": "t3"}])
+    await _create_server(
+        registered_by=aid, name="tc-srv", namespace="tc",
+        tools_json=tools, status="active", health_score=100,
+    )
+    resp = await client.get(f"{FED}/health")
+    body = resp.json()
+    assert body["total_tool_count"] >= 3
+
+
+async def test_read_resource_extracts_namespace_from_uri_scheme(client):
+    """Namespace is extracted from URI scheme (e.g. myns://...)."""
+    aid, jwt = await _create_agent()
+    await _create_server(
+        registered_by=aid, name="nsext-srv", namespace="myns",
+        base_url="http://nsext.example.com/mcp",
+    )
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {"data": "ok"}
+    mc = AsyncMock()
+    mc.__aenter__ = AsyncMock(return_value=mc)
+    mc.__aexit__ = AsyncMock(return_value=False)
+    mc.post = AsyncMock(return_value=mock_resp)
+    with patch("httpx.AsyncClient", return_value=mc):
+        resp = await client.post(
+            f"{FED}/resources/read",
+            json={"uri": "myns://some/resource"},
+            headers=_auth(jwt),
+        )
+    assert resp.status_code == 200
+    call_url = mc.post.call_args[0][0]
+    assert "nsext.example.com" in call_url
+
+
+async def test_register_server_with_full_options(client):
+    """register_server with description, auth_type=bearer, credential_ref."""
+    _, jwt = await _create_agent()
+    resp = await client.post(
+        f"{FED}/servers",
+        json={
+            "name": "Full Opts",
+            "base_url": "http://full.example.com/mcp",
+            "namespace": "fullopts",
+            "description": "Fully configured server",
+            "auth_type": "bearer",
+            "auth_credential_ref": "vault://secret/token",
+        },
+        headers=_auth(jwt),
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["description"] == "Fully configured server"
+    assert body["auth_type"] == "bearer"

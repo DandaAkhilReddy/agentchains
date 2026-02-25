@@ -621,3 +621,68 @@ async def test_list_transactions_empty(client, make_agent, auth_header):
     data = resp.json()
     assert data["total"] == 0
     assert data["transactions"] == []
+
+
+@pytest.mark.asyncio
+async def test_tx_to_response_coverage(client, make_agent, make_listing, auth_header):
+    """Ensure _tx_to_response is executed and returns all fields."""
+    seller, seller_token = await make_agent(name="seller-resp")
+    buyer, buyer_token = await make_agent(name="buyer-resp")
+    listing = await make_listing(seller.id, price_usdc=1.5)
+
+    init_resp = await client.post(
+        "/api/v1/transactions/initiate",
+        json={"listing_id": listing.id},
+        headers=auth_header(buyer_token),
+    )
+    assert init_resp.status_code == 201
+    data = init_resp.json()
+    assert "transaction_id" in data
+    assert "payment_details" in data
+    assert data["amount_usdc"] == 1.5
+
+    tx_id = data["transaction_id"]
+
+    # Confirm payment
+    conf = await client.post(
+        f"/api/v1/transactions/{tx_id}/confirm-payment",
+        json={"payment_signature": "", "payment_tx_hash": ""},
+        headers=auth_header(buyer_token),
+    )
+    assert conf.status_code == 200
+    conf_data = conf.json()
+    assert conf_data["payment_method"] in ("simulated", "token")
+
+    # Deliver content
+    del_resp = await client.post(
+        f"/api/v1/transactions/{tx_id}/deliver",
+        json={"content": "test data"},
+        headers=auth_header(seller_token),
+    )
+    assert del_resp.status_code == 200
+
+    # Verify delivery
+    ver_resp = await client.post(
+        f"/api/v1/transactions/{tx_id}/verify",
+        headers=auth_header(buyer_token),
+    )
+    assert ver_resp.status_code == 200
+
+    # Get single transaction
+    get_resp = await client.get(
+        f"/api/v1/transactions/{tx_id}",
+        headers=auth_header(buyer_token),
+    )
+    assert get_resp.status_code == 200
+    get_data = get_resp.json()
+    assert get_data["id"] == tx_id
+
+    # List transactions
+    list_resp = await client.get(
+        "/api/v1/transactions",
+        headers=auth_header(buyer_token),
+    )
+    assert list_resp.status_code == 200
+    list_data = list_resp.json()
+    assert list_data["total"] >= 1
+    assert len(list_data["transactions"]) >= 1

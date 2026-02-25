@@ -343,3 +343,52 @@ async def test_get_memory_snapshot_no_auth(client):
     """GET /snapshots/{id} without auth returns 401."""
     resp = await client.get(f"{MEMORY_PREFIX}/snapshots/{_new_id()}")
     assert resp.status_code == 401
+
+
+async def test_import_memory_snapshot_direct_function(db, make_agent):
+    """Call import_memory_snapshot_v2 directly to cover lines 42-57."""
+    from unittest.mock import AsyncMock, patch, MagicMock
+    from marketplace.api.v2_memory import import_memory_snapshot_v2, SnapshotImportRequest
+    agent, _ = await make_agent()
+
+    req = SnapshotImportRequest(
+        source_type="sdk",
+        label="direct-test",
+        records=[{"id": "r1", "text": "hello"}],
+        chunk_size=100,
+        source_metadata={"key": "value"},
+        encrypted_blob_ref="blob:ref:xyz",
+    )
+
+    mock_result = {
+        "snapshot": {
+            "snapshot_id": "snap-1",
+            "agent_id": agent.id,
+            "source_type": "sdk",
+            "label": "direct-test",
+            "manifest": {},
+            "merkle_root": "sha256:abc",
+            "status": "imported",
+            "total_records": 1,
+            "total_chunks": 1,
+            "created_at": None,
+            "verified_at": None,
+        },
+        "chunk_hashes": ["sha256:abc"],
+        "trust_profile": {},
+    }
+
+    with patch(
+        "marketplace.api.v2_memory.memory_service.import_snapshot",
+        new_callable=AsyncMock,
+        return_value=mock_result,
+    ) as mock_import:
+        # Simulate the function with mocked dependencies
+        with patch("marketplace.api.v2_memory.get_current_agent_id", return_value=agent.id):
+            result = await import_memory_snapshot_v2(req, db, agent.id)
+            assert result == mock_result
+            call_kwargs = mock_import.call_args.kwargs
+            assert call_kwargs["source_type"] == "sdk"
+            assert call_kwargs["label"] == "direct-test"
+            assert call_kwargs["source_metadata"] == {"key": "value"}
+            assert call_kwargs["encrypted_blob_ref"] == "blob:ref:xyz"

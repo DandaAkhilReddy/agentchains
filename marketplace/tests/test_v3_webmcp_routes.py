@@ -883,3 +883,238 @@ class TestExecutionEndpoints:
         assert "total" in body
         assert body["page"] == 2
         assert body["page_size"] == 15
+
+
+# ===========================================================================
+# Extra coverage tests -- uncovered code paths (appended by coverage push)
+# ===========================================================================
+
+
+class TestExtraToolFilters:
+    """Additional tests for tool listing query/filter branches."""
+
+    @pytest.mark.asyncio
+    async def test_list_tools_query_too_long_400(self, client):
+        """GET /tools?q= with >500 chars returns 400."""
+        long_q = "x" * 501
+        resp = await client.get(f"{V3}/tools", params={"q": long_q})
+        assert resp.status_code == 400
+        assert "too long" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_list_tools_domain_filter(self, client, make_creator):
+        """GET /tools?domain= filters by domain."""
+        creator, ctoken = await make_creator()
+        # Register and approve a tool with specific domain
+        payload = _tool_payload(name="domain-test", domain="special.io")
+        reg = await client.post(
+            f"{V3}/tools", json=payload, params=_creator_params(ctoken),
+        )
+        tool_id = reg.json()["id"]
+        await client.put(
+            f"{V3}/tools/{tool_id}/approve",
+            json={"notes": "ok"},
+            params=_creator_params(ctoken),
+        )
+        resp = await client.get(
+            f"{V3}/tools", params={"domain": "special.io"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        for t in body["tools"]:
+            assert t["domain"] == "special.io"
+
+    @pytest.mark.asyncio
+    async def test_list_tools_status_filter(self, client, make_creator):
+        """GET /tools?status=pending returns only pending tools."""
+        creator, ctoken = await make_creator()
+        payload = _tool_payload(name="status-test")
+        await client.post(
+            f"{V3}/tools", json=payload, params=_creator_params(ctoken),
+        )
+        resp = await client.get(
+            f"{V3}/tools", params={"status": "pending"},
+        )
+        assert resp.status_code == 200
+        for t in resp.json()["tools"]:
+            assert t["status"] == "pending"
+
+
+class TestExtraActionFilters:
+    """Additional tests for action listing query/category branches."""
+
+    @pytest.mark.asyncio
+    async def test_list_actions_query_too_long_400(self, client):
+        """GET /actions?q= with >500 chars returns 400."""
+        long_q = "a" * 501
+        resp = await client.get(f"{V3}/actions", params={"q": long_q})
+        assert resp.status_code == 400
+        assert "too long" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_list_actions_with_category_filter(
+        self, client, make_agent, make_creator,
+    ):
+        """GET /actions?category= filters by category."""
+        creator, ctoken = await make_creator()
+        agent, atoken = await make_agent()
+        payload = _tool_payload(name="cat-tool", category="finance")
+        reg = await client.post(
+            f"{V3}/tools", json=payload, params=_creator_params(ctoken),
+        )
+        tool_id = reg.json()["id"]
+        await client.put(
+            f"{V3}/tools/{tool_id}/approve",
+            json={"notes": "ok"},
+            params=_creator_params(ctoken),
+        )
+        await client.post(
+            f"{V3}/actions",
+            json=_action_payload(tool_id, title="Finance Action"),
+            headers=_agent_headers(atoken),
+        )
+        resp = await client.get(
+            f"{V3}/actions", params={"category": "finance"},
+        )
+        assert resp.status_code == 200
+
+
+class TestExtraExecutionPaths:
+    """Additional tests for execution edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_execute_nonexistent_listing_400(
+        self, client, make_agent,
+    ):
+        """POST /execute/{id} with non-existent action returns 400."""
+        agent, atoken = await make_agent()
+        resp = await client.post(
+            f"{V3}/execute/nonexistent-action-id",
+            json={"parameters": {}, "consent": True},
+            headers=_agent_headers(atoken),
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_list_executions_status_filter(
+        self, client, make_agent, make_creator,
+    ):
+        """GET /executions?status= filters by status."""
+        creator, ctoken = await make_creator()
+        agent, atoken = await make_agent()
+        # Create approved tool + action + execute it
+        payload = _tool_payload(name="ef-tool")
+        reg = await client.post(
+            f"{V3}/tools", json=payload, params=_creator_params(ctoken),
+        )
+        tool_id = reg.json()["id"]
+        await client.put(
+            f"{V3}/tools/{tool_id}/approve",
+            json={"notes": "ok"},
+            params=_creator_params(ctoken),
+        )
+        act = await client.post(
+            f"{V3}/actions",
+            json=_action_payload(tool_id, title="EF Action", requires_consent=False),
+            headers=_agent_headers(atoken),
+        )
+        act_id = act.json()["id"]
+        await client.post(
+            f"{V3}/execute/{act_id}",
+            json={"parameters": {}, "consent": True},
+            headers=_agent_headers(atoken),
+        )
+        # Filter by completed status
+        resp = await client.get(
+            f"{V3}/executions",
+            params={"status": "completed"},
+            headers=_agent_headers(atoken),
+        )
+        assert resp.status_code == 200
+        for e in resp.json()["executions"]:
+            assert e["status"] == "completed"
+
+
+class TestExtraToolFields:
+    """Additional tests for tool detail fields."""
+
+    @pytest.mark.asyncio
+    async def test_get_tool_returns_all_fields(self, client, make_creator):
+        """GET /tools/{id} returns all expected fields."""
+        creator, ctoken = await make_creator()
+        payload = _tool_payload(name="fields-tool")
+        reg = await client.post(
+            f"{V3}/tools", json=payload, params=_creator_params(ctoken),
+        )
+        tool_id = reg.json()["id"]
+        resp = await client.get(f"{V3}/tools/{tool_id}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["id"] == tool_id
+        assert body["name"] == "fields-tool"
+        assert "domain" in body
+        assert "category" in body
+        assert "status" in body
+
+    @pytest.mark.asyncio
+    async def test_approve_tool_returns_updated_status(
+        self, client, make_creator,
+    ):
+        """PUT /tools/{id}/approve returns tool with approved status."""
+        creator, ctoken = await make_creator()
+        payload = _tool_payload(name="approve-fields-tool")
+        reg = await client.post(
+            f"{V3}/tools", json=payload, params=_creator_params(ctoken),
+        )
+        tool_id = reg.json()["id"]
+        resp = await client.put(
+            f"{V3}/tools/{tool_id}/approve",
+            json={"notes": "looks good"},
+            params=_creator_params(ctoken),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "approved"
+        assert body["id"] == tool_id
+
+
+class TestExtraCancelExecution:
+    """Additional cancel execution tests."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_execution_not_owner(
+        self, client, make_agent, make_creator,
+    ):
+        """Cancel by non-owner is rejected."""
+        creator, ctoken = await make_creator()
+        agent1, atoken1 = await make_agent()
+        agent2, atoken2 = await make_agent()
+        payload = _tool_payload(name="cancel-owner-tool")
+        reg = await client.post(
+            f"{V3}/tools", json=payload, params=_creator_params(ctoken),
+        )
+        tool_id = reg.json()["id"]
+        await client.put(
+            f"{V3}/tools/{tool_id}/approve",
+            json={"notes": "ok"},
+            params=_creator_params(ctoken),
+        )
+        act = await client.post(
+            f"{V3}/actions",
+            json=_action_payload(tool_id, title="Cancel Owner Act"),
+            headers=_agent_headers(atoken1),
+        )
+        act_id = act.json()["id"]
+        exec_resp = await client.post(
+            f"{V3}/execute/{act_id}",
+            json={"parameters": {}, "consent": True},
+            headers=_agent_headers(atoken1),
+        )
+        exec_id = exec_resp.json()["id"]
+        # Agent2 tries to cancel agent1 execution
+        cancel = await client.post(
+            f"{V3}/executions/{exec_id}/cancel",
+            headers=_agent_headers(atoken2),
+        )
+        # Should be 400 (ValueError from service) or 404
+        assert cancel.status_code in (400, 404)

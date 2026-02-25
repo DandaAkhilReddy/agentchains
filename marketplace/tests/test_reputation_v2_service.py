@@ -646,3 +646,236 @@ class TestGetReputationV2Service:
 
         # Clean up
         mod._reputation_v2_service = None
+
+
+
+# ===================================================================
+# 8. Additional tests for uncovered lines
+# ===================================================================
+
+
+class TestImportFallback:
+    """Test the ImportError fallback path (lines 29-31)."""
+
+    def test_import_error_sets_flag_false(self) -> None:
+        """When marketplace.ml.reputation_model is unavailable, _HAS_ML_MODEL=False."""
+        import importlib
+        import sys
+        import marketplace.services.reputation_v2_service as mod
+
+        # Save original state
+        original_has = mod._HAS_ML_MODEL
+        original_modules = {}
+        for key in list(sys.modules.keys()):
+            if 'reputation_model' in key:
+                original_modules[key] = sys.modules.pop(key)
+
+        # Temporarily make the import fail
+        import builtins
+        real_import = builtins.__import__
+
+        def fail_import(name, *args, **kwargs):
+            if 'reputation_model' in name:
+                raise ImportError('test: no ml module')
+            return real_import(name, *args, **kwargs)
+
+        builtins.__import__ = fail_import
+        try:
+            importlib.reload(mod)
+            assert mod._HAS_ML_MODEL is False
+        finally:
+            builtins.__import__ = real_import
+            # Restore modules
+            sys.modules.update(original_modules)
+            importlib.reload(mod)
+
+
+class TestModelLoadingPaths:
+    """Test model loading in __init__ (lines 66, 69-71)."""
+
+    def test_model_loaded_successfully_logs(self) -> None:
+        """When ReputationModel loads and has _model, line 66 is hit."""
+        import marketplace.services.reputation_v2_service as mod
+        original_has = mod._HAS_ML_MODEL
+        mod._HAS_ML_MODEL = True
+
+        mock_model_cls = MagicMock()
+        mock_instance = MagicMock()
+        mock_instance._model = MagicMock()  # non-None -> model loaded
+        mock_model_cls.return_value = mock_instance
+
+        with patch.dict('sys.modules', {'marketplace.ml.reputation_model': MagicMock(ReputationModel=mock_model_cls)}):
+            with patch.object(mod, 'ReputationModel', mock_model_cls, create=True):
+                svc = ReputationV2Service()
+                assert svc._model is mock_instance
+
+        mod._HAS_ML_MODEL = original_has
+
+    def test_model_loading_exception_falls_back(self) -> None:
+        """When ReputationModel() raises, lines 69-71 are hit."""
+        import marketplace.services.reputation_v2_service as mod
+        original_has = mod._HAS_ML_MODEL
+        mod._HAS_ML_MODEL = True
+
+        mock_model_cls = MagicMock(side_effect=RuntimeError('model init crash'))
+
+        with patch.dict('sys.modules', {'marketplace.ml.reputation_model': MagicMock(ReputationModel=mock_model_cls)}):
+            with patch.object(mod, 'ReputationModel', mock_model_cls, create=True):
+                svc = ReputationV2Service()
+                assert svc._model is None
+
+        mod._HAS_ML_MODEL = original_has
+
+
+
+
+
+class TestRatingParsing:
+    """Test rating parsing with ValueError/TypeError (lines 122-125).
+
+    Transaction model has no rating column; these lines are defensive
+    future-proofing. We exercise them by mocking DB query results.
+    """
+
+    async def test_rating_parsing_via_mock(self, db: AsyncSession) -> None:
+        """Exercise lines 122-125 by patching select to return rated transactions."""
+        seller = await _create_agent(db)
+
+        svc = ReputationV2Service.__new__(ReputationV2Service)
+        svc._model = None
+
+        class FakeTx:
+            def __init__(self, status, rating=None):
+                self.status = status
+                self.rating = rating
+                self.seller_id = seller.id
+                self.buyer_id = "other"
+                self.initiated_at = None
+                self.delivered_at = None
+
+        class FakeScalars:
+            def __init__(self, items):
+                self._items = items
+            def all(self):
+                return self._items
+
+        class FakeRes:
+            def __init__(self, items):
+                self._items = items
+            def scalar_one_or_none(self):
+                return self._items[0] if self._items else None
+            def scalars(self):
+                return FakeScalars(self._items)
+
+        original_execute = db.execute
+        call_count = 0
+
+        async def patched_execute(stmt, *a, **kw):
+            nonlocal call_count
+            call_count += 1
+            real_result = await original_execute(stmt, *a, **kw)
+            if call_count == 2:
+                return FakeRes([
+                    FakeTx("completed", rating=4.5),
+                    FakeTx("completed", rating="bad_value"),
+                    FakeTx("completed", rating=None),
+                ])
+            if call_count == 3:
+                return FakeRes([])
+            return real_result
+
+        db.execute = patched_execute
+        try:
+            features = await svc.compute_features(db, seller.id)
+            assert features["avg_rating"] == 4.5
+        finally:
+            db.execute = original_execute
+
+    async def test_rating_value_error_path(self, db: AsyncSession) -> None:
+        """Exercise ValueError path in rating parsing (line 124)."""
+        seller = await _create_agent(db)
+        svc = ReputationV2Service.__new__(ReputationV2Service)
+        svc._model = None
+        class FakeTx:
+            def __init__(self, status, rating):
+                self.status = status
+                self.rating = rating
+                self.seller_id = seller.id
+                self.buyer_id = "other"
+                self.initiated_at = None
+                self.delivered_at = None
+        class FakeScalars:
+            def __init__(self, items): self._items = items
+            def all(self): return self._items
+        class FakeRes:
+            def __init__(self, items): self._items = items
+            def scalar_one_or_none(self): return self._items[0] if self._items else None
+            def scalars(self): return FakeScalars(self._items)
+        original_execute = db.execute
+        call_count = 0
+        async def patched_execute(stmt, *a, **kw):
+            nonlocal call_count
+            call_count += 1
+            real = await original_execute(stmt, *a, **kw)
+            if call_count == 2:
+                return FakeRes([FakeTx("completed", rating="not_numeric")])
+            if call_count == 3:
+                return FakeRes([])
+            return real
+        db.execute = patched_execute
+        try:
+            features = await svc.compute_features(db, seller.id)
+            assert features["avg_rating"] == 0.5
+        finally:
+            db.execute = original_execute
+
+    async def test_rating_type_error_path(self, db: AsyncSession) -> None:
+        """Exercise TypeError path in rating parsing (line 124)."""
+        seller = await _create_agent(db)
+        svc = ReputationV2Service.__new__(ReputationV2Service)
+        svc._model = None
+        class FakeTx:
+            def __init__(self, status, rating):
+                self.status = status
+                self.rating = rating
+                self.seller_id = seller.id
+                self.buyer_id = "other"
+                self.initiated_at = None
+                self.delivered_at = None
+        class FakeScalars:
+            def __init__(self, items): self._items = items
+            def all(self): return self._items
+        class FakeRes:
+            def __init__(self, items): self._items = items
+            def scalar_one_or_none(self): return self._items[0] if self._items else None
+            def scalars(self): return FakeScalars(self._items)
+        original_execute = db.execute
+        call_count = 0
+        async def patched_execute(stmt, *a, **kw):
+            nonlocal call_count
+            call_count += 1
+            real = await original_execute(stmt, *a, **kw)
+            if call_count == 2:
+                return FakeRes([FakeTx("completed", rating=object())])
+            if call_count == 3:
+                return FakeRes([])
+            return real
+        db.execute = patched_execute
+        try:
+            features = await svc.compute_features(db, seller.id)
+            assert features["avg_rating"] == 0.5
+        finally:
+            db.execute = original_execute
+
+    async def test_rating_with_none_type(self, db: AsyncSession) -> None:
+        """Transactions with None rating are skipped (line 121 check)."""
+        seller = await _create_agent(db)
+        buyer = await _create_agent(db)
+        listing = await _create_listing(db, seller.id)
+        await _create_transaction(
+            db, buyer.id, seller.id, listing.id, status="completed", rating=None,
+        )
+        svc = ReputationV2Service.__new__(ReputationV2Service)
+        svc._model = None
+        features = await svc.compute_features(db, seller.id)
+        assert features["avg_rating"] == 0.5

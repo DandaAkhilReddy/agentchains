@@ -346,7 +346,7 @@ class TestInitializePlugin:
             author="A",
             entry_point="nonexistent.module.path:SomeClass",
         )
-        with pytest.raises(ImportError):
+        with pytest.raises(ValueError, match="Plugin module must be under"):
             initialize_plugin(manifest)
 
     async def test_nonexistent_class_raises_attribute_error(self):

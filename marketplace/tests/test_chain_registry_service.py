@@ -401,3 +401,126 @@ async def test_provenance_allowed_author(db, make_agent):
     )
     assert "error" not in result
     assert result["chain_execution_id"] == execution.id
+
+
+# ---------------------------------------------------------------------------
+# Additional tests for uncovered lines
+# ---------------------------------------------------------------------------
+
+
+class TestRedactNonDict:
+    def test_non_dict_returns_as_is(self):
+        result = _redact_sensitive_keys("not a dict")
+        assert result == "not a dict"
+
+
+class TestValidateGraphSkipsNonAgentCall:
+    @pytest.mark.asyncio
+    async def test_skips_non_agent_call_nodes(self, db, make_agent):
+        agent, _ = await make_agent()
+        graph = {
+            "nodes": {
+                "n1": {"type": "transform", "config": {}},
+                "n2": {"type": "agent_call", "config": {"agent_id": agent.id}},
+            },
+            "edges": [],
+        }
+        result = await chain_registry_service.validate_graph_agents(db, graph)
+        assert agent.id in result
+
+
+class TestValidateGraphAgentNotFound:
+    @pytest.mark.asyncio
+    async def test_nonexistent_agent(self, db):
+        graph = {"nodes": {"n1": {"type": "agent_call", "config": {"agent_id": "nonexistent"}}}, "edges": []}
+        with pytest.raises(ValueError, match="not found"):
+            await chain_registry_service.validate_graph_agents(db, graph)
+
+
+class TestListChainTemplates:
+    @pytest.mark.asyncio
+    async def test_list_empty(self, db):
+        templates, total = await chain_registry_service.list_chain_templates(db)
+        assert templates == []
+        assert total == 0
+
+    @pytest.mark.asyncio
+    async def test_list_with_filters(self, db, make_agent):
+        agent, _ = await make_agent()
+        graph = _make_graph([agent.id])
+        await chain_registry_service.publish_chain_template(
+            db, name="Cat1", graph_json=json.dumps(graph), author_id=agent.id, category="test",
+        )
+        await chain_registry_service.publish_chain_template(
+            db, name="Cat2", graph_json=json.dumps(graph), author_id=agent.id, category="other",
+        )
+        templates, total = await chain_registry_service.list_chain_templates(db, category="test")
+        assert total == 1
+        assert templates[0].name == "Cat1"
+
+    @pytest.mark.asyncio
+    async def test_list_by_author(self, db, make_agent):
+        a1, _ = await make_agent()
+        a2, _ = await make_agent()
+        graph = _make_graph([a1.id])
+        await chain_registry_service.publish_chain_template(
+            db, name="A1", graph_json=json.dumps(graph), author_id=a1.id,
+        )
+        templates, total = await chain_registry_service.list_chain_templates(db, author_id=a1.id)
+        assert total == 1
+
+    @pytest.mark.asyncio
+    async def test_list_by_status(self, db, make_agent):
+        a, _ = await make_agent()
+        graph = _make_graph([a.id])
+        await chain_registry_service.publish_chain_template(
+            db, name="S1", graph_json=json.dumps(graph), author_id=a.id,
+        )
+        templates, total = await chain_registry_service.list_chain_templates(db, status="active")
+        assert total >= 1
+
+
+class TestForkWithNewGraph:
+    @pytest.mark.asyncio
+    async def test_fork_with_invalid_graph(self, db, make_agent):
+        author, _ = await make_agent()
+        graph = _make_graph([author.id])
+        original = await chain_registry_service.publish_chain_template(
+            db, name="Orig", graph_json=json.dumps(graph), author_id=author.id,
+        )
+        with pytest.raises(ValueError, match="valid JSON"):
+            await chain_registry_service.fork_chain_template(
+                db, source_template_id=original.id, new_author_id=author.id, graph_json="bad{",
+            )
+
+
+class TestResolveGraphEndpoints:
+    @pytest.mark.asyncio
+    async def test_missing_agent_id_in_resolve(self, db):
+        graph = {"nodes": {"n1": {"type": "agent_call", "config": {}}}, "edges": []}
+        with pytest.raises(ValueError, match="missing config.agent_id"):
+            await chain_registry_service._resolve_graph_endpoints(db, graph)
+
+    @pytest.mark.asyncio
+    async def test_inactive_agent_in_resolve(self, db, make_agent):
+        agent, _ = await make_agent()
+        agent.status = "suspended"
+        await db.commit()
+        graph = {"nodes": {"n1": {"type": "agent_call", "config": {"agent_id": agent.id}}}, "edges": []}
+        with pytest.raises(ValueError, match="not found or not active"):
+            await chain_registry_service._resolve_graph_endpoints(db, graph)
+
+
+class TestExecuteChainErrors:
+    @pytest.mark.asyncio
+    async def test_execute_nonexistent_template(self, db, make_agent):
+        a, _ = await make_agent()
+        with pytest.raises(ValueError, match="not found"):
+            await chain_registry_service.execute_chain(db, "nonexistent", a.id)
+
+
+class TestProvenanceErrors:
+    @pytest.mark.asyncio
+    async def test_provenance_not_found(self, db):
+        with pytest.raises(ValueError, match="not found"):
+            await chain_registry_service.get_chain_provenance(db, "nonexistent", "agent-1")

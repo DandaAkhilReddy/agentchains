@@ -1247,3 +1247,357 @@ async def test_get_cost_estimate_404(client):
         headers=_auth(token),
     )
     assert resp.status_code == 404
+
+
+# ===========================================================================
+# Extra coverage tests -- uncovered code paths (appended by coverage push)
+# ===========================================================================
+
+
+async def test_create_chain_template_with_tags(client):
+    """POST /chain-templates with tags populates tags_json."""
+    aid, token = await _create_agent()
+    graph = _simple_graph(aid)
+    resp = await client.post(
+        f"{V5}/chain-templates",
+        json={
+            "name": "tagged-chain",
+            "graph_json": graph,
+            "tags": ["nlp", "summarize"],
+        },
+        headers=_auth(token),
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert "nlp" in body["tags"]
+    assert "summarize" in body["tags"]
+
+
+async def test_list_chain_templates_offset_beyond_total(client):
+    """list with offset beyond total returns empty list."""
+    _, token = await _create_agent()
+    resp = await client.get(
+        f"{V5}/chain-templates",
+        params={"offset": 9999},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["templates"] == []
+    assert body["offset"] == 9999
+
+
+async def test_fork_chain_uses_original_graph_when_none(client):
+    """Fork without graph_json keeps original graph."""
+    aid, token = await _create_agent()
+    graph = _simple_graph(aid)
+    create = await client.post(
+        f"{V5}/chain-templates",
+        json={"name": "orig", "graph_json": graph},
+        headers=_auth(token),
+    )
+    tid = create.json()["id"]
+    fork_resp = await client.post(
+        f"{V5}/chain-templates/{tid}/fork",
+        json={"name": "forked-no-graph"},
+        headers=_auth(token),
+    )
+    assert fork_resp.status_code == 201
+    body = fork_resp.json()
+    assert body["forked_from_id"] == tid
+    assert body["graph_json"] == graph
+
+
+async def test_execute_chain_with_input_data(client):
+    """Execute with non-empty input_data stores it in input_json."""
+    aid, token = await _create_agent()
+    graph = _simple_graph(aid)
+    cr = await client.post(
+        f"{V5}/chain-templates",
+        json={"name": "exec-input", "graph_json": graph},
+        headers=_auth(token),
+    )
+    tid = cr.json()["id"]
+    resp = await client.post(
+        f"{V5}/chain-templates/{tid}/execute",
+        json={"input_data": {"query": "hello"}},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 202
+    body = resp.json()
+    import json as _json
+    inp = _json.loads(body["input_json"]) if body["input_json"] else {}
+    assert inp.get("query") == "hello"
+
+
+async def test_get_chain_execution_response_fields(client):
+    """GET /chain-executions/{id} returns all expected fields."""
+    aid, token = await _create_agent()
+    graph = _simple_graph(aid)
+    cr = await client.post(
+        f"{V5}/chain-templates",
+        json={"name": "exec-fields", "graph_json": graph},
+        headers=_auth(token),
+    )
+    tid = cr.json()["id"]
+    ex = await client.post(
+        f"{V5}/chain-templates/{tid}/execute",
+        json={},
+        headers=_auth(token),
+    )
+    eid = ex.json()["id"]
+    resp = await client.get(
+        f"{V5}/chain-executions/{eid}", headers=_auth(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    for key in ["id", "chain_template_id", "initiated_by", "status",
+                "input_json", "output_json", "total_cost_usd",
+                "participant_agents", "provenance_hash", "created_at"]:
+        assert key in body
+
+
+async def test_list_chain_executions_non_author_filter(client):
+    """Non-author agent sees only own executions via list endpoint."""
+    aid1, token1 = await _create_agent()
+    aid2, token2 = await _create_agent()
+    graph = _simple_graph(aid1)
+    cr = await client.post(
+        f"{V5}/chain-templates",
+        json={"name": "exec-filter", "graph_json": graph},
+        headers=_auth(token1),
+    )
+    tid = cr.json()["id"]
+    # Author executes
+    await client.post(
+        f"{V5}/chain-templates/{tid}/execute",
+        json={}, headers=_auth(token1),
+    )
+    # Non-author executes
+    await client.post(
+        f"{V5}/chain-templates/{tid}/execute",
+        json={}, headers=_auth(token2),
+    )
+    # Non-author sees only own
+    resp = await client.get(
+        f"{V5}/chain-templates/{tid}/executions",
+        headers=_auth(token2),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    for ex in body["executions"]:
+        assert ex["initiated_by"] == aid2
+
+
+async def test_compose_chain_short_task_rejected(client):
+    """POST /chains/compose rejects task_description < 5 chars."""
+    _, token = await _create_agent()
+    resp = await client.post(
+        f"{V5}/chains/compose",
+        json={"task_description": "hi"},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 422
+
+
+async def test_suggest_agents_max_price_filter(client):
+    """POST /chains/suggest-agents with max_price filter."""
+    _, token = await _create_agent()
+    resp = await client.post(
+        f"{V5}/chains/suggest-agents",
+        json={"capability": "nlp", "max_price": 0.01, "min_quality": 0.5},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["capability"] == "nlp"
+    assert "agents" in body
+    assert "total" in body
+
+
+async def test_popular_chains_empty_result(client):
+    """GET /chains/popular with no chains returns empty list."""
+    _, token = await _create_agent()
+    resp = await client.get(
+        f"{V5}/chains/popular", headers=_auth(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["chains"] == []
+    assert body["total"] == 0
+
+
+async def test_popular_chains_with_category_filter(client):
+    """GET /chains/popular?category= applies category filter."""
+    _, token = await _create_agent()
+    resp = await client.get(
+        f"{V5}/chains/popular",
+        params={"category": "nonexistent-cat"},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 0
+
+
+async def test_agent_chain_stats_fields(client):
+    """GET /chains/agents/{id}/stats returns stats structure."""
+    aid, token = await _create_agent()
+    resp = await client.get(
+        f"{V5}/chains/agents/{aid}/stats", headers=_auth(token),
+    )
+    assert resp.status_code == 200
+
+
+async def test_create_policy_with_invalid_rules_json(client):
+    """POST /chains/policies with invalid JSON in rules_json returns 400."""
+    _, token = await _create_agent()
+    resp = await client.post(
+        f"{V5}/chains/policies",
+        json={
+            "name": "bad-rules",
+            "policy_type": "budget_limit",
+            "rules_json": "not valid json{{",
+        },
+        headers=_auth(token),
+    )
+    assert resp.status_code == 400
+    assert "rules_json" in resp.json()["detail"].lower()
+
+
+async def test_list_policies_with_owner_filter(client):
+    """GET /chains/policies?owner_id= filters by owner."""
+    aid, token = await _create_agent()
+    # Create a policy
+    await client.post(
+        f"{V5}/chains/policies",
+        json={
+            "name": "owner-filter-pol",
+            "policy_type": "budget_limit",
+            "rules_json": "{}",
+        },
+        headers=_auth(token),
+    )
+    resp = await client.get(
+        f"{V5}/chains/policies",
+        params={"owner_id": aid},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200
+    for p in resp.json()["policies"]:
+        assert p["owner_id"] == aid
+
+
+async def test_evaluate_policies_template_not_found(client):
+    """POST /chains/{id}/evaluate-policies with bad template_id returns 404."""
+    _, token = await _create_agent()
+    resp = await client.post(
+        f"{V5}/chains/missing-template-id/evaluate-policies",
+        json={"policy_ids": ["pol-1"]},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 404
+
+
+async def test_settlement_wrong_agent_403(client):
+    """GET /chain-executions/{id}/settlement by non-initiator returns 403."""
+    aid1, token1 = await _create_agent()
+    _, token2 = await _create_agent()
+    graph = _simple_graph(aid1)
+    cr = await client.post(
+        f"{V5}/chain-templates",
+        json={"name": "settle-403", "graph_json": graph},
+        headers=_auth(token1),
+    )
+    tid = cr.json()["id"]
+    ex = await client.post(
+        f"{V5}/chain-templates/{tid}/execute",
+        json={}, headers=_auth(token1),
+    )
+    eid = ex.json()["id"]
+    resp = await client.get(
+        f"{V5}/chain-executions/{eid}/settlement",
+        headers=_auth(token2),
+    )
+    assert resp.status_code == 403
+
+
+async def test_cost_estimate_response_fields(client):
+    """GET /chain-templates/{id}/cost-estimate returns expected shape."""
+    aid, token = await _create_agent()
+    graph = _simple_graph(aid)
+    cr = await client.post(
+        f"{V5}/chain-templates",
+        json={"name": "cost-est", "graph_json": graph},
+        headers=_auth(token),
+    )
+    tid = cr.json()["id"]
+    resp = await client.get(
+        f"{V5}/chain-templates/{tid}/cost-estimate",
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200
+
+
+async def test_provenance_entries_by_author(client):
+    """Author can view provenance entries for any execution of their template."""
+    aid, token = await _create_agent()
+    graph = _simple_graph(aid)
+    cr = await client.post(
+        f"{V5}/chain-templates",
+        json={"name": "prov-ent", "graph_json": graph},
+        headers=_auth(token),
+    )
+    tid = cr.json()["id"]
+    ex = await client.post(
+        f"{V5}/chain-templates/{tid}/execute",
+        json={}, headers=_auth(token),
+    )
+    eid = ex.json()["id"]
+    resp = await client.get(
+        f"{V5}/chain-executions/{eid}/provenance-entries",
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "entries" in body
+    assert "total" in body
+
+
+async def test_provenance_entries_with_event_type_filter(client):
+    """GET /chain-executions/{id}/provenance-entries?event_type= works."""
+    aid, token = await _create_agent()
+    graph = _simple_graph(aid)
+    cr = await client.post(
+        f"{V5}/chain-templates",
+        json={"name": "prov-filter", "graph_json": graph},
+        headers=_auth(token),
+    )
+    tid = cr.json()["id"]
+    ex = await client.post(
+        f"{V5}/chain-templates/{tid}/execute",
+        json={}, headers=_auth(token),
+    )
+    eid = ex.json()["id"]
+    resp = await client.get(
+        f"{V5}/chain-executions/{eid}/provenance-entries",
+        params={"event_type": "node_start"},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200
+
+
+async def test_validate_chain_response_fields(client):
+    """POST /chains/{id}/validate returns validation result."""
+    aid, token = await _create_agent()
+    graph = _simple_graph(aid)
+    cr = await client.post(
+        f"{V5}/chain-templates",
+        json={"name": "val-fields", "graph_json": graph},
+        headers=_auth(token),
+    )
+    tid = cr.json()["id"]
+    resp = await client.post(
+        f"{V5}/chains/{tid}/validate",
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200

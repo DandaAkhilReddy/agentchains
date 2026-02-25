@@ -258,3 +258,101 @@ async def test_get_history_paginated(db: AsyncSession, make_agent, make_token_ac
     assert total >= 2
     assert isinstance(entries, list)
     assert len(entries) >= 2
+
+
+# ---------------------------------------------------------------------------
+# Additional tests for uncovered lines
+# ---------------------------------------------------------------------------
+
+
+async def test_get_balance_nonexistent_agent(db: AsyncSession, seed_platform):
+    """get_balance raises ValueError for nonexistent agent (line 239)."""
+    with pytest.raises(ValueError, match="No token account"):
+        await token_service.get_balance(db, "nonexistent-agent-id")
+
+
+async def test_transfer_no_platform_account(db: AsyncSession, make_agent, make_token_account):
+    """transfer raises when platform account is missing (line 304)."""
+    a, _ = await make_agent("noplatform_a")
+    b, _ = await make_agent("noplatform_b")
+    await make_token_account(a.id, 100)
+    await make_token_account(b.id, 0)
+    with pytest.raises(ValueError, match="Platform treasury"):
+        await token_service.transfer(db, a.id, b.id, 10, "purchase")
+
+
+async def test_deposit_nonexistent_agent(db: AsyncSession, seed_platform):
+    """deposit raises for nonexistent agent (line 426)."""
+    with pytest.raises(ValueError, match="No token account"):
+        await token_service.deposit(db, "nonexistent-id", 100)
+
+
+async def test_deposit_no_platform_account(db: AsyncSession, make_agent, make_token_account):
+    """deposit raises when platform account is missing (line 430)."""
+    agent, _ = await make_agent("dep_no_plat")
+    await make_token_account(agent.id, 0)
+    with pytest.raises(ValueError, match="Platform treasury"):
+        await token_service.deposit(db, agent.id, 100)
+
+
+async def test_get_history_nonexistent_agent(db: AsyncSession, seed_platform):
+    """get_history returns empty for nonexistent agent (line 560)."""
+    entries, total = await token_service.get_history(db, "nonexistent-agent-id")
+    assert entries == []
+    assert total == 0
+
+
+async def test_get_creator_balance_nonexistent(db: AsyncSession, seed_platform):
+    """get_creator_balance raises for nonexistent creator (lines 608-613)."""
+    with pytest.raises(ValueError, match="No token account for creator"):
+        await token_service.get_creator_balance(db, "nonexistent-creator-id")
+
+
+async def test_get_creator_balance_success(db: AsyncSession, make_agent, make_creator, seed_platform):
+    """get_creator_balance returns balance dict for existing creator (lines 608-613)."""
+    creator, _ = await make_creator()
+    # Create a token account for the creator
+    from marketplace.models.token_account import TokenAccount
+    import uuid
+    creator_acct = TokenAccount(
+        id=str(uuid.uuid4()),
+        creator_id=creator.id,
+        balance=Decimal("42.50"),
+    )
+    db.add(creator_acct)
+    await db.commit()
+    await db.refresh(creator_acct)
+    bal = await token_service.get_creator_balance(db, creator.id)
+    assert bal["balance"] == 42.5
+    assert "total_earned" in bal
+
+
+async def test_transfer_with_creator_royalty(db: AsyncSession, make_agent, make_token_account, make_creator, seed_platform):
+    """Transfer with purchase tx_type triggers creator royalty (lines 132-188)."""
+    creator, _ = await make_creator()
+    seller, _ = await make_agent("royalty_seller")
+    buyer, _ = await make_agent("royalty_buyer")
+    # Link seller to creator
+    seller.creator_id = creator.id
+    await db.commit()
+    # Create accounts
+    await make_token_account(buyer.id, 1000)
+    await make_token_account(seller.id, 0)
+    # Create creator token account
+    from marketplace.models.token_account import TokenAccount
+    import uuid
+    creator_acct = TokenAccount(
+        id=str(uuid.uuid4()),
+        creator_id=creator.id,
+        balance=Decimal("0"),
+    )
+    db.add(creator_acct)
+    await db.commit()
+    # Do a purchase transfer
+    ledger = await token_service.transfer(
+        db, buyer.id, seller.id, 100, "purchase", reference_id="tx-royalty-1",
+    )
+    assert float(ledger.amount) == 100.0
+    # Creator should have received royalty
+    await db.refresh(creator_acct)
+    assert float(creator_acct.balance) > 0

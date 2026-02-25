@@ -420,33 +420,33 @@ async def test_v3_get_execution_cost_not_found(client, make_agent):
 
 
 async def test_v3_pause_execution_not_found_or_conflict(client, make_agent):
-    """POST /api/v3/executions/{id}/pause for a non-running execution returns 409."""
+    """POST /api/v3/executions/{id}/pause for a non-existent execution returns 404."""
     _, token = await make_agent()
     resp = await client.post(
         f"{_V3}/executions/ghost-exec/pause",
         headers=_auth(token),
     )
-    assert resp.status_code == 409
+    assert resp.status_code == 404
 
 
 async def test_v3_resume_execution_not_found_or_conflict(client, make_agent):
-    """POST /api/v3/executions/{id}/resume for a non-paused execution returns 409."""
+    """POST /api/v3/executions/{id}/resume for a non-existent execution returns 404."""
     _, token = await make_agent()
     resp = await client.post(
         f"{_V3}/executions/ghost-exec/resume",
         headers=_auth(token),
     )
-    assert resp.status_code == 409
+    assert resp.status_code == 404
 
 
 async def test_v3_cancel_execution_not_found_or_conflict(client, make_agent):
-    """POST /api/v3/executions/{id}/cancel for an unknown execution returns 409."""
+    """POST /api/v3/executions/{id}/cancel for a non-existent execution returns 404."""
     _, token = await make_agent()
     resp = await client.post(
         f"{_V3}/executions/ghost-exec/cancel",
         headers=_auth(token),
     )
-    assert resp.status_code == 409
+    assert resp.status_code == 404
 
 
 async def test_v3_cancel_execution_success(client, make_agent, db):

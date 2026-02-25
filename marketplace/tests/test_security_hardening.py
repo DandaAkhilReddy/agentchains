@@ -32,6 +32,8 @@ def _agent_token(
     payload = {
         "sub": sub,
         "name": name,
+        "aud": "agentchains-marketplace",
+        "iss": "agentchains",
         "exp": datetime.now(timezone.utc) + timedelta(seconds=exp_delta_seconds),
         "iat": datetime.now(timezone.utc),
     }

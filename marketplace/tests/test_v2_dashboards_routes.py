@@ -318,3 +318,24 @@ async def test_dashboard_agent_private_agent_not_found(client, make_creator):
         headers=_creator_auth(creator_token),
     )
     assert resp.status_code == 404
+
+
+async def test_admin_creator_ids_helper_function():
+    """Test _admin_creator_ids helper returns correct set."""
+    from marketplace.api.v2_dashboards import _admin_creator_ids
+    from marketplace.config import settings
+    original = settings.admin_creator_ids
+    try:
+        object.__setattr__(settings, "admin_creator_ids", "id1, id2, id3")
+        result = _admin_creator_ids()
+        assert result == {"id1", "id2", "id3"}
+
+        object.__setattr__(settings, "admin_creator_ids", "")
+        result = _admin_creator_ids()
+        assert result == set()
+
+        object.__setattr__(settings, "admin_creator_ids", "single")
+        result = _admin_creator_ids()
+        assert result == {"single"}
+    finally:
+        object.__setattr__(settings, "admin_creator_ids", original)

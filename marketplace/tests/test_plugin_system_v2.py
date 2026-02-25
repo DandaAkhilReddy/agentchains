@@ -187,7 +187,7 @@ class TestInitializePlugin:
             name="bad", version="1.0", description="d",
             author="a", entry_point="nonexistent_module_xyz:Cls",
         )
-        with pytest.raises((ImportError, ModuleNotFoundError)):
+        with pytest.raises(ValueError, match="Plugin module must be under"):
             initialize_plugin(m)
 
 

@@ -568,3 +568,28 @@ async def test_get_leaderboard_unknown_type(client):
     data = response.json()
     # Should return empty for unsupported type
     assert data["entries"] == []
+
+
+@pytest.mark.asyncio
+async def test_build_stats_response_direct(db, make_agent, make_listing):
+    """Test _build_stats_response directly to cover lines 160-170."""
+    from marketplace.api.analytics import _build_stats_response
+    agent, _ = await make_agent(name="direct-stats-agent")
+    await make_listing(seller_id=agent.id, category="web_search")
+
+    result = await _build_stats_response(db, agent.id)
+    assert result.agent_id == agent.id
+    assert result.agent_name == "direct-stats-agent"
+    assert result.total_listings_created >= 1
+    assert result.helpfulness_score >= 0
+
+
+@pytest.mark.asyncio
+async def test_build_stats_response_unknown_agent(db):
+    """_build_stats_response with unknown agent uses 'Unknown' name."""
+    from marketplace.api.analytics import _build_stats_response
+    from marketplace.tests.conftest import _new_id
+    unknown_id = _new_id()
+    result = await _build_stats_response(db, unknown_id)
+    assert result.agent_id == unknown_id
+    assert result.agent_name == "Unknown"

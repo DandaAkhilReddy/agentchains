@@ -658,7 +658,7 @@ class TestAgentServiceServicerExecuteTask:
 
         result = await svc.ExecuteTask(request, context)
 
-        assert result["status"] == "success"
+        assert result["status"] == "error"
         assert result["task_id"] == "t-3"
 
     async def test_execute_task_empty_input_json(self):
@@ -748,7 +748,7 @@ class TestAgentServiceServicerExecuteTask:
 
         assert result["status"] == "error"
         assert result["task_id"] == "t-err"
-        assert "kaboom" in result["error_message"]
+        assert result["error_message"] == "Internal execution error"
 
     async def test_execute_task_exception_still_decrements_active_tasks(self):
         """_active_tasks is decremented even when execution raises (finally block)."""
@@ -879,13 +879,15 @@ class TestAgentServiceServicerHealthCheck:
         from marketplace.grpc.server import AgentServiceServicer
         svc = AgentServiceServicer()
         result = await svc.HealthCheck(_make_request(), MagicMock())
-        assert result["active_tasks"] == 0
+        # Server no longer exposes active_tasks to avoid information disclosure
+        assert "status" in result
 
     async def test_health_check_uptime_positive(self):
         from marketplace.grpc.server import AgentServiceServicer
         svc = AgentServiceServicer()
         result = await svc.HealthCheck(_make_request(), MagicMock())
-        assert result["uptime_seconds"] >= 0.0
+        # Server no longer exposes uptime_seconds to avoid information disclosure
+        assert result["version"] == "1.0.0"
 
 
 class TestAgentServiceServicerGetCapabilities:
@@ -962,7 +964,7 @@ class TestAgentServiceServicerDispatchTask:
         svc = AgentServiceServicer()
         result = await svc._dispatch_task("agent_call", {"x": 1}, "agent-1")
         assert "result" in result
-        assert "agent-1" in result["result"]
+        assert result["result"] == "Agent call completed"
 
     async def test_dispatch_tool_call(self):
         from marketplace.grpc.server import AgentServiceServicer
@@ -975,13 +977,13 @@ class TestAgentServiceServicerDispatchTask:
         from marketplace.grpc.server import AgentServiceServicer
         svc = AgentServiceServicer()
         result = await svc._dispatch_task("mystery_type", {}, "agent-1")
-        assert "Unknown task type" in result["result"]
+        assert "Unsupported task type" in result["result"]
 
     async def test_dispatch_input_data_echoed(self):
         from marketplace.grpc.server import AgentServiceServicer
         svc = AgentServiceServicer()
         result = await svc._dispatch_task("agent_call", {"echo_me": True}, "agent-1")
-        assert result["input"] == {"echo_me": True}
+        assert result["result"] == "Agent call completed"
 
 
 # ===========================================================================

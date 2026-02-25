@@ -504,3 +504,38 @@ async def test_reject_payout_not_found(client, make_creator):
 
     assert resp.status_code == 400
     assert "not found" in resp.json()["detail"].lower()
+
+
+async def test_normalize_payout_method_mapping():
+    """Test _normalize_payout_method for all supported mappings."""
+    from marketplace.api.v2_payouts import _normalize_payout_method
+    assert _normalize_payout_method("bank_transfer") == "bank_withdrawal"
+    assert _normalize_payout_method("bank_withdrawal") == "bank_withdrawal"
+    assert _normalize_payout_method("upi") == "upi"
+    assert _normalize_payout_method("gift_card") == "gift_card"
+    assert _normalize_payout_method("api_credits") == "api_credits"
+
+
+async def test_normalize_payout_method_unsupported():
+    """Test _normalize_payout_method raises for unsupported method."""
+    from marketplace.api.v2_payouts import _normalize_payout_method
+    import pytest as pt
+    with pt.raises(ValueError, match="Unsupported payout_method"):
+        _normalize_payout_method("bitcoin")
+
+
+async def test_reject_payout_no_admin_configured_v2(client, make_creator):
+    """POST /requests/{id}/reject with no admin configured -> 403."""
+    creator, token = await make_creator()
+    original = settings.admin_creator_ids
+    try:
+        object.__setattr__(settings, "admin_creator_ids", "")
+        resp = await client.post(
+            f"/api/v2/payouts/requests/{_new_id()}/reject",
+            headers=_creator_auth(token),
+            json={"reason": "bad"},
+        )
+    finally:
+        object.__setattr__(settings, "admin_creator_ids", original)
+    assert resp.status_code == 403
+    assert "No admin accounts configured" in resp.json()["detail"]

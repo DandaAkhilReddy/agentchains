@@ -1349,3 +1349,265 @@ async def test_full_lifecycle_create_list_update_delete(client):
     )
     assert del_resp.status_code == 200
     assert del_resp.json()["detail"] == "Workflow archived"
+
+
+# ===========================================================================
+# Extra coverage tests -- uncovered code paths (appended by coverage push)
+# ===========================================================================
+
+
+async def test_create_workflow_with_description(client):
+    """POST /workflows with description stores it."""
+    _, jwt = await _create_agent()
+    resp = await client.post(
+        f"{V3}/workflows",
+        json={
+            "name": "desc-wf",
+            "description": "A workflow with a description",
+            "graph_json": _simple_graph(),
+        },
+        headers={"Authorization": f"Bearer {jwt}"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["description"] == "A workflow with a description"
+
+
+async def test_list_workflows_status_filter(client):
+    """GET /workflows?status=active returns only active workflows."""
+    _, jwt = await _create_agent()
+    headers = {"Authorization": f"Bearer {jwt}"}
+    # Create a workflow
+    cr = await client.post(
+        f"{V3}/workflows",
+        json={"name": "stat-wf", "graph_json": _simple_graph()},
+        headers=headers,
+    )
+    wid = cr.json()["id"]
+    # Activate it
+    await client.put(
+        f"{V3}/workflows/{wid}",
+        json={"status": "active"},
+        headers=headers,
+    )
+    resp = await client.get(
+        f"{V3}/workflows", params={"status": "active"}, headers=headers,
+    )
+    assert resp.status_code == 200
+    for w in resp.json()["workflows"]:
+        assert w["status"] == "active"
+
+
+async def test_update_workflow_name_only(client):
+    """PUT /workflows/{id} with only name field updates name."""
+    _, jwt = await _create_agent()
+    headers = {"Authorization": f"Bearer {jwt}"}
+    cr = await client.post(
+        f"{V3}/workflows",
+        json={"name": "name-upd", "graph_json": _simple_graph()},
+        headers=headers,
+    )
+    wid = cr.json()["id"]
+    resp = await client.put(
+        f"{V3}/workflows/{wid}",
+        json={"name": "renamed-wf"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "renamed-wf"
+
+
+async def test_execute_workflow_with_input_data(client):
+    """POST /workflows/{id}/execute with input_data stores it."""
+    _, jwt = await _create_agent()
+    headers = {"Authorization": f"Bearer {jwt}"}
+    cr = await client.post(
+        f"{V3}/workflows",
+        json={"name": "inp-wf", "graph_json": _simple_graph()},
+        headers=headers,
+    )
+    wid = cr.json()["id"]
+    resp = await client.post(
+        f"{V3}/workflows/{wid}/execute",
+        json={"input_data": {"key": "value"}},
+        headers=headers,
+    )
+    assert resp.status_code == 202
+    eid = resp.json()["execution_id"]
+    # Get the execution to verify input was stored
+    get_resp = await client.get(
+        f"{V3}/executions/{eid}", headers=headers,
+    )
+    assert get_resp.status_code == 200
+    body = get_resp.json()
+    assert body["input_json"] is not None
+
+
+async def test_get_execution_cost_with_node_costs(client):
+    """GET /executions/{id}/cost returns node_costs array."""
+    aid, jwt = await _create_agent()
+    headers = {"Authorization": f"Bearer {jwt}"}
+    cr = await client.post(
+        f"{V3}/workflows",
+        json={"name": "cost-wf", "graph_json": _two_node_graph()},
+        headers=headers,
+    )
+    wid = cr.json()["id"]
+    ex = await client.post(
+        f"{V3}/workflows/{wid}/execute",
+        json={}, headers=headers,
+    )
+    eid = ex.json()["execution_id"]
+    resp = await client.get(
+        f"{V3}/executions/{eid}/cost", headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "node_costs" in body
+    assert "total_cost_usd" in body
+    assert body["execution_id"] == eid
+    assert body["workflow_id"] == wid
+
+
+async def test_pause_already_paused_execution_409(client):
+    """Pausing an already-paused execution returns 409."""
+    _, jwt = await _create_agent()
+    headers = {"Authorization": f"Bearer {jwt}"}
+    cr = await client.post(
+        f"{V3}/workflows",
+        json={"name": "pp-wf", "graph_json": _simple_graph()},
+        headers=headers,
+    )
+    wid = cr.json()["id"]
+    ex = await client.post(
+        f"{V3}/workflows/{wid}/execute",
+        json={}, headers=headers,
+    )
+    eid = ex.json()["execution_id"]
+    # Set execution to paused directly
+    async with TestSession() as db:
+        from sqlalchemy import select as sel
+        r = await db.execute(
+            sel(WorkflowExecution).where(WorkflowExecution.id == eid)
+        )
+        e = r.scalar_one()
+        e.status = "paused"
+        await db.commit()
+    resp = await client.post(
+        f"{V3}/executions/{eid}/pause", headers=headers,
+    )
+    assert resp.status_code == 409
+
+
+async def test_resume_running_execution_409(client):
+    """Resuming a running (not paused) execution returns 409."""
+    _, jwt = await _create_agent()
+    headers = {"Authorization": f"Bearer {jwt}"}
+    cr = await client.post(
+        f"{V3}/workflows",
+        json={"name": "rr-wf", "graph_json": _simple_graph()},
+        headers=headers,
+    )
+    wid = cr.json()["id"]
+    ex = await client.post(
+        f"{V3}/workflows/{wid}/execute",
+        json={}, headers=headers,
+    )
+    eid = ex.json()["execution_id"]
+    # Set to running
+    async with TestSession() as db:
+        from sqlalchemy import select as sel
+        r = await db.execute(
+            sel(WorkflowExecution).where(WorkflowExecution.id == eid)
+        )
+        e = r.scalar_one()
+        e.status = "running"
+        await db.commit()
+    resp = await client.post(
+        f"{V3}/executions/{eid}/resume", headers=headers,
+    )
+    assert resp.status_code == 409
+
+
+async def test_workflow_templates_content(client):
+    """GET /workflow-templates returns all expected template fields."""
+    resp = await client.get(f"{V3}/workflow-templates")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] > 0
+    for tmpl in body["templates"]:
+        assert "key" in tmpl
+        assert "name" in tmpl
+        assert "description" in tmpl
+        assert "graph_json" in tmpl
+
+
+async def test_delete_then_get_shows_archived_status(client):
+    """DELETE archives; subsequent GET returns archived status."""
+    _, jwt = await _create_agent()
+    headers = {"Authorization": f"Bearer {jwt}"}
+    cr = await client.post(
+        f"{V3}/workflows",
+        json={"name": "del-arch-wf", "graph_json": _simple_graph()},
+        headers=headers,
+    )
+    wid = cr.json()["id"]
+    del_resp = await client.delete(
+        f"{V3}/workflows/{wid}", headers=headers,
+    )
+    assert del_resp.status_code == 200
+    get_resp = await client.get(
+        f"{V3}/workflows/{wid}", headers=headers,
+    )
+    assert get_resp.status_code == 200
+    assert get_resp.json()["status"] == "archived"
+
+
+async def test_get_execution_nodes_returns_list(client):
+    """GET /executions/{id}/nodes returns nodes array with total."""
+    _, jwt = await _create_agent()
+    headers = {"Authorization": f"Bearer {jwt}"}
+    cr = await client.post(
+        f"{V3}/workflows",
+        json={"name": "nodes-wf", "graph_json": _two_node_graph()},
+        headers=headers,
+    )
+    wid = cr.json()["id"]
+    ex = await client.post(
+        f"{V3}/workflows/{wid}/execute",
+        json={}, headers=headers,
+    )
+    eid = ex.json()["execution_id"]
+    resp = await client.get(
+        f"{V3}/executions/{eid}/nodes", headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "nodes" in body
+    assert "total" in body
+    assert body["execution_id"] == eid
+
+
+async def test_list_workflows_with_status_param(client):
+    """GET /workflows?status=draft returns only draft workflows."""
+    _, jwt = await _create_agent()
+    headers = {"Authorization": f"Bearer {jwt}"}
+    await client.post(
+        f"{V3}/workflows",
+        json={"name": "draft-wf-x", "graph_json": _simple_graph()},
+        headers=headers,
+    )
+    resp = await client.get(
+        f"{V3}/workflows", params={"status": "draft"}, headers=headers,
+    )
+    assert resp.status_code == 200
+    for w in resp.json()["workflows"]:
+        assert w["status"] == "draft"
+
+
+async def test_templates_alias_returns_same_as_workflow_templates(client):
+    """GET /templates is an alias returning same content as /workflow-templates."""
+    r1 = await client.get(f"{V3}/workflow-templates")
+    r2 = await client.get(f"{V3}/templates")
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r1.json()["total"] == r2.json()["total"]

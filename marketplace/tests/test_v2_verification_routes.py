@@ -308,3 +308,118 @@ async def test_add_receipt_with_all_allowed_providers(client, make_agent, make_l
             },
         )
         assert resp.status_code == 200, f"Provider {provider} rejected unexpectedly"
+
+
+# ===========================================================================
+# Extra coverage tests -- uncovered code paths (appended by coverage push)
+# ===========================================================================
+
+
+async def test_run_verification_multiple_times(client, make_agent, make_listing):
+    """Running verification twice on same listing succeeds both times."""
+    agent, token = await make_agent()
+    listing = await make_listing(seller_id=agent.id, price_usdc=5.0)
+    headers = _auth(token)
+    r1 = await client.post(
+        f"{VERIFICATION_PREFIX}/listings/{listing.id}/run", headers=headers,
+    )
+    assert r1.status_code == 200
+    r2 = await client.post(
+        f"{VERIFICATION_PREFIX}/listings/{listing.id}/run", headers=headers,
+    )
+    assert r2.status_code == 200
+
+
+async def test_add_receipt_then_run_verification(client, make_agent, make_listing):
+    """Adding a receipt triggers re-verification which returns result."""
+    agent, token = await make_agent()
+    listing = await make_listing(seller_id=agent.id, price_usdc=3.0)
+    headers = _auth(token)
+    resp = await client.post(
+        f"{VERIFICATION_PREFIX}/listings/{listing.id}/receipts",
+        json={
+            "provider": "serpapi",
+            "source_query": "test receipt query",
+            "seller_signature": "sig_serpapi_receipt_123",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "receipt_id" in body
+    assert "verification" in body
+    # Now run explicit verification
+    r2 = await client.post(
+        f"{VERIFICATION_PREFIX}/listings/{listing.id}/run", headers=headers,
+    )
+    assert r2.status_code == 200
+
+
+async def test_get_trust_state_after_verification(client, make_agent, make_listing):
+    """GET trust state after running verification reflects updated state."""
+    agent, token = await make_agent()
+    listing = await make_listing(seller_id=agent.id, price_usdc=7.0)
+    headers = _auth(token)
+    # Run verification first
+    await client.post(
+        f"{VERIFICATION_PREFIX}/listings/{listing.id}/run", headers=headers,
+    )
+    # Then get trust state
+    resp = await client.get(
+        f"{VERIFICATION_PREFIX}/listings/{listing.id}"
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["listing_id"] == listing.id
+    assert "trust_status" in body
+    assert "trust_score" in body
+
+
+async def test_add_receipt_with_optional_fields(client, make_agent, make_listing):
+    """Adding receipt with response_hash and request_payload."""
+    agent, token = await make_agent()
+    listing = await make_listing(seller_id=agent.id, price_usdc=2.0)
+    resp = await client.post(
+        f"{VERIFICATION_PREFIX}/listings/{listing.id}/receipts",
+        json={
+            "provider": "browserbase",
+            "source_query": "optional fields test",
+            "seller_signature": "sig_bb_optional_12345",
+            "response_hash": "abc123hash",
+            "request_payload": {"url": "https://example.com"},
+            "headers": {"X-Custom": "value"},
+        },
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "receipt_id" in body
+
+
+async def test_multiple_listings_independent_trust(client, make_agent, make_listing):
+    """Different listings have independent trust state."""
+    agent, token = await make_agent()
+    listing1 = await make_listing(seller_id=agent.id, price_usdc=1.0)
+    listing2 = await make_listing(seller_id=agent.id, price_usdc=2.0)
+    r1 = await client.get(f"{VERIFICATION_PREFIX}/listings/{listing1.id}")
+    r2 = await client.get(f"{VERIFICATION_PREFIX}/listings/{listing2.id}")
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r1.json()["listing_id"] == listing1.id
+    assert r2.json()["listing_id"] == listing2.id
+
+
+async def test_run_verification_response_structure(client, make_agent, make_listing):
+    """Verification response includes stage_results and overall_pass."""
+    agent, token = await make_agent()
+    listing = await make_listing(seller_id=agent.id, price_usdc=4.0)
+    resp = await client.post(
+        f"{VERIFICATION_PREFIX}/listings/{listing.id}/run",
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "trust_status" in body
+    assert "trust_score" in body
+    assert "verification_summary" in body
+    assert "job_id" in body

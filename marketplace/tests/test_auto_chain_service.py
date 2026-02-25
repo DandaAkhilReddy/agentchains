@@ -345,3 +345,108 @@ async def test_validate_not_found(db):
     """Validation of nonexistent template raises ValueError."""
     with pytest.raises(ValueError, match="not found"):
         await validate_chain_compatibility(db, "nonexistent-id")
+
+
+# ---------------------------------------------------------------------------
+# Additional tests for uncovered lines
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_suggest_agent_with_bad_capabilities_json(db, make_agent):
+    agent, _ = await make_agent()
+    agent.capabilities = "not-valid-json{"
+    agent.description = "search data agent"
+    await db.commit()
+    agents = await suggest_agents_for_capability(db, "data")
+    ids = [a["agent_id"] for a in agents]
+    assert agent.id in ids
+
+
+@pytest.mark.asyncio
+async def test_suggest_catalog_inactive_agent_skipped(db, make_agent, make_catalog_entry):
+    agent, _ = await make_agent()
+    agent.status = "suspended"
+    await db.commit()
+    await make_catalog_entry(agent.id, namespace="web_search", topic="search data", description="data agent")
+    agents = await suggest_agents_for_capability(db, "data")
+    ids = [a["agent_id"] for a in agents]
+    assert agent.id not in ids
+
+
+@pytest.mark.asyncio
+async def test_suggest_respects_min_quality(db, make_agent, make_catalog_entry):
+    agent, _ = await make_agent()
+    agent.capabilities = json.dumps(["search", "data"])
+    await db.commit()
+    agents = await suggest_agents_for_capability(db, "data", min_quality=0.9)
+    ids = [a["agent_id"] for a in agents]
+    assert agent.id not in ids
+
+
+@pytest.mark.asyncio
+async def test_validate_chain_invalid_graph_json(db, make_agent):
+    from marketplace.services.chain_registry_service import publish_chain_template
+    agent, _ = await make_agent()
+    agent.a2a_endpoint = "http://test:9000"
+    await db.commit()
+    graph = {"nodes": {"n1": {"type": "agent_call", "config": {"agent_id": agent.id}}}, "edges": []}
+    template = await publish_chain_template(
+        db, name="BadJSON", graph_json=json.dumps(graph), author_id=agent.id,
+    )
+    template.graph_json = "not-valid-json{"
+    await db.commit()
+    result = await validate_chain_compatibility(db, template.id)
+    assert result["valid"] is False
+    assert any("Invalid graph_json" in e for e in result["errors"])
+
+@pytest.mark.asyncio
+async def test_validate_chain_missing_agent_id_node(db, make_agent):
+    from marketplace.services.chain_registry_service import publish_chain_template
+    import json as _json
+    agent, _ = await make_agent()
+    agent.a2a_endpoint = "http://test:9000"
+    await db.commit()
+    graph = {"nodes": {"n1": {"type": "agent_call", "config": {"agent_id": agent.id}}}, "edges": []}
+    template = await publish_chain_template(db, name="NoAID", graph_json=_json.dumps(graph), author_id=agent.id)
+    g = _json.loads(template.graph_json)
+    g["nodes"]["n1"]["config"] = {}
+    template.graph_json = _json.dumps(g)
+    await db.commit()
+    result = await validate_chain_compatibility(db, template.id)
+    assert result["valid"] is False
+    assert any("missing agent_id" in e for e in result["errors"])
+
+
+@pytest.mark.asyncio
+async def test_validate_chain_agent_not_found(db, make_agent):
+    from marketplace.services.chain_registry_service import publish_chain_template
+    import json as _json
+    agent, _ = await make_agent()
+    agent.a2a_endpoint = "http://test:9000"
+    await db.commit()
+    graph = {"nodes": {"n1": {"type": "agent_call", "config": {"agent_id": agent.id}}}, "edges": []}
+    template = await publish_chain_template(db, name="Gone", graph_json=_json.dumps(graph), author_id=agent.id)
+    g = _json.loads(template.graph_json)
+    g["nodes"]["n1"]["config"]["agent_id"] = "nonexistent-agent-abc"
+    template.graph_json = _json.dumps(g)
+    await db.commit()
+    result = await validate_chain_compatibility(db, template.id)
+    assert result["valid"] is False
+    assert any("not found" in e for e in result["errors"])
+
+
+@pytest.mark.asyncio
+async def test_validate_chain_cycle_detection(db, make_agent):
+    from marketplace.services.chain_registry_service import publish_chain_template
+    import json as _json
+    agent, _ = await make_agent()
+    agent.a2a_endpoint = "http://test:9000"
+    await db.commit()
+    graph = {"nodes": {"n1": {"type": "agent_call", "config": {"agent_id": agent.id}}}, "edges": []}
+    template = await publish_chain_template(db, name="Cyc", graph_json=_json.dumps(graph), author_id=agent.id)
+    cyclic = {"nodes": {"a": {"type": "agent_call", "config": {"agent_id": agent.id}, "depends_on": ["b"]}, "b": {"type": "agent_call", "config": {"agent_id": agent.id}, "depends_on": ["a"]}}, "edges": []}
+    template.graph_json = _json.dumps(cyclic)
+    await db.commit()
+    result = await validate_chain_compatibility(db, template.id)
+    assert result["valid"] is False

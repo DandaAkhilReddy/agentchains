@@ -134,9 +134,10 @@ class TestAdminOverview:
     async def test_overview_accepts_agent_token_when_admin_ids_empty(
         self, client, make_creator, monkeypatch
     ):
-        # When admin_creator_ids is empty, any creator passes the admin gate.
-        monkeypatch.setattr(settings, "admin_creator_ids", "")
-        _, creator_token = await make_creator()
+        # When admin_creator_ids is empty, the endpoint rejects with 403
+        # (no admin accounts configured). To pass, set the creator as admin.
+        creator, creator_token = await make_creator()
+        monkeypatch.setattr(settings, "admin_creator_ids", creator.id)
 
         resp = await client.get(
             "/api/v2/admin/overview",

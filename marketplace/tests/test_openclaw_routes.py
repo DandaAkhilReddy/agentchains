@@ -228,3 +228,80 @@ async def test_status_connected_after_register(client):
     assert resp.status_code == 200
     assert resp.json()["connected"] is True
     assert resp.json()["active_count"] == 1
+
+
+async def test_register_webhook_direct(db):
+    """Call register_webhook endpoint function directly."""
+    from marketplace.api.integrations.openclaw import register_webhook, WebhookRegisterRequest
+    agent_id, jwt = await _setup_agent()
+    req = WebhookRegisterRequest(
+        gateway_url="https://example.com/hooks/agent",
+        bearer_token="test-token",
+        event_types=["listing_created"],
+        filters={"categories": ["web_search"]},
+    )
+    result = await register_webhook(req, db, agent_id)
+    assert result["agent_id"] == agent_id
+    assert result["gateway_url"] == "https://example.com/hooks/agent"
+    assert result["status"] == "active"
+
+
+async def test_list_webhooks_direct(db):
+    """Call list_webhooks endpoint function directly."""
+    from marketplace.api.integrations.openclaw import list_webhooks, register_webhook, WebhookRegisterRequest
+    agent_id, jwt = await _setup_agent()
+    req = WebhookRegisterRequest(
+        gateway_url="https://example.com/hooks/agent",
+        bearer_token="test-token",
+    )
+    await register_webhook(req, db, agent_id)
+    result = await list_webhooks(db, agent_id)
+    assert result["count"] == 1
+    assert len(result["webhooks"]) == 1
+
+
+async def test_delete_webhook_direct(db):
+    """Call delete_webhook endpoint function directly."""
+    from marketplace.api.integrations.openclaw import delete_webhook, register_webhook, WebhookRegisterRequest
+    agent_id, jwt = await _setup_agent()
+    req = WebhookRegisterRequest(
+        gateway_url="https://example.com/hooks/direct",
+        bearer_token="tok",
+    )
+    wh = await register_webhook(req, db, agent_id)
+    result = await delete_webhook(wh["id"], db, agent_id)
+    assert result["deleted"] is True
+
+
+async def test_delete_webhook_not_found_direct(db):
+    """Call delete_webhook for nonexistent webhook directly -> 404."""
+    from marketplace.api.integrations.openclaw import delete_webhook
+    from fastapi import HTTPException
+    import pytest as pt
+    agent_id, jwt = await _setup_agent()
+    with pt.raises(HTTPException) as exc_info:
+        await delete_webhook("nonexistent-id", db, agent_id)
+    assert exc_info.value.status_code == 404
+
+
+async def test_test_webhook_direct(db):
+    """Call test_webhook endpoint function directly."""
+    from marketplace.api.integrations.openclaw import test_webhook, register_webhook, WebhookRegisterRequest
+    agent_id, jwt = await _setup_agent()
+    req = WebhookRegisterRequest(
+        gateway_url="https://example.com/hooks/test",
+        bearer_token="tok",
+    )
+    wh = await register_webhook(req, db, agent_id)
+    with patch("marketplace.services.openclaw_service.deliver_event", new_callable=AsyncMock, return_value=True):
+        result = await test_webhook(wh["id"], db, agent_id)
+        assert result["success"] is True
+
+
+async def test_get_status_direct(db):
+    """Call get_status endpoint function directly."""
+    from marketplace.api.integrations.openclaw import get_status
+    agent_id, jwt = await _setup_agent()
+    result = await get_status(db, agent_id)
+    assert result["connected"] is False
+    assert result["webhooks_count"] == 0

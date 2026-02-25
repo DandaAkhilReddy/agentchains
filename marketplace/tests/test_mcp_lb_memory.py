@@ -535,7 +535,7 @@ class TestImportSnapshot:
         agent, _ = await make_agent()
         with (
             patch("marketplace.services.memory_service.update_memory_stage", new_callable=AsyncMock) as mock_ums,
-            patch("marketplace.services.memory_service.fire_and_forget"),
+            patch("marketplace.services.memory_service.broadcast_event"),
             patch("marketplace.main.broadcast_event", new_callable=AsyncMock),
         ):
             mock_ums.return_value = {"trust_score": 5}
@@ -573,7 +573,7 @@ class TestImportSnapshot:
 
         with (
             patch("marketplace.services.memory_service.update_memory_stage", side_effect=_fake_ums),
-            patch("marketplace.services.memory_service.fire_and_forget"),
+            patch("marketplace.services.memory_service.broadcast_event"),
             patch("marketplace.main.broadcast_event", new_callable=AsyncMock),
         ):
             await memory_service.import_snapshot(
@@ -598,7 +598,7 @@ class TestImportSnapshot:
 
         with (
             patch("marketplace.services.memory_service.update_memory_stage", side_effect=_fake_ums),
-            patch("marketplace.services.memory_service.fire_and_forget"),
+            patch("marketplace.services.memory_service.broadcast_event"),
             patch("marketplace.main.broadcast_event", new_callable=AsyncMock),
         ):
             await memory_service.import_snapshot(
@@ -640,7 +640,7 @@ class TestImportSnapshot:
         agent, _ = await make_agent()
         with (
             patch("marketplace.services.memory_service.update_memory_stage", new_callable=AsyncMock) as mock_ums,
-            patch("marketplace.services.memory_service.fire_and_forget"),
+            patch("marketplace.services.memory_service.broadcast_event"),
             patch("marketplace.main.broadcast_event", new_callable=AsyncMock),
         ):
             mock_ums.return_value = {}
@@ -670,7 +670,7 @@ class TestVerifySnapshot:
         records = records or _records(3)
         with (
             patch("marketplace.services.memory_service.update_memory_stage", new_callable=AsyncMock) as mock_ums,
-            patch("marketplace.services.memory_service.fire_and_forget"),
+            patch("marketplace.services.memory_service.broadcast_event"),
             patch("marketplace.main.broadcast_event", new_callable=AsyncMock),
         ):
             mock_ums.return_value = {}
@@ -691,7 +691,7 @@ class TestVerifySnapshot:
 
         with (
             patch("marketplace.services.memory_service.update_memory_stage", new_callable=AsyncMock) as mock_ums,
-            patch("marketplace.services.memory_service.fire_and_forget"),
+            patch("marketplace.services.memory_service.broadcast_event"),
             patch("marketplace.main.broadcast_event", new_callable=AsyncMock),
         ):
             mock_ums.return_value = {"trust_score": 20}
@@ -712,7 +712,7 @@ class TestVerifySnapshot:
 
         with (
             patch("marketplace.services.memory_service.update_memory_stage", new_callable=AsyncMock) as mock_ums,
-            patch("marketplace.services.memory_service.fire_and_forget"),
+            patch("marketplace.services.memory_service.broadcast_event"),
             patch("marketplace.main.broadcast_event", new_callable=AsyncMock),
         ):
             mock_ums.return_value = {}
@@ -755,7 +755,7 @@ class TestVerifySnapshot:
 
         with (
             patch("marketplace.services.memory_service.update_memory_stage", new_callable=AsyncMock) as mock_ums,
-            patch("marketplace.services.memory_service.fire_and_forget"),
+            patch("marketplace.services.memory_service.broadcast_event"),
             patch("marketplace.main.broadcast_event", new_callable=AsyncMock),
         ):
             mock_ums.return_value = {}
@@ -775,7 +775,7 @@ class TestVerifySnapshot:
 
         with (
             patch("marketplace.services.memory_service.update_memory_stage", new_callable=AsyncMock) as mock_ums,
-            patch("marketplace.services.memory_service.fire_and_forget"),
+            patch("marketplace.services.memory_service.broadcast_event"),
             patch("marketplace.main.broadcast_event", new_callable=AsyncMock),
         ):
             mock_ums.return_value = {}
@@ -817,7 +817,7 @@ class TestVerifySnapshot:
 
         with (
             patch("marketplace.services.memory_service.update_memory_stage", new_callable=AsyncMock) as mock_ums,
-            patch("marketplace.services.memory_service.fire_and_forget"),
+            patch("marketplace.services.memory_service.broadcast_event"),
             patch("marketplace.main.broadcast_event", new_callable=AsyncMock),
         ):
             mock_ums.return_value = {}

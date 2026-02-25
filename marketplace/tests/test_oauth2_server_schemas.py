@@ -60,6 +60,14 @@ from marketplace.tests.conftest import _new_id
 # ===========================================================================
 
 
+def _make_auth_header(agent_id: str | None = None) -> dict[str, str]:
+    """Create a valid Bearer token header for OAuth2 API tests."""
+    from marketplace.core.auth import create_access_token
+    aid = agent_id or _new_id()
+    token = create_access_token(aid, f"oauth-test-{aid[:8]}")
+    return {"Authorization": f"Bearer {token}"}
+
+
 def _make_pkce_pair(verifier: str | None = None):
     """Return (verifier, challenge) for S256 PKCE."""
     verifier = verifier or secrets.token_urlsafe(43)
@@ -1365,6 +1373,7 @@ class TestOAuth2APIClientRegistration:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_make_auth_header(),
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -1391,6 +1400,7 @@ class TestOAuth2APIClientRegistration:
                 "scopes": "write",
                 "owner_id": _new_id(),
             },
+            headers=_make_auth_header(),
         )
         assert resp.status_code == 200
         assert resp.json()["name"] == "EchoApp"
@@ -1402,6 +1412,7 @@ class TestOAuth2APIGetClient:
 
     async def test_get_existing_client(self, client):
         # Register first
+        auth = _make_auth_header()
         reg_resp = await client.post(
             "/oauth2/clients",
             json={
@@ -1410,17 +1421,18 @@ class TestOAuth2APIGetClient:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=auth,
         )
         client_id = reg_resp.json()["client_id"]
 
-        resp = await client.get(f"/oauth2/clients/{client_id}")
+        resp = await client.get(f"/oauth2/clients/{client_id}", headers=auth)
         assert resp.status_code == 200
         data = resp.json()
         assert data["client_id"] == client_id
         assert data["name"] == "Lookup App"
 
     async def test_get_nonexistent_client_returns_404(self, client):
-        resp = await client.get("/oauth2/clients/no_such_client_xyz")
+        resp = await client.get("/oauth2/clients/no_such_client_xyz", headers=_make_auth_header())
         assert resp.status_code == 404
 
 
@@ -1436,6 +1448,7 @@ class TestOAuth2APIAuthorize:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_make_auth_header(),
         )
         return reg_resp.json()
 
@@ -1504,6 +1517,7 @@ class TestOAuth2APIToken:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_make_auth_header(),
         )
         reg = reg_resp.json()
 
@@ -1546,6 +1560,7 @@ class TestOAuth2APIToken:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_make_auth_header(),
         )
         reg = reg_resp.json()
 
@@ -1616,6 +1631,7 @@ class TestOAuth2APIRevoke:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_make_auth_header(),
         )
         reg = reg_resp.json()
 
@@ -1669,6 +1685,7 @@ class TestOAuth2APIUserinfo:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_make_auth_header(),
         )
         reg = reg_resp.json()
 

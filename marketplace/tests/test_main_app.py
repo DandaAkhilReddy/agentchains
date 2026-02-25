@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from marketplace.main import (
+    broadcast_event,
     APP_VERSION,
     ConnectionManager,
     ScopedConnectionManager,
@@ -348,3 +349,72 @@ class TestRootEndpoint:
         assert resp.status_code == 200
         body = resp.json()
         assert "version" in body or "name" in body
+
+
+class TestBroadcastEvent:
+    async def test_public_event(self):
+        with patch("marketplace.main.ws_manager.broadcast", new_callable=AsyncMock) as mb, \
+             patch("marketplace.main.ws_scoped_manager.broadcast_public", new_callable=AsyncMock), \
+             patch("marketplace.services.event_subscription_service.build_event_envelope",
+                   return_value={"event_type":"t","payload":{},"visibility":"public","topic":"public.market"}), \
+             patch("marketplace.services.event_subscription_service.should_dispatch_event",return_value=True), \
+             patch("marketplace.main.fire_and_forget"):
+            await broadcast_event("t", {})
+            mb.assert_awaited_once()
+
+    async def test_private_agent(self):
+        with patch("marketplace.main.ws_scoped_manager.broadcast_private_agent", new_callable=AsyncMock) as mp, \
+             patch("marketplace.services.event_subscription_service.build_event_envelope",
+                   return_value={"event_type":"t","payload":{},"visibility":"private","topic":"private.agent","target_agent_ids":["a1"]}), \
+             patch("marketplace.services.event_subscription_service.should_dispatch_event",return_value=True), \
+             patch("marketplace.main.fire_and_forget"):
+            await broadcast_event("t", {"agent_id":"a1"})
+            mp.assert_awaited_once()
+
+    async def test_private_admin(self):
+        with patch("marketplace.main.ws_scoped_manager.broadcast_private_admin", new_callable=AsyncMock) as ma, \
+             patch("marketplace.services.event_subscription_service.build_event_envelope",
+                   return_value={"event_type":"t","payload":{},"visibility":"private","topic":"private.admin","target_creator_ids":["c1"]}), \
+             patch("marketplace.services.event_subscription_service.should_dispatch_event",return_value=True), \
+             patch("marketplace.main.fire_and_forget"):
+            await broadcast_event("t", {})
+            ma.assert_awaited_once()
+
+    async def test_private_user(self):
+        with patch("marketplace.main.ws_scoped_manager.broadcast_private_user", new_callable=AsyncMock) as mu, \
+             patch("marketplace.services.event_subscription_service.build_event_envelope",
+                   return_value={"event_type":"t","payload":{},"visibility":"private","topic":"private.user","target_user_ids":["u1"]}), \
+             patch("marketplace.services.event_subscription_service.should_dispatch_event",return_value=True), \
+             patch("marketplace.main.fire_and_forget"):
+            await broadcast_event("t", {})
+            mu.assert_awaited_once()
+
+    async def test_dispatch_skipped(self):
+        with patch("marketplace.services.event_subscription_service.build_event_envelope",return_value={"visibility":"public"}), \
+             patch("marketplace.services.event_subscription_service.should_dispatch_event",return_value=False), \
+             patch("marketplace.main.ws_manager.broadcast", new_callable=AsyncMock) as mb:
+            await broadcast_event("t", {})
+            mb.assert_not_awaited()
+
+
+class TestBackgroundDispatchers:
+    async def test_dispatch_openclaw_exception(self):
+        from marketplace.main import _dispatch_openclaw
+        from contextlib import asynccontextmanager
+        @asynccontextmanager
+        async def _bad_session():
+            raise Exception("db fail")
+            yield  # noqa: unreachable
+        with patch("marketplace.database.async_session", _bad_session):
+            await _dispatch_openclaw("t", {})
+
+    async def test_dispatch_event_subs_exception(self):
+        from marketplace.main import _dispatch_event_subscriptions
+        from contextlib import asynccontextmanager
+        @asynccontextmanager
+        async def _bad_session():
+            raise Exception("db fail")
+            yield  # noqa: unreachable
+        with patch("marketplace.database.async_session", _bad_session):
+            await _dispatch_event_subscriptions({})
+
