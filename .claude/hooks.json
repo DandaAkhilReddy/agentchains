@@ -13,6 +13,26 @@
             "command": "bash .claude/hooks/validate-python.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); if [ \"$BRANCH\" = \"master\" ] || [ \"$BRANCH\" = \"main\" ]; then echo \"BLOCKED: Cannot edit files on $BRANCH. Create a feature branch first.\" >&2; exit 1; fi'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'FILE=\"$CLAUDE_FILE_PATH\"; case \"$FILE\" in *.py) ruff check --fix \"$FILE\" 2>/dev/null || true ;; *.ts|*.tsx) npx eslint --fix \"$FILE\" 2>/dev/null || true ;; esac'"
+          }
+        ]
       }
     ],
     "Stop": [
