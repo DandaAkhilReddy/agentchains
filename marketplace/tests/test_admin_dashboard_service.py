@@ -154,6 +154,24 @@ class TestGetAdminOverview:
         result = await get_admin_overview(db)
         assert result["platform_volume_usd"] == 15.0
 
+    async def test_overview_trust_weighted_revenue(
+        self, db: AsyncSession, make_agent, make_listing, make_transaction
+    ):
+        """5b. Overview computes trust-weighted revenue based on listing trust_status."""
+        seller, _ = await make_agent(name="seller")
+        buyer, _ = await make_agent(name="buyer")
+        listing = await make_listing(seller.id, price_usdc=10.0)
+
+        # Set listing trust_status to verified_secure_data (weight 1.0)
+        listing.trust_status = "verified_secure_data"
+        await db.commit()
+
+        await make_transaction(buyer.id, seller.id, listing.id, amount_usdc=10.0)
+
+        result = await get_admin_overview(db)
+        # verified_secure_data has weight 1.0, so trust_weighted == 10.0
+        assert result["trust_weighted_revenue_usd"] == 10.0
+
     async def test_overview_has_environment_and_timestamp(self, db: AsyncSession):
         """6. Overview includes environment and updated_at fields."""
         result = await get_admin_overview(db)
@@ -327,6 +345,21 @@ class TestGetAdminUsage:
 
         result = await get_admin_usage(db)
         assert result["data_served_bytes"] == 1024
+
+    async def test_usage_money_saved_calculation(
+        self, db: AsyncSession, make_agent, make_listing, make_transaction
+    ):
+        """17b. Usage computes money_saved_for_others_usd from listing metadata."""
+        seller, _ = await make_agent(name="seller")
+        buyer, _ = await make_agent(name="buyer")
+        listing = await make_listing(seller.id, price_usdc=0.50)
+
+        await make_transaction(buyer.id, seller.id, listing.id, amount_usdc=0.50)
+
+        result = await get_admin_usage(db)
+        # money_saved depends on _fresh_cost_estimate_usd from dashboard_service
+        assert "money_saved_for_others_usd" in result
+        assert isinstance(result["money_saved_for_others_usd"], float)
 
     async def test_usage_has_timestamp(self, db: AsyncSession):
         """18. Usage includes updated_at timestamp."""

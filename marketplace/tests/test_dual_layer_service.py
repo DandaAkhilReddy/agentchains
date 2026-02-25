@@ -465,6 +465,18 @@ class TestBuildListingRequest:
         with pytest.raises(ValueError, match="summary.*sample_output"):
             svc._build_listing_request(project)
 
+    def test_config_json_is_list_treated_as_empty_dict(self):
+        """When config_json deserializes to a list instead of dict, falls back to {}."""
+        project = BuilderProject(
+            id="proj-list",
+            creator_id="c-1",
+            template_key="firecrawl-web-research",
+            title="List Config",
+            config_json=json.dumps(["not", "a", "dict"]),
+        )
+        with pytest.raises(ValueError, match="summary.*sample_output"):
+            svc._build_listing_request(project)
+
     def test_zero_price_uses_template_default(self):
         project = BuilderProject(
             id="proj-5",
@@ -619,6 +631,126 @@ class TestConsumerOrders:
         payload = svc._order_payload(order, include_content="the content")
         assert payload["content"] == "the content"
 
+    async def test_create_market_order_success(
+        self, db: AsyncSession, make_agent, make_listing, seed_platform,
+    ):
+        """End-to-end create_market_order: registers user, creates listing,
+        mocks express_buy, and verifies order + fee records."""
+        from unittest.mock import patch
+        from fastapi.responses import JSONResponse
+
+        user_result = await svc.register_end_user(db, email="order@test.com", password="Pass!")
+        user_id = user_result["user"]["id"]
+        agent, _ = await make_agent("seller-agent")
+        listing = await make_listing(agent.id, price_usdc=1.0)
+
+        tx_id = "tx-mock-001"
+        mock_response = JSONResponse(content={
+            "transaction_id": tx_id,
+            "price_usdc": 1.0,
+            "content": "purchased content data",
+        })
+
+        with patch.object(svc.express_service, "express_buy", return_value=mock_response):
+            order = await svc.create_market_order(
+                db,
+                user_id=user_id,
+                listing_id=listing.id,
+                allow_unverified=True,
+            )
+
+        assert order["status"] == "completed"
+        assert order["amount_usd"] == 1.0
+        assert order["fee_usd"] == 0.1  # 10% fee
+        assert order["payout_usd"] == 0.9
+        assert order["content"] == "purchased content data"
+        assert order["trust_status"] is not None
+
+        # Verify PlatformFee record was created
+        from marketplace.models.dual_layer import PlatformFee
+        fee_result = await db.execute(select(PlatformFee).where(PlatformFee.tx_id == tx_id))
+        fee = fee_result.scalar_one()
+        assert float(fee.fee_usd) == 0.1
+        assert float(fee.payout_usd) == 0.9
+
+    async def test_create_market_order_rejects_unverified_without_flag(
+        self, db: AsyncSession, make_agent, make_listing, seed_platform,
+    ):
+        """Order creation fails when listing is not verified and allow_unverified is False."""
+        user_result = await svc.register_end_user(db, email="strict@test.com", password="Pass!")
+        user_id = user_result["user"]["id"]
+        agent, _ = await make_agent()
+        listing = await make_listing(agent.id, price_usdc=0.5)
+        # Default trust_status is not "verified_secure_data"
+
+        with pytest.raises(ValueError, match="not verified"):
+            await svc.create_market_order(
+                db,
+                user_id=user_id,
+                listing_id=listing.id,
+                allow_unverified=False,
+            )
+
+    async def test_get_market_order_success(
+        self, db: AsyncSession, make_agent, make_listing, seed_platform,
+    ):
+        """get_market_order_for_user returns the order payload on success."""
+        from unittest.mock import patch
+        from fastapi.responses import JSONResponse
+
+        user_result = await svc.register_end_user(db, email="getorder@test.com", password="Pass!")
+        user_id = user_result["user"]["id"]
+        agent, _ = await make_agent()
+        listing = await make_listing(agent.id, price_usdc=0.5)
+
+        mock_response = JSONResponse(content={
+            "transaction_id": "tx-get-001",
+            "price_usdc": 0.5,
+            "content": "content",
+        })
+
+        with patch.object(svc.express_service, "express_buy", return_value=mock_response):
+            created = await svc.create_market_order(
+                db,
+                user_id=user_id,
+                listing_id=listing.id,
+                allow_unverified=True,
+            )
+
+        fetched = await svc.get_market_order_for_user(
+            db, user_id=user_id, order_id=created["id"],
+        )
+        assert fetched["id"] == created["id"]
+        assert fetched["status"] == "completed"
+
+    async def test_list_market_orders_with_data(
+        self, db: AsyncSession, make_agent, make_listing, seed_platform,
+    ):
+        """list_market_orders_for_user returns orders with correct count."""
+        from unittest.mock import patch
+        from fastapi.responses import JSONResponse
+
+        user_result = await svc.register_end_user(db, email="list@test.com", password="Pass!")
+        user_id = user_result["user"]["id"]
+        agent, _ = await make_agent()
+        listing = await make_listing(agent.id, price_usdc=0.25)
+
+        mock_response = JSONResponse(content={
+            "transaction_id": "tx-list-001",
+            "price_usdc": 0.25,
+            "content": "data",
+        })
+
+        with patch.object(svc.express_service, "express_buy", return_value=mock_response):
+            await svc.create_market_order(
+                db, user_id=user_id, listing_id=listing.id, allow_unverified=True,
+            )
+
+        orders, total = await svc.list_market_orders_for_user(db, user_id=user_id)
+        assert total == 1
+        assert len(orders) == 1
+        assert orders[0]["amount_usd"] == 0.25
+
 
 # ---------------------------------------------------------------------------
 # Featured collections
@@ -683,6 +815,47 @@ class TestDualLayerMetrics:
 
         metrics = await svc.get_creator_dual_layer_metrics(db, creator_id=creator.id)
         assert metrics["creator_gross_revenue_usd"] == 0.0
+
+    async def test_creator_metrics_with_orders(
+        self, db: AsyncSession, make_creator, make_agent, make_listing, seed_platform,
+    ):
+        """Creator metrics with actual orders compute revenue correctly."""
+        from unittest.mock import patch
+        from fastapi.responses import JSONResponse
+
+        creator, _ = await make_creator(email="rev@test.com")
+        agent, _ = await make_agent("revenue-seller")
+        # Assign agent to creator
+        agent_result = await db.execute(
+            select(RegisteredAgent).where(RegisteredAgent.id == agent.id)
+        )
+        a = agent_result.scalar_one()
+        a.creator_id = creator.id
+        await db.commit()
+
+        listing = await make_listing(agent.id, price_usdc=2.0)
+
+        # Create a user and place an order
+        user_result = await svc.register_end_user(
+            db, email="rev-buyer@test.com", password="Pass!",
+        )
+        user_id = user_result["user"]["id"]
+
+        mock_response = JSONResponse(content={
+            "transaction_id": "tx-rev-001",
+            "price_usdc": 2.0,
+            "content": "data",
+        })
+
+        with patch.object(svc.express_service, "express_buy", return_value=mock_response):
+            await svc.create_market_order(
+                db, user_id=user_id, listing_id=listing.id, allow_unverified=True,
+            )
+
+        metrics = await svc.get_creator_dual_layer_metrics(db, creator_id=creator.id)
+        assert metrics["creator_gross_revenue_usd"] == 2.0
+        assert metrics["creator_platform_fees_usd"] == 0.2  # 10% fee
+        assert metrics["creator_net_revenue_usd"] == 1.8
 
 
 # ---------------------------------------------------------------------------

@@ -1,9 +1,14 @@
-"""Tests for marketplace/api/v2_compliance.py — GDPR compliance endpoints."""
+"""Tests for marketplace/api/v2_compliance.py -- GDPR compliance endpoints.
+
+All endpoints hit the real FastAPI app via the ``client`` fixture.
+The compliance module uses in-memory stores, so we clear them between tests.
+No external services to mock.
+"""
 
 from __future__ import annotations
 
 import marketplace.api.v2_compliance as _compliance_mod
-from marketplace.tests.conftest import TestSession, _new_id
+from marketplace.tests.conftest import _new_id
 
 
 COMPLIANCE_PREFIX = "/api/v2/compliance"
@@ -86,12 +91,27 @@ async def test_data_export_cannot_export_other_agent(client, make_agent):
     assert "your own account" in resp.json()["detail"]
 
 
+async def test_data_export_default_includes_all_sections(client, make_agent):
+    """POST /data-export with empty body defaults to include all data sections."""
+    _clear_compliance_stores()
+    agent, token = await make_agent()
+
+    resp = await client.post(
+        f"{COMPLIANCE_PREFIX}/data-export",
+        headers=_auth(token),
+        json={},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["format"] == "json"
+    assert body["status"] == "completed"
+
+
 async def test_data_export_status_happy_path(client, make_agent):
     """GET /data-export/{job_id} returns the job status for the owner."""
     _clear_compliance_stores()
     agent, token = await make_agent()
 
-    # Create export
     create_resp = await client.post(
         f"{COMPLIANCE_PREFIX}/data-export",
         headers=_auth(token),
@@ -99,7 +119,6 @@ async def test_data_export_status_happy_path(client, make_agent):
     )
     job_id = create_resp.json()["job_id"]
 
-    # Query status
     resp = await client.get(
         f"{COMPLIANCE_PREFIX}/data-export/{job_id}",
         headers=_auth(token),
@@ -122,13 +141,19 @@ async def test_data_export_status_not_found(client, make_agent):
     assert resp.status_code == 404
 
 
+async def test_data_export_status_requires_auth(client):
+    """GET /data-export/{job_id} without auth returns 401."""
+    _clear_compliance_stores()
+    resp = await client.get(f"{COMPLIANCE_PREFIX}/data-export/some-job-id")
+    assert resp.status_code == 401
+
+
 async def test_data_export_status_wrong_agent(client, make_agent):
     """GET /data-export/{job_id} returns 403 when queried by another agent."""
     _clear_compliance_stores()
     agent_a, token_a = await make_agent(name="agent-a")
     _, token_b = await make_agent(name="agent-b")
 
-    # Agent A creates an export
     create_resp = await client.post(
         f"{COMPLIANCE_PREFIX}/data-export",
         headers=_auth(token_a),
@@ -136,7 +161,6 @@ async def test_data_export_status_wrong_agent(client, make_agent):
     )
     job_id = create_resp.json()["job_id"]
 
-    # Agent B tries to read it
     resp = await client.get(
         f"{COMPLIANCE_PREFIX}/data-export/{job_id}",
         headers=_auth(token_b),
@@ -238,6 +262,13 @@ async def test_data_deletion_status_not_found(client, make_agent):
     assert resp.status_code == 404
 
 
+async def test_data_deletion_status_requires_auth(client):
+    """GET /data-deletion/{request_id} without auth returns 401."""
+    _clear_compliance_stores()
+    resp = await client.get(f"{COMPLIANCE_PREFIX}/data-deletion/some-req-id")
+    assert resp.status_code == 401
+
+
 async def test_data_deletion_status_wrong_agent(client, make_agent):
     """GET /data-deletion/{request_id} returns 403 for non-owner."""
     _clear_compliance_stores()
@@ -281,7 +312,6 @@ async def test_consent_record_and_retrieve(client, make_agent):
     _clear_compliance_stores()
     agent, token = await make_agent()
 
-    # Record consent
     resp = await client.post(
         f"{COMPLIANCE_PREFIX}/consent",
         headers=_auth(token),
@@ -297,7 +327,6 @@ async def test_consent_record_and_retrieve(client, make_agent):
     assert body["granted"] is True
     assert body["agent_id"] == agent.id
 
-    # Retrieve
     get_resp = await client.get(
         f"{COMPLIANCE_PREFIX}/consent",
         headers=_auth(token),
@@ -313,7 +342,6 @@ async def test_consent_upsert_same_type(client, make_agent):
     _clear_compliance_stores()
     _, token = await make_agent()
 
-    # Grant consent
     resp1 = await client.post(
         f"{COMPLIANCE_PREFIX}/consent",
         headers=_auth(token),
@@ -322,17 +350,15 @@ async def test_consent_upsert_same_type(client, make_agent):
     assert resp1.status_code == 200
     original_id = resp1.json()["id"]
 
-    # Revoke same consent type
     resp2 = await client.post(
         f"{COMPLIANCE_PREFIX}/consent",
         headers=_auth(token),
         json={"consent_type": "marketing", "granted": False, "purpose": "opt-out"},
     )
     assert resp2.status_code == 200
-    assert resp2.json()["id"] == original_id  # same ID preserved
+    assert resp2.json()["id"] == original_id
     assert resp2.json()["granted"] is False
 
-    # Only one record exists
     get_resp = await client.get(
         f"{COMPLIANCE_PREFIX}/consent",
         headers=_auth(token),
@@ -379,16 +405,47 @@ async def test_consent_isolated_between_agents(client, make_agent):
     _, token_a = await make_agent(name="consent-a")
     _, token_b = await make_agent(name="consent-b")
 
-    # Agent A records consent
     await client.post(
         f"{COMPLIANCE_PREFIX}/consent",
         headers=_auth(token_a),
         json={"consent_type": "marketing", "granted": True},
     )
 
-    # Agent B should see empty
     resp_b = await client.get(
         f"{COMPLIANCE_PREFIX}/consent",
         headers=_auth(token_b),
     )
     assert resp_b.json() == []
+
+
+async def test_consent_revoke_then_regrant(client, make_agent):
+    """Revoking and re-granting updates the same record."""
+    _clear_compliance_stores()
+    _, token = await make_agent()
+
+    # Grant
+    resp1 = await client.post(
+        f"{COMPLIANCE_PREFIX}/consent",
+        headers=_auth(token),
+        json={"consent_type": "analytics", "granted": True},
+    )
+    assert resp1.json()["granted"] is True
+    record_id = resp1.json()["id"]
+
+    # Revoke
+    resp2 = await client.post(
+        f"{COMPLIANCE_PREFIX}/consent",
+        headers=_auth(token),
+        json={"consent_type": "analytics", "granted": False},
+    )
+    assert resp2.json()["granted"] is False
+    assert resp2.json()["id"] == record_id
+
+    # Re-grant
+    resp3 = await client.post(
+        f"{COMPLIANCE_PREFIX}/consent",
+        headers=_auth(token),
+        json={"consent_type": "analytics", "granted": True},
+    )
+    assert resp3.json()["granted"] is True
+    assert resp3.json()["id"] == record_id

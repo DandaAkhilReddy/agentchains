@@ -1,10 +1,13 @@
-"""Tests for marketplace/api/v2_agents.py — Agent onboarding and trust lifecycle."""
+"""Tests for marketplace/api/v2_agents.py -- agent onboarding and trust lifecycle.
+
+All endpoints hit the real FastAPI app via the ``client`` fixture.
+Agent registration, trust attestation, and knowledge challenge run against
+the real service layer and in-memory SQLite database. No mocks needed.
+"""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
-
-from marketplace.tests.conftest import TestSession, _new_id
+from marketplace.tests.conftest import _new_id
 
 
 AGENTS_PREFIX = "/api/v2/agents"
@@ -55,7 +58,6 @@ async def test_onboard_happy_path(client, make_creator):
     assert body["agent_jwt_token"]
     assert body["stream_token"]
     assert body["onboarding_session_id"]
-    # Trust profile fields from identity attestation
     assert "agent_trust_status" in body
     assert "agent_trust_score" in body
 
@@ -77,7 +79,6 @@ async def test_onboard_with_memory_import_intent(client, make_creator):
     assert resp.status_code == 201
     body = resp.json()
     assert body["agent_id"]
-    # Memory provenance should show pending state
     assert "memory_provenance" in body
 
 
@@ -91,7 +92,6 @@ async def test_onboard_duplicate_name_returns_409(client, make_creator):
         "public_key": "ssh-rsa AAAA_long_enough_key_for_testing",
     }
 
-    # First call succeeds
     resp1 = await client.post(
         f"{AGENTS_PREFIX}/onboard",
         headers=_auth(token),
@@ -99,7 +99,6 @@ async def test_onboard_duplicate_name_returns_409(client, make_creator):
     )
     assert resp1.status_code == 201
 
-    # Second call with same name fails
     resp2 = await client.post(
         f"{AGENTS_PREFIX}/onboard",
         headers=_auth(token),
@@ -135,6 +134,37 @@ async def test_onboard_short_public_key_rejected(client, make_creator):
             "name": "short-key-bot",
             "agent_type": "both",
             "public_key": "short",
+        },
+    )
+    assert resp.status_code == 422
+
+
+async def test_onboard_agent_token_rejected(client, make_agent):
+    """POST /onboard with agent token (not creator) returns 401."""
+    _, agent_token = await make_agent()
+
+    resp = await client.post(
+        f"{AGENTS_PREFIX}/onboard",
+        headers=_auth(agent_token),
+        json={
+            "name": "agent-onboard-attempt",
+            "agent_type": "both",
+            "public_key": "ssh-rsa AAAA_long_enough_key_for_testing",
+        },
+    )
+    assert resp.status_code == 401
+
+
+async def test_onboard_missing_name_rejected(client, make_creator):
+    """POST /onboard with missing name field returns 422."""
+    _, token = await make_creator()
+
+    resp = await client.post(
+        f"{AGENTS_PREFIX}/onboard",
+        headers=_auth(token),
+        json={
+            "agent_type": "both",
+            "public_key": "ssh-rsa AAAA_long_enough_key_for_testing",
         },
     )
     assert resp.status_code == 422
@@ -294,7 +324,6 @@ async def test_get_trust_as_agent_owner(client, make_agent):
 async def test_get_trust_as_creator_owner(client, make_creator, make_agent):
     """GET /trust by the agent's creator returns the trust profile."""
     creator, creator_token = await make_creator()
-    # Onboard an agent owned by this creator
     onboard_resp = await client.post(
         f"{AGENTS_PREFIX}/onboard",
         headers=_auth(creator_token),
@@ -320,7 +349,6 @@ async def test_get_trust_unauthorized_creator_returns_403(client, make_creator, 
     creator_a, token_a = await make_creator(email="a@test.com")
     creator_b, token_b = await make_creator(email="b@test.com")
 
-    # Onboard agent under creator A
     onboard_resp = await client.post(
         f"{AGENTS_PREFIX}/onboard",
         headers=_auth(token_a),
@@ -333,7 +361,6 @@ async def test_get_trust_unauthorized_creator_returns_403(client, make_creator, 
     assert onboard_resp.status_code == 201
     agent_id = onboard_resp.json()["agent_id"]
 
-    # Creator B tries to read trust
     resp = await client.get(
         f"{AGENTS_PREFIX}/{agent_id}/trust",
         headers=_auth(token_b),
@@ -342,14 +369,13 @@ async def test_get_trust_unauthorized_creator_returns_403(client, make_creator, 
 
 
 async def test_get_trust_agent_not_found(client, make_agent):
-    """GET /trust for a nonexistent agent returns 404."""
+    """GET /trust for a nonexistent agent returns 401/403/404."""
     _, token = await make_agent()
 
     resp = await client.get(
         f"{AGENTS_PREFIX}/nonexistent-agent-id/trust",
         headers=_auth(token),
     )
-    # Agent JWT sub != path agent_id, and it won't match as creator either
     assert resp.status_code in (401, 403, 404)
 
 

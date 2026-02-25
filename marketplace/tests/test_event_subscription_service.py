@@ -199,12 +199,46 @@ class TestExtractTargetIds:
         assert "c1" in ids
         assert "c2" in ids
 
+    def test_extract_creator_ids_with_explicit_targets(self):
+        ids = svc._extract_target_creator_ids({}, {"target_keys": []}, ["explicit-c1"])
+        assert "explicit-c1" in ids
+
+    def test_extract_creator_ids_from_list_values(self):
+        payload = {"creator_id": ["c1", "c2"]}
+        ids = svc._extract_target_creator_ids(payload, {"target_keys": []})
+        assert "c1" in ids
+        assert "c2" in ids
+
+    def test_extract_creator_ids_skips_empty_strings(self):
+        ids = svc._extract_target_creator_ids(
+            {"creator_id": "  ", "target_creator_id": ""},
+            {"target_keys": []},
+        )
+        assert ids == []
+
     def test_extract_user_ids_from_payload(self):
         policy = {"target_keys": ["user_id"]}
         payload = {"user_id": "u1", "target_user_id": "u2"}
         ids = svc._extract_target_user_ids(payload, policy)
         assert "u1" in ids
         assert "u2" in ids
+
+    def test_extract_user_ids_with_explicit_targets(self):
+        ids = svc._extract_target_user_ids({}, {"target_keys": []}, ["explicit-u1"])
+        assert "explicit-u1" in ids
+
+    def test_extract_user_ids_from_list_values(self):
+        payload = {"user_id": ["u1", "u2"]}
+        ids = svc._extract_target_user_ids(payload, {"target_keys": []})
+        assert "u1" in ids
+        assert "u2" in ids
+
+    def test_extract_user_ids_skips_empty_strings(self):
+        ids = svc._extract_target_user_ids(
+            {"user_id": "  ", "target_user_id": ""},
+            {"target_keys": []},
+        )
+        assert ids == []
 
 
 # ---------------------------------------------------------------------------
@@ -383,6 +417,40 @@ class TestValidateCallbackUrl:
         url = "https://example.com/hook?token=abc"
         result = svc.validate_callback_url(url)
         assert "token=abc" in result
+
+
+# ---------------------------------------------------------------------------
+# _resolve_host_ips
+# ---------------------------------------------------------------------------
+
+class TestResolveHostIps:
+    def test_gaierror_raises_value_error(self):
+        import socket
+        with patch.object(socket, "getaddrinfo", side_effect=socket.gaierror("lookup failed")):
+            with pytest.raises(ValueError, match="Unable to resolve callback host"):
+                svc._resolve_host_ips("nonexistent.invalid")
+
+    def test_no_routable_addresses_raises_value_error(self):
+        # Return getaddrinfo results with unparseable IP addresses
+        import socket
+        fake_infos = [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("not-an-ip", 0)),
+        ]
+        with patch.object(socket, "getaddrinfo", return_value=fake_infos):
+            with pytest.raises(ValueError, match="No routable IP addresses"):
+                svc._resolve_host_ips("example.com")
+
+    def test_valid_resolution_returns_addresses(self):
+        import ipaddress
+        import socket
+        fake_infos = [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("8.8.8.8", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("8.8.4.4", 0)),
+        ]
+        with patch.object(socket, "getaddrinfo", return_value=fake_infos):
+            result = svc._resolve_host_ips("dns.google")
+        assert ipaddress.ip_address("8.8.8.8") in result
+        assert ipaddress.ip_address("8.8.4.4") in result
 
 
 # ---------------------------------------------------------------------------
@@ -746,6 +814,69 @@ class TestDeliverToSubscription:
         assert len(deliveries) == 1
         assert deliveries[0].status == "blocked"
 
+    async def test_delivery_blocked_dns_rebinding_pauses_on_max_failures(
+        self, db: AsyncSession, make_agent,
+    ):
+        """DNS rebinding failure increments failure_count and pauses when hitting max."""
+        agent, _ = await make_agent()
+        sub_data = await svc.register_subscription(
+            db, agent_id=agent.id, callback_url="https://example.com/hook",
+        )
+        res = await db.execute(
+            select(EventSubscription).where(EventSubscription.id == sub_data["id"])
+        )
+        sub = res.scalar_one()
+        sub.failure_count = 4  # One below max of 5
+        await db.commit()
+
+        event = svc.build_event_envelope("test_event", {})
+
+        with (
+            patch.object(
+                svc, "validate_callback_url",
+                side_effect=ValueError("resolves to private address"),
+            ),
+            patch.object(svc.settings, "trust_webhook_max_failures", 5),
+        ):
+            await svc._deliver_to_subscription(db, subscription=sub, event=event)
+
+        await db.refresh(sub)
+        assert sub.status == "paused"
+        assert sub.failure_count >= 5
+
+    async def test_delivery_hostname_dns_rebinding_at_delivery_time(
+        self, db: AsyncSession, make_agent,
+    ):
+        """Hostname resolves to private IP at delivery time triggers blocked delivery."""
+        import ipaddress
+
+        agent, _ = await make_agent()
+        sub_data = await svc.register_subscription(
+            db, agent_id=agent.id, callback_url="https://evil-rebind.com/hook",
+        )
+        res = await db.execute(
+            select(EventSubscription).where(EventSubscription.id == sub_data["id"])
+        )
+        sub = res.scalar_one()
+        event = svc.build_event_envelope("test_event", {})
+
+        # validate_callback_url passes (first check), but _resolve_host_ips at
+        # delivery time returns a private address
+        with (
+            patch.object(svc, "_resolve_host_ips", return_value=[
+                ipaddress.ip_address("10.0.0.5")
+            ]),
+            patch.object(svc.settings, "trust_webhook_max_retries", 1),
+        ):
+            await svc._deliver_to_subscription(db, subscription=sub, event=event)
+
+        deliveries_result = await db.execute(
+            select(WebhookDelivery).where(WebhookDelivery.subscription_id == sub.id)
+        )
+        deliveries = deliveries_result.scalars().all()
+        assert len(deliveries) == 1
+        assert deliveries[0].status == "blocked"
+
 
 # ---------------------------------------------------------------------------
 # dispatch_event_to_subscriptions
@@ -804,6 +935,98 @@ class TestDispatchEventToSubscriptions:
         deliveries_result = await db.execute(select(WebhookDelivery))
         deliveries = deliveries_result.scalars().all()
         assert len(deliveries) >= 1
+
+    async def test_private_event_dispatches_to_targeted_agent(
+        self, db: AsyncSession, make_agent,
+    ):
+        """Private event with target_agent_ids filters subscriptions to those agents."""
+        a1, _ = await make_agent("targeted-agent")
+        a2, _ = await make_agent("other-agent")
+        await svc.register_subscription(
+            db, agent_id=a1.id, callback_url="https://target.com/hook",
+        )
+        await svc.register_subscription(
+            db, agent_id=a2.id, callback_url="https://other.com/hook",
+        )
+        # Build a proper event envelope for a private event type
+        event = svc.build_event_envelope(
+            "catalog_update",
+            {"agent_id": a1.id, "subscriber_id": a1.id},
+            target_agent_ids=[a1.id],
+        )
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "ok"
+
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_client
+
+            await svc.dispatch_event_to_subscriptions(db, event=event)
+
+        deliveries_result = await db.execute(select(WebhookDelivery))
+        deliveries = deliveries_result.scalars().all()
+        # Only the targeted agent's subscription should receive delivery
+        assert len(deliveries) == 1
+        target_sub_result = await db.execute(
+            select(EventSubscription).where(EventSubscription.agent_id == a1.id)
+        )
+        target_sub = target_sub_result.scalar_one()
+        assert deliveries[0].subscription_id == target_sub.id
+
+    async def test_public_event_without_agent_id_dispatches_to_all(
+        self, db: AsyncSession, make_agent,
+    ):
+        """Public event with no agent_id should query all active subscriptions."""
+        agent, _ = await make_agent()
+        await svc.register_subscription(
+            db, agent_id=agent.id, callback_url="https://public.com/hook",
+        )
+        # Build a proper event envelope for a public event, then override agent_id
+        event = svc.build_event_envelope("test_event", {})
+        event["agent_id"] = None  # Force no agent_id for this test case
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "ok"
+
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_client
+
+            await svc.dispatch_event_to_subscriptions(db, event=event)
+
+        deliveries_result = await db.execute(select(WebhookDelivery))
+        deliveries = deliveries_result.scalars().all()
+        assert len(deliveries) >= 1
+
+    async def test_dispatch_handles_sqlalchemy_error_gracefully(
+        self, db: AsyncSession, make_agent,
+    ):
+        """SQLAlchemyError during subscription query is caught and dispatch returns silently."""
+        from sqlalchemy.exc import SQLAlchemyError
+
+        agent, _ = await make_agent()
+        await svc.register_subscription(
+            db, agent_id=agent.id, callback_url="https://example.com/hook",
+        )
+        event = svc.build_event_envelope("test_event", {}, agent_id=agent.id)
+
+        original_execute = db.execute
+
+        async def _failing_execute(stmt, *args, **kwargs):
+            raise SQLAlchemyError("DB error")
+
+        with patch.object(db, "execute", side_effect=_failing_execute):
+            # Should not raise — silently returns
+            await svc.dispatch_event_to_subscriptions(db, event=event)
 
 
 # ---------------------------------------------------------------------------

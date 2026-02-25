@@ -1,17 +1,15 @@
-"""Tests for proof_of_execution_service — 25 tests covering proof generation and verification.
+"""Tests for proof_of_execution_service — JWT proof generation and verification.
 
-Covers generate_proof, verify_proof, hash helpers, expiration, issuer validation,
-params hash matching, and status checks.
+All functions are called directly. No mocks — these are pure functions that
+operate on JWTs using the application's jwt_secret_key.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
 
 import pytest
 from jose import jwt
@@ -29,7 +27,7 @@ from marketplace.services.proof_of_execution_service import (
 
 
 # ---------------------------------------------------------------------------
-# Hash helpers
+# Hash helpers — pure functions
 # ---------------------------------------------------------------------------
 
 
@@ -39,13 +37,13 @@ class TestHashHelpers:
         params = {"b": 2, "a": 1}
         h1 = _hash_params(params)
         h2 = _hash_params({"a": 1, "b": 2})
-        assert h1 == h2  # sort_keys ensures determinism
+        assert h1 == h2
 
     def test_hash_params_returns_sha256_hex(self):
         params = {"key": "value"}
         result = _hash_params(params)
-        assert len(result) == 64  # SHA-256 hex digest
-        int(result, 16)  # valid hex
+        assert len(result) == 64
+        int(result, 16)
 
     def test_hash_result_deterministic(self):
         result = {"status": "ok", "data": [1, 2]}
@@ -63,9 +61,19 @@ class TestHashHelpers:
         expected = hashlib.sha256(b"{}").hexdigest()
         assert result == expected
 
+    def test_hash_params_nested_dict(self):
+        params = {"outer": {"inner": "value"}}
+        result = _hash_params(params)
+        assert len(result) == 64
+
+    def test_hash_params_with_list_value(self):
+        params = {"items": [1, 2, 3]}
+        result = _hash_params(params)
+        assert len(result) == 64
+
 
 # ---------------------------------------------------------------------------
-# generate_proof
+# generate_proof — real JWT creation
 # ---------------------------------------------------------------------------
 
 
@@ -80,7 +88,6 @@ class TestGenerateProof:
         )
         assert isinstance(token, str)
         assert len(token) > 0
-        # Should have 3 dot-separated parts
         assert token.count(".") == 2
 
     def test_jwt_contains_expected_claims(self):
@@ -139,7 +146,6 @@ class TestGenerateProof:
         )
         iat = claims["iat"]
         exp = claims["exp"]
-        # Expiry should be approximately PROOF_EXPIRY_HOURS after iat
         diff_hours = (exp - iat) / 3600
         assert abs(diff_hours - PROOF_EXPIRY_HOURS) < 0.01
 
@@ -155,6 +161,17 @@ class TestGenerateProof:
             algorithms=[PROOF_ALGORITHM], audience="agentchains-buyer",
         )
         assert claims1["jti"] != claims2["jti"]
+
+    def test_generate_proof_with_complex_params(self):
+        params = {"nested": {"list": [1, 2, 3], "dict": {"a": "b"}}}
+        result = {"complex": True, "data": [{"x": 1}]}
+        token = generate_proof("e1", "t1", params, result)
+        claims = jwt.decode(
+            token, settings.jwt_secret_key,
+            algorithms=[PROOF_ALGORITHM], audience="agentchains-buyer",
+        )
+        assert claims["params_hash"] == _hash_params(params)
+        assert claims["result_hash"] == _hash_result(result)
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +204,11 @@ class TestVerifyProofValid:
         assert "execution_id" in claims
         assert "tool_id" in claims
 
+    def test_valid_proof_without_params_hash_check(self):
+        token = generate_proof("e1", "t1", {"key": "val"}, {"result": "ok"})
+        result = verify_proof(token, expected_params_hash=None)
+        assert result["valid"] is True
+
 
 # ---------------------------------------------------------------------------
 # verify_proof — invalid proofs
@@ -203,8 +225,6 @@ class TestVerifyProofInvalid:
         assert result["error"] is not None
 
     def test_wrong_secret_key_fails(self):
-        token = generate_proof("e1", "t1", {}, {})
-        # Decode with wrong key by crafting a token with different secret
         fake_token = jwt.encode(
             {"iss": PROOF_ISSUER, "aud": "agentchains-buyer",
              "execution_id": "e1", "status": "success",
@@ -230,7 +250,6 @@ class TestVerifyProofInvalid:
         assert "status" in result["error"].lower()
 
     def test_wrong_issuer_fails(self):
-        """Token with wrong issuer is rejected even if signature is valid."""
         payload = {
             "iss": "wrong-issuer",
             "aud": "agentchains-buyer",
@@ -247,7 +266,6 @@ class TestVerifyProofInvalid:
         assert "issuer" in result["error"].lower()
 
     def test_expired_token_fails(self):
-        """An expired JWT is rejected during verification."""
         payload = {
             "iss": PROOF_ISSUER,
             "aud": "agentchains-buyer",
@@ -265,7 +283,6 @@ class TestVerifyProofInvalid:
         assert result["valid"] is False
 
     def test_wrong_audience_fails(self):
-        """Token with wrong audience is rejected."""
         payload = {
             "iss": PROOF_ISSUER,
             "aud": "wrong-audience",

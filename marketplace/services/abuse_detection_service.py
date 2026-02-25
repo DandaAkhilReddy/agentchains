@@ -49,7 +49,7 @@ class RapidTransactionRule(AnomalyRule):
             select(func.count(Transaction.id)).where(
                 and_(
                     (Transaction.buyer_id == agent_id) | (Transaction.seller_id == agent_id),
-                    Transaction.created_at >= since,
+                    Transaction.initiated_at >= since,
                 )
             )
         )
@@ -108,7 +108,7 @@ class LargeTransactionRule(AnomalyRule):
                 and_(
                     (Transaction.buyer_id == agent_id) | (Transaction.seller_id == agent_id),
                     Transaction.amount_usdc >= self.threshold_usd,
-                    Transaction.created_at >= since,
+                    Transaction.initiated_at >= since,
                 )
             )
         )
@@ -144,7 +144,10 @@ class NewAccountHighVolumeRule(AnomalyRule):
         if not agent:
             return []
 
-        age = datetime.now(timezone.utc) - (agent.created_at or datetime.now(timezone.utc))
+        created = agent.created_at or datetime.now(timezone.utc)
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        age = datetime.now(timezone.utc) - created
         if age.total_seconds() > self.account_age_hours * 3600:
             return []
 

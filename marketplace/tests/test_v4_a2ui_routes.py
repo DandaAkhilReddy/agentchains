@@ -1,8 +1,11 @@
-"""Tests for marketplace/api/v4_a2ui.py — A2UI stream tokens, sessions, and health."""
+"""Tests for marketplace/api/v4_a2ui.py -- A2UI stream tokens, sessions, and health.
+
+All endpoints hit the real FastAPI app via the ``client`` fixture.
+Sessions are created directly via the session manager for testing.
+No external services to mock.
+"""
 
 from __future__ import annotations
-
-from unittest.mock import patch
 
 from marketplace.a2ui.session_manager import A2UISession, a2ui_session_manager
 from marketplace.tests.conftest import _new_id
@@ -26,10 +29,11 @@ def _create_test_session(agent_id: str, user_id: str | None = None) -> A2UISessi
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v4/stream-token — generate stream token
+# POST /api/v4/stream-token -- generate stream token
 # ---------------------------------------------------------------------------
 
 async def test_generate_stream_token_success(client, make_agent):
+    """POST /stream-token returns a valid stream token for the agent."""
     agent, token = await make_agent()
 
     resp = await client.post(
@@ -40,7 +44,7 @@ async def test_generate_stream_token_success(client, make_agent):
     body = resp.json()
     assert body["agent_id"] == agent.id
     assert "stream_token" in body
-    assert body["stream_token"]  # non-empty
+    assert body["stream_token"]
     assert "expires_in_seconds" in body
     assert body["expires_in_seconds"] > 0
     assert "expires_at" in body
@@ -48,11 +52,13 @@ async def test_generate_stream_token_success(client, make_agent):
 
 
 async def test_generate_stream_token_no_auth(client):
+    """POST /stream-token without auth returns 401."""
     resp = await client.post("/api/v4/stream-token")
     assert resp.status_code == 401
 
 
 async def test_generate_stream_token_invalid_auth(client):
+    """POST /stream-token with invalid token returns 401."""
     resp = await client.post(
         "/api/v4/stream-token",
         headers={"Authorization": "Bearer invalid-token-garbage"},
@@ -60,11 +66,23 @@ async def test_generate_stream_token_invalid_auth(client):
     assert resp.status_code == 401
 
 
+async def test_generate_stream_token_creator_token_rejected(client, make_creator):
+    """POST /stream-token rejects creator tokens (agent-only)."""
+    _, creator_token = await make_creator()
+
+    resp = await client.post(
+        "/api/v4/stream-token",
+        headers=_agent_auth(creator_token),
+    )
+    assert resp.status_code == 401
+
+
 # ---------------------------------------------------------------------------
-# GET /api/v4/sessions — list sessions for authenticated agent
+# GET /api/v4/sessions -- list sessions for authenticated agent
 # ---------------------------------------------------------------------------
 
 async def test_list_sessions_empty(client, make_agent):
+    """GET /sessions returns empty list when no sessions exist."""
     agent, token = await make_agent()
 
     resp = await client.get(
@@ -78,6 +96,7 @@ async def test_list_sessions_empty(client, make_agent):
 
 
 async def test_list_sessions_with_data(client, make_agent):
+    """GET /sessions returns sessions for the authenticated agent."""
     agent, token = await make_agent()
 
     session = _create_test_session(agent.id, user_id="user-1")
@@ -123,15 +142,17 @@ async def test_list_sessions_filters_by_agent(client, make_agent):
 
 
 async def test_list_sessions_no_auth(client):
+    """GET /sessions without auth returns 401."""
     resp = await client.get("/api/v4/sessions")
     assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v4/sessions/{session_id} — get single session
+# GET /api/v4/sessions/{session_id} -- get single session
 # ---------------------------------------------------------------------------
 
 async def test_get_session_success(client, make_agent):
+    """GET /sessions/{id} returns session details for the owning agent."""
     agent, token = await make_agent()
     session = _create_test_session(agent.id, user_id="user-2")
 
@@ -154,6 +175,7 @@ async def test_get_session_success(client, make_agent):
 
 
 async def test_get_session_not_found(client, make_agent):
+    """GET /sessions/{id} returns 404 for nonexistent session."""
     agent, token = await make_agent()
 
     resp = await client.get(
@@ -182,15 +204,17 @@ async def test_get_session_wrong_agent(client, make_agent):
 
 
 async def test_get_session_no_auth(client):
+    """GET /sessions/{id} without auth returns 401."""
     resp = await client.get(f"/api/v4/sessions/{_new_id()}")
     assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------
-# DELETE /api/v4/sessions/{session_id} — close session
+# DELETE /api/v4/sessions/{session_id} -- close session
 # ---------------------------------------------------------------------------
 
 async def test_close_session_success(client, make_agent):
+    """DELETE /sessions/{id} closes the session."""
     agent, token = await make_agent()
     session = _create_test_session(agent.id)
 
@@ -203,11 +227,11 @@ async def test_close_session_success(client, make_agent):
     assert body["status"] == "closed"
     assert body["session_id"] == session.session_id
 
-    # Verify session is actually gone
     assert a2ui_session_manager.get_session(session.session_id) is None
 
 
 async def test_close_session_not_found(client, make_agent):
+    """DELETE /sessions/{id} for nonexistent session returns 404."""
     agent, token = await make_agent()
 
     resp = await client.delete(
@@ -235,15 +259,17 @@ async def test_close_session_wrong_agent(client, make_agent):
 
 
 async def test_close_session_no_auth(client):
+    """DELETE /sessions/{id} without auth returns 401."""
     resp = await client.delete(f"/api/v4/sessions/{_new_id()}")
     assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v4/health — A2UI health check (public)
+# GET /api/v4/health -- A2UI health check (public)
 # ---------------------------------------------------------------------------
 
 async def test_a2ui_health_check(client):
+    """GET /health returns protocol health information."""
     resp = await client.get("/api/v4/health")
     assert resp.status_code == 200
     body = resp.json()

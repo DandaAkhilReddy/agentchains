@@ -163,6 +163,11 @@ class TestHelperFunctions:
         """6m. _json_load returns fallback for invalid JSON string."""
         assert _json_load("not json", {}) == {}
 
+    async def test_json_load_with_non_string_non_dict(self):
+        """6n. _json_load returns fallback for non-string, non-dict, non-list input."""
+        assert _json_load(42, "default") == "default"
+        assert _json_load(True, []) == []
+
 
 # ===========================================================================
 # 2. ENCRYPTION / DECRYPTION (tests 7-11)
@@ -192,6 +197,15 @@ class TestEncryption:
     async def test_decrypt_empty_string(self):
         """10. _decrypt_chunk_payload handles empty string."""
         assert _decrypt_chunk_payload("") == ""
+
+    async def test_memory_key_raises_without_config(self):
+        """10b. _memory_key raises RuntimeError when encryption key is empty."""
+        from marketplace.services.memory_service import _memory_key
+
+        with patch("marketplace.services.memory_service.settings") as mock_settings:
+            mock_settings.memory_encryption_key = ""
+            with pytest.raises(RuntimeError, match="MEMORY_ENCRYPTION_KEY must be configured"):
+                _memory_key()
 
     async def test_encrypt_different_nonces(self):
         """11. Two encryptions of same text produce different ciphertexts."""
@@ -523,6 +537,26 @@ class TestVerifySnapshot:
 
         with pytest.raises(ValueError, match="no chunks"):
             await verify_snapshot(db, snapshot_id=snap.id, agent_id=agent.id)
+
+    async def test_verify_corrupted_chunk_payload_fails(self, db: AsyncSession, make_agent):
+        """25e. verify_snapshot detects corrupted (non-decryptable) chunk payload."""
+        agent, _ = await make_agent()
+        imp = await self._import_and_return(db, agent.id)
+        sid = imp["snapshot"]["snapshot_id"]
+
+        # Corrupt the chunk payload so decryption fails
+        chunk_result = await db.execute(
+            select(MemorySnapshotChunk).where(
+                MemorySnapshotChunk.snapshot_id == sid
+            )
+        )
+        chunk = chunk_result.scalar_one()
+        chunk.chunk_payload = "enc:v1:AAAA_totally_corrupted_data_here"
+        await db.commit()
+
+        result = await verify_snapshot(db, snapshot_id=sid, agent_id=agent.id)
+        assert result["status"] == "failed"
+        assert result["score"] == 0
 
 
 # ===========================================================================

@@ -1,10 +1,15 @@
-"""Tests for marketplace/api/v2_search.py — Search V2 API routes."""
+"""Tests for marketplace/api/v2_search.py -- Search V2 API routes.
+
+The search service wraps Azure AI Search (an external dependency), so we mock
+``get_search_service`` and the ``sync_*_index`` helpers.  All HTTP calls still
+flow through the real FastAPI stack via the ``client`` fixture.
+"""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from marketplace.tests.conftest import TestSession, _new_id
+from marketplace.tests.conftest import _new_id
 
 
 # ---------------------------------------------------------------------------
@@ -30,11 +35,15 @@ def _mock_search_service(
     return svc
 
 
+def _auth(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
 SEARCH_PREFIX = "/api/v2/search"
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v2/search — unified search_all
+# GET /api/v2/search -- unified search_all
 # ---------------------------------------------------------------------------
 
 async def test_search_all_listings_default(client):
@@ -138,6 +147,15 @@ async def test_search_all_with_price_range(client):
     assert "le 10.0" in filters
 
 
+async def test_search_all_empty_query(client):
+    """search_all with empty query still returns results."""
+    svc = _mock_search_service(results=[], count=0)
+    with patch("marketplace.api.v2_search.get_search_service", return_value=svc):
+        resp = await client.get(f"{SEARCH_PREFIX}", params={"q": ""})
+    assert resp.status_code == 200
+    assert resp.json()["count"] == 0
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v2/search/listings
 # ---------------------------------------------------------------------------
@@ -182,6 +200,22 @@ async def test_search_listings_pagination(client):
     assert call_kwargs.kwargs["skip"] == 10
 
 
+async def test_search_listings_with_price_filters(client):
+    """search_listings passes price range to backend OData filter."""
+    svc = _mock_search_service()
+    with patch("marketplace.api.v2_search.get_search_service", return_value=svc):
+        resp = await client.get(
+            f"{SEARCH_PREFIX}/listings",
+            params={"q": "", "min_price": 2.5, "max_price": 50.0, "category": "code_analysis"},
+        )
+    assert resp.status_code == 200
+    call_kwargs = svc.search_listings.call_args
+    filters = call_kwargs.kwargs.get("filters", "")
+    assert "code_analysis" in filters
+    assert "ge 2.5" in filters
+    assert "le 50.0" in filters
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v2/search/agents
 # ---------------------------------------------------------------------------
@@ -222,6 +256,21 @@ async def test_search_agents_with_status_filter(client):
     assert resp.status_code == 200
     call_kwargs = svc.search_agents.call_args
     assert "active" in call_kwargs.kwargs.get("filters", "")
+
+
+async def test_search_agents_combined_filters(client):
+    """search_agents combines agent_type and status filters."""
+    svc = _mock_search_service()
+    with patch("marketplace.api.v2_search.get_search_service", return_value=svc):
+        resp = await client.get(
+            f"{SEARCH_PREFIX}/agents",
+            params={"q": "", "agent_type": "buyer", "status": "active"},
+        )
+    assert resp.status_code == 200
+    call_kwargs = svc.search_agents.call_args
+    filters = call_kwargs.kwargs.get("filters", "")
+    assert "buyer" in filters
+    assert "active" in filters
 
 
 # ---------------------------------------------------------------------------
@@ -320,14 +369,30 @@ async def test_suggestions_invalid_type(client):
     assert "Invalid type" in resp.json()["detail"]
 
 
+async def test_suggestions_respects_top_param(client):
+    """suggestions passes top limit to the search service."""
+    svc = _mock_search_service(
+        results=[{"title": "A"}, {"title": "B"}, {"title": "C"}],
+        count=3,
+    )
+    with patch("marketplace.api.v2_search.get_search_service", return_value=svc):
+        resp = await client.get(
+            f"{SEARCH_PREFIX}/suggestions",
+            params={"q": "test", "type": "listing", "top": 2},
+        )
+    assert resp.status_code == 200
+    # The search service itself was called with top=2
+    call_kwargs = svc.search_listings.call_args
+    assert call_kwargs.kwargs["top"] == 2
+
+
 # ---------------------------------------------------------------------------
-# POST /api/v2/search/reindex — admin-only
+# POST /api/v2/search/reindex -- admin-only
 # ---------------------------------------------------------------------------
 
 async def test_reindex_no_auth_returns_401(client):
     """reindex without auth returns 401."""
     resp = await client.post(f"{SEARCH_PREFIX}/reindex")
-    # UnauthorizedError from get_current_creator_id
     assert resp.status_code in (401, 403, 500)
 
 
@@ -336,7 +401,7 @@ async def test_reindex_non_admin_returns_403(client, make_creator):
     creator, token = await make_creator()
     resp = await client.post(
         f"{SEARCH_PREFIX}/reindex",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=_auth(token),
     )
     assert resp.status_code == 403
 
@@ -371,12 +436,13 @@ async def test_reindex_admin_succeeds(client, make_creator):
         mock_settings.admin_creator_ids = creator.id
         resp = await client.post(
             f"{SEARCH_PREFIX}/reindex",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=_auth(token),
         )
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "completed"
     assert "documents_indexed" in body
+    assert "indexes_created" in body
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +468,30 @@ async def test_odata_injection_keyword_rejected(client):
         resp = await client.get(
             f"{SEARCH_PREFIX}",
             params={"q": "x", "category": "web eq true"},
+        )
+    assert resp.status_code == 400
+    assert "reserved keyword" in resp.json()["detail"]
+
+
+async def test_odata_injection_agent_type_single_quote(client):
+    """Agent type filter with single quote is rejected."""
+    svc = _mock_search_service()
+    with patch("marketplace.api.v2_search.get_search_service", return_value=svc):
+        resp = await client.get(
+            f"{SEARCH_PREFIX}/agents",
+            params={"q": "", "agent_type": "sell'er"},
+        )
+    assert resp.status_code == 400
+    assert "single quotes" in resp.json()["detail"]
+
+
+async def test_odata_injection_status_keyword(client):
+    """Status filter containing OData keyword is rejected."""
+    svc = _mock_search_service()
+    with patch("marketplace.api.v2_search.get_search_service", return_value=svc):
+        resp = await client.get(
+            f"{SEARCH_PREFIX}/agents",
+            params={"q": "", "status": "active or 1"},
         )
     assert resp.status_code == 400
     assert "reserved keyword" in resp.json()["detail"]

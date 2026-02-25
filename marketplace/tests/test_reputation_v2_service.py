@@ -349,6 +349,78 @@ class TestComputeFeatures:
         assert features["listing_count"] == 2.0
         assert features["unique_buyers"] == 2.0
 
+    async def test_agent_without_created_at_has_zero_age(
+        self, db: AsyncSession
+    ) -> None:
+        """compute_features returns age_days=0 when agent has no created_at."""
+        agent = RegisteredAgent(
+            id=_id(),
+            name=f"rep-agent-{_id()[:8]}",
+            agent_type="both",
+            public_key="ssh-rsa AAAA_test",
+            status="active",
+            created_at=None,
+        )
+        db.add(agent)
+        await db.commit()
+        await db.refresh(agent)
+
+        svc = ReputationV2Service.__new__(ReputationV2Service)
+        svc._model = None
+        features = await svc.compute_features(db, agent.id)
+        assert features["age_days"] == 0.0
+
+    async def test_avg_rating_defaults_when_no_ratings(
+        self, db: AsyncSession
+    ) -> None:
+        """compute_features returns default avg_rating=0.5 when no ratings on transactions."""
+        seller = await _create_agent(db)
+        buyer = await _create_agent(db)
+        listing = await _create_listing(db, seller.id)
+
+        await _create_transaction(
+            db, buyer.id, seller.id, listing.id, status="completed"
+        )
+
+        svc = ReputationV2Service.__new__(ReputationV2Service)
+        svc._model = None
+        features = await svc.compute_features(db, seller.id)
+        # Transaction model has no rating column, so avg_rating defaults to 0.5
+        assert features["avg_rating"] == 0.5
+
+    async def test_response_time_average_computed(
+        self, db: AsyncSession
+    ) -> None:
+        """compute_features calculates normalised response time from seller transactions."""
+        seller = await _create_agent(db)
+        buyer = await _create_agent(db)
+        listing = await _create_listing(db, seller.id)
+
+        now = datetime.now(timezone.utc)
+        # Transaction with 1800s (30 min) response time
+        await _create_transaction(
+            db, buyer.id, seller.id, listing.id,
+            status="completed",
+            initiated_at=now - timedelta(seconds=1800),
+            delivered_at=now,
+        )
+
+        svc = ReputationV2Service.__new__(ReputationV2Service)
+        svc._model = None
+        features = await svc.compute_features(db, seller.id)
+        # 1800s / 3600 = 0.5 normalised
+        assert abs(features["response_time_avg"] - 0.5) < 0.05
+
+    async def test_nonexistent_agent_returns_zero_age(
+        self, db: AsyncSession
+    ) -> None:
+        """compute_features returns age_days=0 for a nonexistent agent_id."""
+        svc = ReputationV2Service.__new__(ReputationV2Service)
+        svc._model = None
+        features = await svc.compute_features(db, "nonexistent-id-123")
+        assert features["age_days"] == 0.0
+        assert features["transaction_count"] == 0.0
+
 
 # ===================================================================
 # 4. update_agent_reputation (4 tests)

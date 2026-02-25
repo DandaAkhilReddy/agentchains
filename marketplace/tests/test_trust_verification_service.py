@@ -169,6 +169,30 @@ class TestSchemaFingerprint:
         assert fp is not None
 
 
+class TestSafeJsonLoad:
+    """_safe_json_load handles various input types gracefully."""
+
+    def test_none_returns_fallback(self) -> None:
+        assert _safe_json_load(None, {"default": True}) == {"default": True}
+
+    def test_dict_passthrough(self) -> None:
+        assert _safe_json_load({"key": "val"}, {}) == {"key": "val"}
+
+    def test_list_passthrough(self) -> None:
+        assert _safe_json_load([1, 2], []) == [1, 2]
+
+    def test_valid_json_string(self) -> None:
+        assert _safe_json_load('{"a": 1}', {}) == {"a": 1}
+
+    def test_invalid_json_string_returns_fallback(self) -> None:
+        assert _safe_json_load("not json{", []) == []
+
+    def test_non_string_non_dict_returns_fallback(self) -> None:
+        """Cover the final return fallback path for non-string, non-dict, non-list input."""
+        assert _safe_json_load(42, "default") == "default"
+        assert _safe_json_load(True, {}) == {}
+
+
 class TestContainsInjectionRisk:
     """_contains_injection_risk checks content and metadata for injection patterns."""
 

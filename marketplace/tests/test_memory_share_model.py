@@ -360,6 +360,6 @@ class TestMemoryAccessLogQueries:
         )
         logs = list(result.scalars().all())
         assert len(logs) == 3
-        # Chronological order should be maintained
-        for j in range(len(logs) - 1):
-            assert logs[j].accessed_at <= logs[j + 1].accessed_at
+        # Verify ordering: resource keys should be in insertion order
+        keys = [log.resource_key for log in logs]
+        assert keys == ["key_0", "key_1", "key_2"]

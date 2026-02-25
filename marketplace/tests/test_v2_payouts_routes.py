@@ -1,9 +1,14 @@
-"""Tests for marketplace/api/v2_payouts.py — USD payout request endpoints."""
+"""Tests for marketplace/api/v2_payouts.py -- USD payout request endpoints.
+
+All endpoints hit the real FastAPI app via the ``client`` fixture.
+Creator accounts are seeded directly into the in-memory SQLite database.
+Admin settings are temporarily overridden via ``object.__setattr__`` for
+admin-only tests.
+"""
 
 from __future__ import annotations
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
 
 from marketplace.config import settings
 from marketplace.models.token_account import TokenAccount
@@ -31,10 +36,11 @@ async def _seed_creator_account(creator_id: str, balance: float = 100.0) -> None
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v2/payouts/requests — create payout request
+# POST /api/v2/payouts/requests -- create payout request
 # ---------------------------------------------------------------------------
 
 async def test_create_payout_request_success(client, make_creator):
+    """POST /requests creates a payout request."""
     creator, token = await make_creator()
     await _seed_creator_account(creator.id, balance=50.0)
 
@@ -54,6 +60,7 @@ async def test_create_payout_request_success(client, make_creator):
 
 
 async def test_create_payout_request_api_credits_instant(client, make_creator):
+    """POST /requests with api_credits method is processed instantly."""
     creator, token = await make_creator()
     await _seed_creator_account(creator.id, balance=10.0)
 
@@ -68,11 +75,11 @@ async def test_create_payout_request_api_credits_instant(client, make_creator):
     assert resp.status_code == 201
     body = resp.json()
     assert body["redemption_type"] == "api_credits"
-    # api_credits are processed instantly
     assert body["status"] == "completed"
 
 
 async def test_create_payout_request_upi(client, make_creator):
+    """POST /requests with UPI method is accepted."""
     creator, token = await make_creator()
     await _seed_creator_account(creator.id, balance=50.0)
 
@@ -90,6 +97,7 @@ async def test_create_payout_request_upi(client, make_creator):
 
 
 async def test_create_payout_unsupported_method(client, make_creator):
+    """POST /requests with unsupported method returns 400."""
     creator, token = await make_creator()
 
     resp = await client.post(
@@ -105,6 +113,7 @@ async def test_create_payout_unsupported_method(client, make_creator):
 
 
 async def test_create_payout_below_minimum(client, make_creator):
+    """POST /requests below minimum threshold returns 400."""
     creator, token = await make_creator()
     await _seed_creator_account(creator.id, balance=100.0)
 
@@ -113,7 +122,7 @@ async def test_create_payout_below_minimum(client, make_creator):
         headers=_creator_auth(token),
         json={
             "payout_method": "bank_transfer",
-            "amount_usd": 1.0,  # below $10 minimum
+            "amount_usd": 1.0,
         },
     )
     assert resp.status_code == 400
@@ -121,6 +130,7 @@ async def test_create_payout_below_minimum(client, make_creator):
 
 
 async def test_create_payout_no_auth(client):
+    """POST /requests without auth returns 401."""
     resp = await client.post(
         "/api/v2/payouts/requests",
         json={
@@ -132,6 +142,7 @@ async def test_create_payout_no_auth(client):
 
 
 async def test_create_payout_invalid_amount_zero(client, make_creator):
+    """POST /requests with amount_usd=0 returns 422 (pydantic gt=0)."""
     creator, token = await make_creator()
 
     resp = await client.post(
@@ -142,10 +153,11 @@ async def test_create_payout_invalid_amount_zero(client, make_creator):
             "amount_usd": 0,
         },
     )
-    assert resp.status_code == 422  # pydantic validation: gt=0
+    assert resp.status_code == 422
 
 
 async def test_create_payout_negative_amount(client, make_creator):
+    """POST /requests with negative amount returns 422."""
     creator, token = await make_creator()
 
     resp = await client.post(
@@ -160,6 +172,7 @@ async def test_create_payout_negative_amount(client, make_creator):
 
 
 async def test_create_payout_exceeds_max(client, make_creator):
+    """POST /requests exceeding le=100_000 returns 422."""
     creator, token = await make_creator()
 
     resp = await client.post(
@@ -167,17 +180,33 @@ async def test_create_payout_exceeds_max(client, make_creator):
         headers=_creator_auth(token),
         json={
             "payout_method": "bank_transfer",
-            "amount_usd": 200_000,  # exceeds le=100_000
+            "amount_usd": 200_000,
         },
     )
     assert resp.status_code == 422
 
 
+async def test_create_payout_agent_token_rejected(client, make_agent):
+    """POST /requests with agent token (not creator) returns 401."""
+    _, agent_token = await make_agent()
+
+    resp = await client.post(
+        "/api/v2/payouts/requests",
+        headers=_creator_auth(agent_token),
+        json={
+            "payout_method": "bank_transfer",
+            "amount_usd": 20.0,
+        },
+    )
+    assert resp.status_code == 401
+
+
 # ---------------------------------------------------------------------------
-# GET /api/v2/payouts/requests — list payout requests
+# GET /api/v2/payouts/requests -- list payout requests
 # ---------------------------------------------------------------------------
 
 async def test_list_payout_requests_empty(client, make_creator):
+    """GET /requests returns empty list for a fresh creator."""
     creator, token = await make_creator()
 
     resp = await client.get(
@@ -191,10 +220,10 @@ async def test_list_payout_requests_empty(client, make_creator):
 
 
 async def test_list_payout_requests_with_data(client, make_creator):
+    """GET /requests returns created payout requests."""
     creator, token = await make_creator()
     await _seed_creator_account(creator.id, balance=100.0)
 
-    # Create two requests
     await client.post(
         "/api/v2/payouts/requests",
         headers=_creator_auth(token),
@@ -217,6 +246,7 @@ async def test_list_payout_requests_with_data(client, make_creator):
 
 
 async def test_list_payout_requests_filter_by_status(client, make_creator):
+    """GET /requests?status=pending filters results."""
     creator, token = await make_creator()
     await _seed_creator_account(creator.id, balance=100.0)
 
@@ -239,6 +269,7 @@ async def test_list_payout_requests_filter_by_status(client, make_creator):
 
 
 async def test_list_payout_requests_pagination(client, make_creator):
+    """GET /requests respects pagination parameters."""
     creator, token = await make_creator()
 
     resp = await client.get(
@@ -253,6 +284,7 @@ async def test_list_payout_requests_pagination(client, make_creator):
 
 
 async def test_list_payout_requests_no_auth(client):
+    """GET /requests without auth returns 401."""
     resp = await client.get("/api/v2/payouts/requests")
     assert resp.status_code == 401
 
@@ -262,6 +294,7 @@ async def test_list_payout_requests_no_auth(client):
 # ---------------------------------------------------------------------------
 
 async def test_cancel_payout_request_success(client, make_creator):
+    """POST /requests/{id}/cancel cancels a pending payout."""
     creator, token = await make_creator()
     await _seed_creator_account(creator.id, balance=100.0)
 
@@ -284,6 +317,7 @@ async def test_cancel_payout_request_success(client, make_creator):
 
 
 async def test_cancel_payout_request_not_found(client, make_creator):
+    """POST /requests/{id}/cancel for unknown request returns 400."""
     creator, token = await make_creator()
 
     resp = await client.post(
@@ -295,6 +329,7 @@ async def test_cancel_payout_request_not_found(client, make_creator):
 
 
 async def test_cancel_payout_request_no_auth(client):
+    """POST /requests/{id}/cancel without auth returns 401."""
     resp = await client.post(f"/api/v2/payouts/requests/{_new_id()}/cancel")
     assert resp.status_code == 401
 
@@ -304,6 +339,7 @@ async def test_cancel_payout_request_no_auth(client):
 # ---------------------------------------------------------------------------
 
 async def test_approve_payout_no_admin_configured(client, make_creator):
+    """POST /requests/{id}/approve without admin config returns 403."""
     creator, token = await make_creator()
     original = settings.admin_creator_ids
 
@@ -322,6 +358,7 @@ async def test_approve_payout_no_admin_configured(client, make_creator):
 
 
 async def test_approve_payout_non_admin_rejected(client, make_creator):
+    """POST /requests/{id}/approve by non-admin creator returns 403."""
     creator, token = await make_creator()
     original = settings.admin_creator_ids
 
@@ -340,10 +377,10 @@ async def test_approve_payout_non_admin_rejected(client, make_creator):
 
 
 async def test_approve_payout_as_admin_success(client, make_creator):
+    """POST /requests/{id}/approve by admin succeeds."""
     creator, token = await make_creator()
     await _seed_creator_account(creator.id, balance=100.0)
 
-    # Create a payout request first
     create_resp = await client.post(
         "/api/v2/payouts/requests",
         headers=_creator_auth(token),
@@ -369,6 +406,7 @@ async def test_approve_payout_as_admin_success(client, make_creator):
 
 
 async def test_approve_payout_no_auth(client):
+    """POST /requests/{id}/approve without auth returns 401."""
     resp = await client.post(
         f"/api/v2/payouts/requests/{_new_id()}/approve",
         json={"admin_notes": ""},
@@ -381,6 +419,7 @@ async def test_approve_payout_no_auth(client):
 # ---------------------------------------------------------------------------
 
 async def test_reject_payout_non_admin_rejected(client, make_creator):
+    """POST /requests/{id}/reject by non-admin returns 403."""
     creator, token = await make_creator()
     original = settings.admin_creator_ids
 
@@ -398,6 +437,7 @@ async def test_reject_payout_non_admin_rejected(client, make_creator):
 
 
 async def test_reject_payout_as_admin_success(client, make_creator):
+    """POST /requests/{id}/reject by admin succeeds."""
     creator, token = await make_creator()
     await _seed_creator_account(creator.id, balance=100.0)
 
@@ -427,17 +467,19 @@ async def test_reject_payout_as_admin_success(client, make_creator):
 
 
 async def test_reject_payout_missing_reason(client, make_creator):
+    """POST /requests/{id}/reject with empty reason returns 422."""
     creator, token = await make_creator()
 
     resp = await client.post(
         f"/api/v2/payouts/requests/{_new_id()}/reject",
         headers=_creator_auth(token),
-        json={"reason": ""},  # min_length=1
+        json={"reason": ""},
     )
     assert resp.status_code == 422
 
 
 async def test_reject_payout_no_auth(client):
+    """POST /requests/{id}/reject without auth returns 401."""
     resp = await client.post(
         f"/api/v2/payouts/requests/{_new_id()}/reject",
         json={"reason": "nope"},
@@ -446,6 +488,7 @@ async def test_reject_payout_no_auth(client):
 
 
 async def test_reject_payout_not_found(client, make_creator):
+    """POST /requests/{id}/reject for unknown request returns 400."""
     creator, token = await make_creator()
     original = settings.admin_creator_ids
 

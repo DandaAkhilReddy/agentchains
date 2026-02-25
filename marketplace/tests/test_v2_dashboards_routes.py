@@ -1,4 +1,9 @@
-"""Tests for marketplace/api/v2_dashboards.py — role-specific dashboard endpoints."""
+"""Tests for marketplace/api/v2_dashboards.py -- role-specific dashboard endpoints.
+
+The dashboard service performs complex aggregation queries, so we mock it at
+the service boundary.  All route-level auth, permission checks, and DB
+lookups run for real against the in-memory test database.
+"""
 
 from __future__ import annotations
 
@@ -68,12 +73,15 @@ _MOCK_PUBLIC_DASHBOARD = {
     "updated_at": datetime.now(timezone.utc).isoformat(),
 }
 
+DASHBOARDS_PREFIX = "/api/v2/dashboards"
+
 
 # ---------------------------------------------------------------------------
-# GET /api/v2/dashboards/agent/me — authenticated agent dashboard
+# GET /api/v2/dashboards/agent/me -- authenticated agent dashboard
 # ---------------------------------------------------------------------------
 
 async def test_dashboard_agent_me_success(client, make_agent):
+    """GET /agent/me returns the agent's own dashboard."""
     agent, token = await make_agent()
 
     with patch(
@@ -82,7 +90,7 @@ async def test_dashboard_agent_me_success(client, make_agent):
         return_value={**_MOCK_AGENT_DASHBOARD, "agent_id": agent.id},
     ):
         resp = await client.get(
-            "/api/v2/dashboards/agent/me",
+            f"{DASHBOARDS_PREFIX}/agent/me",
             headers=_agent_auth(token),
         )
     assert resp.status_code == 200
@@ -90,18 +98,30 @@ async def test_dashboard_agent_me_success(client, make_agent):
     assert body["agent_id"] == agent.id
     assert "money_received_usd" in body
     assert "savings" in body
+    assert "trust_status" in body
 
 
 async def test_dashboard_agent_me_no_auth(client):
-    resp = await client.get("/api/v2/dashboards/agent/me")
+    """GET /agent/me without auth returns 401."""
+    resp = await client.get(f"{DASHBOARDS_PREFIX}/agent/me")
+    assert resp.status_code == 401
+
+
+async def test_dashboard_agent_me_invalid_token(client):
+    """GET /agent/me with invalid token returns 401."""
+    resp = await client.get(
+        f"{DASHBOARDS_PREFIX}/agent/me",
+        headers=_agent_auth("invalid-jwt"),
+    )
     assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v2/dashboards/creator/me — authenticated creator dashboard
+# GET /api/v2/dashboards/creator/me -- authenticated creator dashboard
 # ---------------------------------------------------------------------------
 
 async def test_dashboard_creator_me_success(client, make_creator):
+    """GET /creator/me returns the creator's dashboard."""
     creator, token = await make_creator()
 
     with patch(
@@ -110,7 +130,7 @@ async def test_dashboard_creator_me_success(client, make_creator):
         return_value={**_MOCK_CREATOR_DASHBOARD, "creator_id": creator.id},
     ):
         resp = await client.get(
-            "/api/v2/dashboards/creator/me",
+            f"{DASHBOARDS_PREFIX}/creator/me",
             headers=_creator_auth(token),
         )
     assert resp.status_code == 200
@@ -118,18 +138,31 @@ async def test_dashboard_creator_me_success(client, make_creator):
     assert body["creator_id"] == creator.id
     assert "creator_balance_usd" in body
     assert "total_agents" in body
+    assert "creator_net_revenue_usd" in body
 
 
 async def test_dashboard_creator_me_no_auth(client):
-    resp = await client.get("/api/v2/dashboards/creator/me")
+    """GET /creator/me without auth returns 401."""
+    resp = await client.get(f"{DASHBOARDS_PREFIX}/creator/me")
+    assert resp.status_code == 401
+
+
+async def test_dashboard_creator_me_agent_token_rejected(client, make_agent):
+    """GET /creator/me rejects agent tokens."""
+    _, agent_token = await make_agent()
+    resp = await client.get(
+        f"{DASHBOARDS_PREFIX}/creator/me",
+        headers=_creator_auth(agent_token),
+    )
     assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v2/dashboards/agent/{agent_id}/public — public agent dashboard
+# GET /api/v2/dashboards/agent/{agent_id}/public -- public agent dashboard
 # ---------------------------------------------------------------------------
 
 async def test_dashboard_agent_public_success(client, make_agent):
+    """GET /agent/{id}/public returns public dashboard (no auth required)."""
     agent, _ = await make_agent()
 
     with patch(
@@ -137,7 +170,7 @@ async def test_dashboard_agent_public_success(client, make_agent):
         new_callable=AsyncMock,
         return_value={**_MOCK_PUBLIC_DASHBOARD, "agent_id": agent.id},
     ):
-        resp = await client.get(f"/api/v2/dashboards/agent/{agent.id}/public")
+        resp = await client.get(f"{DASHBOARDS_PREFIX}/agent/{agent.id}/public")
     assert resp.status_code == 200
     body = resp.json()
     assert body["agent_id"] == agent.id
@@ -146,12 +179,13 @@ async def test_dashboard_agent_public_success(client, make_agent):
 
 
 async def test_dashboard_agent_public_not_found(client):
+    """GET /agent/{id}/public returns 404 for unknown agent."""
     with patch(
         "marketplace.api.v2_dashboards.dashboard_service.get_agent_public_dashboard",
         new_callable=AsyncMock,
         side_effect=ValueError("Agent not found"),
     ):
-        resp = await client.get(f"/api/v2/dashboards/agent/{_new_id()}/public")
+        resp = await client.get(f"{DASHBOARDS_PREFIX}/agent/{_new_id()}/public")
     assert resp.status_code == 404
 
 
@@ -164,12 +198,12 @@ async def test_dashboard_agent_public_no_auth_required(client, make_agent):
         new_callable=AsyncMock,
         return_value={**_MOCK_PUBLIC_DASHBOARD, "agent_id": agent.id},
     ):
-        resp = await client.get(f"/api/v2/dashboards/agent/{agent.id}/public")
+        resp = await client.get(f"{DASHBOARDS_PREFIX}/agent/{agent.id}/public")
     assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v2/dashboards/agent/{agent_id} — private agent dashboard
+# GET /api/v2/dashboards/agent/{agent_id} -- private agent dashboard
 # ---------------------------------------------------------------------------
 
 async def test_dashboard_agent_private_same_agent(client, make_agent):
@@ -182,7 +216,7 @@ async def test_dashboard_agent_private_same_agent(client, make_agent):
         return_value={**_MOCK_AGENT_DASHBOARD, "agent_id": agent.id},
     ):
         resp = await client.get(
-            f"/api/v2/dashboards/agent/{agent.id}",
+            f"{DASHBOARDS_PREFIX}/agent/{agent.id}",
             headers=_agent_auth(token),
         )
     assert resp.status_code == 200
@@ -194,17 +228,17 @@ async def test_dashboard_agent_private_no_auth(client, make_agent):
     """No auth header should return 401."""
     agent, _ = await make_agent()
 
-    resp = await client.get(f"/api/v2/dashboards/agent/{agent.id}")
+    resp = await client.get(f"{DASHBOARDS_PREFIX}/agent/{agent.id}")
     assert resp.status_code == 401
 
 
 async def test_dashboard_agent_private_different_agent_no_creator(client, make_agent):
     """Agent A cannot view Agent B's private dashboard without creator auth."""
-    agent_a, token_a = await make_agent(name="agent-a")
-    agent_b, _ = await make_agent(name="agent-b")
+    agent_a, token_a = await make_agent(name="dash-agent-a")
+    agent_b, _ = await make_agent(name="dash-agent-b")
 
     resp = await client.get(
-        f"/api/v2/dashboards/agent/{agent_b.id}",
+        f"{DASHBOARDS_PREFIX}/agent/{agent_b.id}",
         headers=_agent_auth(token_a),
     )
     # Agent A is not agent B, and agent A's token is not a creator token
@@ -212,15 +246,16 @@ async def test_dashboard_agent_private_different_agent_no_creator(client, make_a
 
 
 async def test_dashboard_agent_private_creator_owns_agent(client, make_agent, make_creator, db):
-    """Creator who owns the agent should be able to view the dashboard."""
+    """Creator who owns the agent can view the dashboard."""
     from marketplace.models.agent import RegisteredAgent
+    from sqlalchemy import select
 
     creator, creator_token = await make_creator()
     agent, _ = await make_agent()
 
     # Assign creator_id to the agent
     result = await db.execute(
-        __import__("sqlalchemy").select(RegisteredAgent).where(RegisteredAgent.id == agent.id)
+        select(RegisteredAgent).where(RegisteredAgent.id == agent.id)
     )
     agent_row = result.scalar_one()
     agent_row.creator_id = creator.id
@@ -232,7 +267,7 @@ async def test_dashboard_agent_private_creator_owns_agent(client, make_agent, ma
         return_value={**_MOCK_AGENT_DASHBOARD, "agent_id": agent.id},
     ):
         resp = await client.get(
-            f"/api/v2/dashboards/agent/{agent.id}",
+            f"{DASHBOARDS_PREFIX}/agent/{agent.id}",
             headers=_creator_auth(creator_token),
         )
     assert resp.status_code == 200
@@ -252,7 +287,7 @@ async def test_dashboard_agent_private_admin_creator(client, make_agent, make_cr
         return_value={**_MOCK_AGENT_DASHBOARD, "agent_id": agent.id},
     ):
         resp = await client.get(
-            f"/api/v2/dashboards/agent/{agent.id}",
+            f"{DASHBOARDS_PREFIX}/agent/{agent.id}",
             headers=_creator_auth(creator_token),
         )
     assert resp.status_code == 200
@@ -268,7 +303,7 @@ async def test_dashboard_agent_private_creator_not_owner(client, make_agent, mak
         return_value=set(),
     ):
         resp = await client.get(
-            f"/api/v2/dashboards/agent/{agent.id}",
+            f"{DASHBOARDS_PREFIX}/agent/{agent.id}",
             headers=_creator_auth(creator_token),
         )
     assert resp.status_code == 403
@@ -279,7 +314,7 @@ async def test_dashboard_agent_private_agent_not_found(client, make_creator):
     creator, creator_token = await make_creator()
 
     resp = await client.get(
-        f"/api/v2/dashboards/agent/{_new_id()}",
+        f"{DASHBOARDS_PREFIX}/agent/{_new_id()}",
         headers=_creator_auth(creator_token),
     )
     assert resp.status_code == 404

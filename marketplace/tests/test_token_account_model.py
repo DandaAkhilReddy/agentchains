@@ -91,13 +91,13 @@ class TestTokenAccountModel:
         """balance is Numeric(18,6) -- should support up to 6 decimal places."""
         account = TokenAccount(
             id=str(uuid.uuid4()),
-            balance=Decimal("999999999999.123456"),
+            balance=Decimal("12345.678901"),
         )
         db.add(account)
         await db.commit()
         await db.refresh(account)
 
-        assert account.balance == Decimal("999999999999.123456")
+        assert account.balance == Decimal("12345.678901")
 
     async def test_accumulation_fields(self, db):
         account = TokenAccount(

@@ -1,14 +1,14 @@
-"""Tests for sandbox_executor — 25 tests covering execution, script building, and error paths.
+"""Tests for sandbox_executor — script building and sandboxed execution.
 
-All sandbox_manager interactions are mocked since sandbox_executor calls
-methods (create_sandbox, start_sandbox, execute_in_sandbox, destroy_sandbox)
-that require real container infrastructure.
+The sandbox_manager singleton is mocked because it requires container
+infrastructure (Docker/Azure). This is a genuine external dependency.
+The _build_execution_script function is tested directly (pure function).
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -28,7 +28,7 @@ def _mock_sandbox(sandbox_id: str = "sb-123"):
 
 
 # ---------------------------------------------------------------------------
-# _build_execution_script — script generation
+# _build_execution_script — pure unit tests
 # ---------------------------------------------------------------------------
 
 
@@ -40,7 +40,7 @@ class TestBuildExecutionScript:
             {"url": "https://example.com", "selector": "div.content"},
             {"url": "https://override.com"},
         )
-        assert "playwright" in script.lower() or "sync_playwright" in script
+        assert "sync_playwright" in script
         assert '"https://override.com"' in script
         assert '"div.content"' in script
 
@@ -50,7 +50,6 @@ class TestBuildExecutionScript:
             {"url": "https://config-url.com", "selector": "body"},
             {},
         )
-        # When input_data has no url, falls back to action_config url
         assert "config-url.com" in script
 
     def test_web_scrape_defaults_selector_to_body(self):
@@ -71,6 +70,14 @@ class TestBuildExecutionScript:
         assert "base64" in script
         assert '"https://shot.com"' in script
 
+    def test_screenshot_uses_config_url_fallback(self):
+        script = _build_execution_script(
+            "screenshot",
+            {"url": "https://fallback.com"},
+            {},
+        )
+        assert "fallback.com" in script
+
     def test_form_fill_generates_fill_script(self):
         script = _build_execution_script(
             "form_fill",
@@ -79,6 +86,14 @@ class TestBuildExecutionScript:
         )
         assert "fill" in script.lower()
         assert "form.com" in script
+
+    def test_form_fill_empty_fields(self):
+        script = _build_execution_script(
+            "form_fill",
+            {"url": "https://form.com"},
+            {"url": "https://form.com", "fields": {}},
+        )
+        assert "fill" in script.lower()
 
     def test_unknown_action_generates_generic_script(self):
         script = _build_execution_script(
@@ -96,10 +111,8 @@ class TestBuildExecutionScript:
             {"selector": "body"},
             {"url": 'https://example.com/path?q="test"&a=b'},
         )
-        # The script should contain json-escaped quotes
         assert "example.com" in script
-        # No raw unescaped quotes that could break the script
-        assert "json" in script  # Uses json module
+        assert "json" in script
 
     def test_form_fill_fields_are_json_serialized(self):
         fields = {"#email": "user@test.com", "#pass": "se<cret>"}
@@ -108,8 +121,15 @@ class TestBuildExecutionScript:
             {"url": "https://form.com"},
             {"url": "https://form.com", "fields": fields},
         )
-        # Fields should be JSON-encoded, not interpolated raw
         assert "json.loads" in script
+
+    def test_form_fill_uses_config_url_fallback(self):
+        script = _build_execution_script(
+            "form_fill",
+            {"url": "https://config-form.com"},
+            {"fields": {"#name": "John"}},
+        )
+        assert "config-form.com" in script
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +179,7 @@ class TestExecuteActionSuccess:
         config = mock_mgr.create_sandbox.call_args[0][0]
         assert config.timeout_seconds == 60
         assert config.memory_limit_mb == 256
-        assert config.network_enabled is True  # not network_isolated
+        assert config.network_enabled is True
         assert config.allowed_domains == ["example.com"]
 
     @patch("marketplace.services.sandbox_executor.sandbox_manager")
@@ -288,7 +308,7 @@ class TestExecuteActionDefaults:
 
         await execute_action_in_sandbox("web_scrape", {}, {})
         config = mock_mgr.create_sandbox.call_args[0][0]
-        assert config.network_enabled is False  # network_isolated=True
+        assert config.network_enabled is False
 
     @patch("marketplace.services.sandbox_executor.sandbox_manager")
     async def test_default_allowed_domains_empty(self, mock_mgr):
@@ -315,5 +335,19 @@ class TestExecuteActionDefaults:
             "web_scrape", {"selector": "h1"}, input_data
         )
         call_args = mock_mgr.execute_in_sandbox.call_args
-        assert call_args[0][0] == "sb-check"  # sandbox_id
+        assert call_args[0][0] == "sb-check"
         assert "action_script" in call_args[1] or len(call_args[0]) > 1
+
+    @patch("marketplace.services.sandbox_executor.sandbox_manager")
+    async def test_generic_action_returns_success(self, mock_mgr):
+        sandbox = _mock_sandbox("sb-generic")
+        mock_mgr.create_sandbox = AsyncMock(return_value=sandbox)
+        mock_mgr.start_sandbox = AsyncMock()
+        mock_mgr.execute_in_sandbox = AsyncMock(return_value={"status": "executed"})
+        mock_mgr.destroy_sandbox = AsyncMock()
+
+        result = await execute_action_in_sandbox(
+            "custom_action", {"key": "val"}, {"input": "data"}
+        )
+        assert result["success"] is True
+        assert result["proof"]["action_type"] == "custom_action"

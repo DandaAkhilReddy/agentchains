@@ -393,7 +393,7 @@ class TestCheckAccess:
         # Use naive datetime because SQLite strips timezone info from stored values.
         # The service code uses datetime.now(timezone.utc), so we patch it to return
         # a naive datetime that is consistent with what SQLite returns.
-        past = datetime.utcnow() - timedelta(hours=1)
+        past = datetime.now() - timedelta(hours=1)
         await create_share_policy(
             db,
             owner_agent_id=OWNER_ID,
@@ -402,7 +402,7 @@ class TestCheckAccess:
             expires_at=past,
         )
 
-        fake_now = datetime.utcnow() + timedelta(seconds=10)
+        fake_now = datetime.now() + timedelta(seconds=10)
         with patch(
             "marketplace.services.memory_federation_service.datetime"
         ) as mock_dt:
@@ -419,7 +419,7 @@ class TestCheckAccess:
         assert policy is None
 
     async def test_expired_policy_status_updated_to_expired(self, db: AsyncSession):
-        past = datetime.utcnow() - timedelta(hours=1)
+        past = datetime.now() - timedelta(hours=1)
         created = await create_share_policy(
             db,
             owner_agent_id=OWNER_ID,
@@ -428,7 +428,7 @@ class TestCheckAccess:
             expires_at=past,
         )
 
-        fake_now = datetime.utcnow() + timedelta(seconds=10)
+        fake_now = datetime.now() + timedelta(seconds=10)
         with patch(
             "marketplace.services.memory_federation_service.datetime"
         ) as mock_dt:

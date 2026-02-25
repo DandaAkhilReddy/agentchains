@@ -1,4 +1,9 @@
-"""Tests for marketplace/api/v2_billing.py — USD-native billing endpoints."""
+"""Tests for marketplace/api/v2_billing.py -- USD-native billing endpoints.
+
+All endpoints hit the real FastAPI app via the ``client`` fixture.
+Token accounts are seeded directly into the in-memory SQLite database.
+No external services to mock.
+"""
 
 from __future__ import annotations
 
@@ -22,7 +27,6 @@ def _auth(token: str) -> dict[str, str]:
 async def _seed_account(agent_id: str, balance: float = 0.0) -> TokenAccount:
     """Create a TokenAccount for the agent and a platform treasury account."""
     async with TestSession() as db:
-        # Platform treasury (agent_id=None)
         from sqlalchemy import select
 
         result = await db.execute(
@@ -160,6 +164,18 @@ async def test_billing_ledger_no_account_returns_empty(client, make_agent):
     assert resp.json()["entries"] == []
 
 
+async def test_billing_ledger_invalid_page_rejected(client, make_agent):
+    """GET /ledger/me with page=0 returns 422."""
+    _, token = await make_agent()
+
+    resp = await client.get(
+        f"{BILLING_PREFIX}/ledger/me",
+        headers=_auth(token),
+        params={"page": 0},
+    )
+    assert resp.status_code == 422
+
+
 # ===========================================================================
 # POST /api/v2/billing/deposits
 # ===========================================================================
@@ -243,7 +259,6 @@ async def test_confirm_deposit_happy_path(client, make_agent):
     agent, token = await make_agent()
     await _seed_account(agent.id, balance=0.0)
 
-    # Create deposit
     create_resp = await client.post(
         f"{BILLING_PREFIX}/deposits",
         headers=_auth(token),
@@ -251,7 +266,6 @@ async def test_confirm_deposit_happy_path(client, make_agent):
     )
     deposit_id = create_resp.json()["id"]
 
-    # Confirm deposit
     confirm_resp = await client.post(
         f"{BILLING_PREFIX}/deposits/{deposit_id}/confirm",
         headers=_auth(token),
@@ -260,7 +274,6 @@ async def test_confirm_deposit_happy_path(client, make_agent):
     body = confirm_resp.json()
     assert body["status"] == "completed"
 
-    # Verify balance increased
     balance_resp = await client.get(
         f"{BILLING_PREFIX}/accounts/me",
         headers=_auth(token),
@@ -276,7 +289,6 @@ async def test_confirm_deposit_nonexistent(client, make_agent):
         f"{BILLING_PREFIX}/deposits/no-such-deposit/confirm",
         headers=_auth(token),
     )
-    # NotFoundError raised from deposit_service
     assert resp.status_code in (400, 404)
 
 
@@ -285,7 +297,6 @@ async def test_confirm_deposit_already_completed(client, make_agent):
     agent, token = await make_agent()
     await _seed_account(agent.id, balance=0.0)
 
-    # Create and confirm
     create_resp = await client.post(
         f"{BILLING_PREFIX}/deposits",
         headers=_auth(token),
@@ -298,7 +309,6 @@ async def test_confirm_deposit_already_completed(client, make_agent):
         headers=_auth(token),
     )
 
-    # Try to confirm again
     resp = await client.post(
         f"{BILLING_PREFIX}/deposits/{deposit_id}/confirm",
         headers=_auth(token),
@@ -420,13 +430,11 @@ async def test_transfer_with_idempotency_key(client, make_agent):
     )
     assert resp1.status_code == 200
 
-    # Second call with same key should return the same result or be idempotent
     resp2 = await client.post(
         f"{BILLING_PREFIX}/transfers",
         headers=_auth(sender_token),
         json=payload,
     )
-    # Either succeeds idempotently or returns 400 for duplicate
     assert resp2.status_code in (200, 400)
 
 

@@ -1,13 +1,13 @@
-"""Tests for a2ui_service — 25 tests covering all public functions and the A2UIService class.
+"""Tests for a2ui_service — covers all public functions and the A2UIService class.
 
-All WebSocket interactions are mocked via the a2ui_connection_manager and
-a2ui_session_manager singletons.
+The a2ui_connection_manager and a2ui_session_manager singletons are mocked
+because they manage real WebSocket connections (external I/O boundary).
+The _build_jsonrpc_notification helper is tested directly as a pure function.
 """
 
 from __future__ import annotations
 
 import asyncio
-import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,7 +26,7 @@ from marketplace.services.a2ui_service import (
 
 
 # ---------------------------------------------------------------------------
-# _build_jsonrpc_notification
+# _build_jsonrpc_notification — pure unit tests
 # ---------------------------------------------------------------------------
 
 
@@ -47,6 +47,10 @@ class TestBuildJsonrpcNotification:
         msg = _build_jsonrpc_notification("test.method", params)
         assert msg["params"] is params
 
+    def test_empty_params(self):
+        msg = _build_jsonrpc_notification("test.method", {})
+        assert msg["params"] == {}
+
 
 # ---------------------------------------------------------------------------
 # push_render
@@ -66,7 +70,6 @@ class TestPushRender:
         cid = await push_render("sess-1", "chart", {"title": "Revenue"})
         assert isinstance(cid, str)
         assert len(cid) > 0
-        # Component ID should be added to session's active_components
         assert cid in mock_session.active_components
 
     @patch("marketplace.services.a2ui_service.a2ui_connection_manager")
@@ -105,6 +108,18 @@ class TestPushRender:
         cid = await push_render("missing-sess", "chart", {"data": 1})
         assert isinstance(cid, str)
 
+    @patch("marketplace.services.a2ui_service.a2ui_connection_manager")
+    @patch("marketplace.services.a2ui_service.a2ui_session_manager")
+    async def test_push_render_no_metadata(self, mock_session_mgr, mock_conn_mgr):
+        mock_session_mgr.get_session.return_value = MagicMock(active_components=set())
+        mock_conn_mgr.send_to_session = AsyncMock(return_value=True)
+
+        await push_render("sess-1", "chart", {"data": 1})
+
+        call_args = mock_conn_mgr.send_to_session.call_args
+        message = call_args[0][1]
+        assert message["params"]["metadata"] is None
+
 
 # ---------------------------------------------------------------------------
 # push_update
@@ -134,13 +149,11 @@ class TestPushUpdate:
     async def test_push_update_accepts_merge_operation(self, mock_conn_mgr):
         mock_conn_mgr.send_to_session = AsyncMock(return_value=True)
         await push_update("sess-1", "comp-1", "merge", {"key": "value"})
-        # Should not raise
 
     @patch("marketplace.services.a2ui_service.a2ui_connection_manager")
     async def test_push_update_accepts_append_operation(self, mock_conn_mgr):
         mock_conn_mgr.send_to_session = AsyncMock(return_value=True)
         await push_update("sess-1", "comp-1", "append", {"row": [1, 2]})
-        # Should not raise
 
     @patch("marketplace.services.a2ui_service.a2ui_connection_manager")
     @patch("marketplace.services.a2ui_service.validate_payload_size", return_value=False)
@@ -161,13 +174,11 @@ class TestRequestInput:
     @patch("marketplace.services.a2ui_service.a2ui_connection_manager")
     @patch("marketplace.services.a2ui_service.a2ui_session_manager")
     async def test_request_input_sends_and_resolves(self, mock_session_mgr, mock_conn_mgr):
-        """Simulates the user responding to an input request."""
         loop = asyncio.get_running_loop()
         future = loop.create_future()
         mock_session_mgr.set_pending_input.return_value = future
         mock_conn_mgr.send_to_session = AsyncMock(return_value=True)
 
-        # Resolve the future after a short delay
         async def _resolve():
             await asyncio.sleep(0.01)
             future.set_result("user-typed-value")
@@ -179,7 +190,6 @@ class TestRequestInput:
     @patch("marketplace.services.a2ui_service.a2ui_connection_manager")
     @patch("marketplace.services.a2ui_service.a2ui_session_manager")
     async def test_request_input_timeout(self, mock_session_mgr, mock_conn_mgr):
-        """If user doesn't respond within timeout, asyncio.TimeoutError is raised."""
         loop = asyncio.get_running_loop()
         future = loop.create_future()
         mock_session_mgr.set_pending_input.return_value = future
@@ -187,6 +197,29 @@ class TestRequestInput:
 
         with pytest.raises(asyncio.TimeoutError):
             await request_input("sess-1", "text", "prompt", timeout=0.01)
+
+    @patch("marketplace.services.a2ui_service.a2ui_connection_manager")
+    @patch("marketplace.services.a2ui_service.a2ui_session_manager")
+    async def test_request_input_with_options(self, mock_session_mgr, mock_conn_mgr):
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        mock_session_mgr.set_pending_input.return_value = future
+        mock_conn_mgr.send_to_session = AsyncMock(return_value=True)
+
+        async def _resolve():
+            await asyncio.sleep(0.01)
+            future.set_result("option-a")
+
+        asyncio.create_task(_resolve())
+        result = await request_input(
+            "sess-1", "select", "Choose:", options=["option-a", "option-b"], timeout=5
+        )
+        assert result == "option-a"
+
+        call_args = mock_conn_mgr.send_to_session.call_args
+        message = call_args[0][1]
+        assert message["params"]["options"] == ["option-a", "option-b"]
+        assert message["params"]["input_type"] == "select"
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +256,29 @@ class TestRequestConfirm:
         with pytest.raises(asyncio.TimeoutError):
             await request_confirm("sess-1", "Approve?", timeout=0.01)
 
+    @patch("marketplace.services.a2ui_service.a2ui_connection_manager")
+    @patch("marketplace.services.a2ui_service.a2ui_session_manager")
+    async def test_request_confirm_message_structure(self, mock_session_mgr, mock_conn_mgr):
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        mock_session_mgr.set_pending_input.return_value = future
+        mock_conn_mgr.send_to_session = AsyncMock(return_value=True)
+
+        async def _resolve():
+            await asyncio.sleep(0.01)
+            future.set_result({"approved": False, "reason": "not now"})
+
+        asyncio.create_task(_resolve())
+        await request_confirm(
+            "sess-1", "Confirm?", description="Details here", severity="info", timeout=5
+        )
+
+        call_args = mock_conn_mgr.send_to_session.call_args
+        message = call_args[0][1]
+        assert message["method"] == "ui.confirm"
+        assert message["params"]["severity"] == "info"
+        assert "timeout_seconds" in message["params"]
+
 
 # ---------------------------------------------------------------------------
 # push_progress
@@ -244,6 +300,18 @@ class TestPushProgress:
         assert message["params"]["progress_type"] == "determinate"
         assert message["params"]["value"] == 50
         assert message["params"]["total"] == 100
+
+    @patch("marketplace.services.a2ui_service.a2ui_connection_manager")
+    async def test_push_progress_no_message(self, mock_conn_mgr):
+        mock_conn_mgr.send_to_session = AsyncMock(return_value=True)
+
+        await push_progress("sess-1", "task-1", "indeterminate")
+
+        call_args = mock_conn_mgr.send_to_session.call_args
+        message = call_args[0][1]
+        assert message["params"]["message"] is None
+        assert message["params"]["value"] is None
+        assert message["params"]["total"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +362,26 @@ class TestPushNotify:
         assert message["method"] == "ui.notify"
         assert message["params"]["level"] == "success"
         assert message["params"]["duration_ms"] == 3000
+
+    @patch("marketplace.services.a2ui_service.a2ui_connection_manager")
+    async def test_push_notify_no_message(self, mock_conn_mgr):
+        mock_conn_mgr.send_to_session = AsyncMock(return_value=True)
+
+        await push_notify("sess-1", "info", "Title only")
+
+        call_args = mock_conn_mgr.send_to_session.call_args
+        message = call_args[0][1]
+        assert message["params"]["message"] is None
+
+    @patch("marketplace.services.a2ui_service.a2ui_connection_manager")
+    async def test_push_notify_default_duration(self, mock_conn_mgr):
+        mock_conn_mgr.send_to_session = AsyncMock(return_value=True)
+
+        await push_notify("sess-1", "warning", "Alert!")
+
+        call_args = mock_conn_mgr.send_to_session.call_args
+        message = call_args[0][1]
+        assert message["params"]["duration_ms"] == 5000
 
 
 # ---------------------------------------------------------------------------

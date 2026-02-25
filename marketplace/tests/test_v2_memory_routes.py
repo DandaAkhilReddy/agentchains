@@ -1,4 +1,9 @@
-"""Tests for marketplace/api/v2_memory.py — managed memory vault endpoints."""
+"""Tests for marketplace/api/v2_memory.py -- managed memory vault endpoints.
+
+The memory service involves encryption and complex DB operations, so we mock
+``memory_service`` at the service boundary.  Route-level auth and validation
+run for real.
+"""
 
 from __future__ import annotations
 
@@ -44,12 +49,15 @@ _MOCK_VERIFY_RESULT = {
     "trust_profile": {"trust_status": "verified", "trust_tier": "T1", "trust_score": 20},
 }
 
+MEMORY_PREFIX = "/api/v2/memory"
+
 
 # ---------------------------------------------------------------------------
-# POST /api/v2/memory/snapshots/import — import memory snapshot
+# POST /api/v2/memory/snapshots/import -- import memory snapshot
 # ---------------------------------------------------------------------------
 
 async def test_import_memory_snapshot_success(client, make_agent):
+    """POST /snapshots/import creates a new snapshot."""
     agent, token = await make_agent()
 
     with patch(
@@ -58,7 +66,7 @@ async def test_import_memory_snapshot_success(client, make_agent):
         return_value={**_MOCK_IMPORT_RESULT, "snapshot": {**_MOCK_SNAPSHOT, "agent_id": agent.id}},
     ):
         resp = await client.post(
-            "/api/v2/memory/snapshots/import",
+            f"{MEMORY_PREFIX}/snapshots/import",
             headers=_agent_auth(token),
             json={
                 "source_type": "sdk",
@@ -75,6 +83,7 @@ async def test_import_memory_snapshot_success(client, make_agent):
 
 
 async def test_import_memory_snapshot_empty_records(client, make_agent):
+    """POST /snapshots/import with empty records returns 400."""
     agent, token = await make_agent()
 
     with patch(
@@ -83,7 +92,7 @@ async def test_import_memory_snapshot_empty_records(client, make_agent):
         side_effect=ValueError("At least one memory record is required"),
     ):
         resp = await client.post(
-            "/api/v2/memory/snapshots/import",
+            f"{MEMORY_PREFIX}/snapshots/import",
             headers=_agent_auth(token),
             json={
                 "source_type": "sdk",
@@ -96,8 +105,9 @@ async def test_import_memory_snapshot_empty_records(client, make_agent):
 
 
 async def test_import_memory_snapshot_no_auth(client):
+    """POST /snapshots/import without auth returns 401."""
     resp = await client.post(
-        "/api/v2/memory/snapshots/import",
+        f"{MEMORY_PREFIX}/snapshots/import",
         json={
             "source_type": "sdk",
             "label": "test",
@@ -108,6 +118,7 @@ async def test_import_memory_snapshot_no_auth(client):
 
 
 async def test_import_memory_snapshot_with_metadata(client, make_agent):
+    """POST /snapshots/import passes source_metadata and encrypted_blob_ref."""
     agent, token = await make_agent()
 
     with patch(
@@ -116,7 +127,7 @@ async def test_import_memory_snapshot_with_metadata(client, make_agent):
         return_value=_MOCK_IMPORT_RESULT,
     ) as mock_import:
         resp = await client.post(
-            "/api/v2/memory/snapshots/import",
+            f"{MEMORY_PREFIX}/snapshots/import",
             headers=_agent_auth(token),
             json={
                 "source_type": "langchain",
@@ -128,14 +139,19 @@ async def test_import_memory_snapshot_with_metadata(client, make_agent):
         )
     assert resp.status_code == 201
     mock_import.assert_called_once()
+    call_kwargs = mock_import.call_args.kwargs
+    assert call_kwargs["source_type"] == "langchain"
+    assert call_kwargs["source_metadata"] == {"model": "gpt-4", "chain": "rag"}
+    assert call_kwargs["encrypted_blob_ref"] == "blob:ref:123"
 
 
 async def test_import_memory_snapshot_validation_chunk_size(client, make_agent):
+    """POST /snapshots/import rejects chunk_size outside [1, 1000]."""
     agent, token = await make_agent()
 
     # chunk_size too large (> 1000)
     resp = await client.post(
-        "/api/v2/memory/snapshots/import",
+        f"{MEMORY_PREFIX}/snapshots/import",
         headers=_agent_auth(token),
         json={
             "source_type": "sdk",
@@ -148,7 +164,7 @@ async def test_import_memory_snapshot_validation_chunk_size(client, make_agent):
 
     # chunk_size too small (< 1)
     resp = await client.post(
-        "/api/v2/memory/snapshots/import",
+        f"{MEMORY_PREFIX}/snapshots/import",
         headers=_agent_auth(token),
         json={
             "source_type": "sdk",
@@ -161,14 +177,14 @@ async def test_import_memory_snapshot_validation_chunk_size(client, make_agent):
 
 
 async def test_import_memory_snapshot_source_type_length(client, make_agent):
+    """POST /snapshots/import rejects source_type shorter than min_length=2."""
     agent, token = await make_agent()
 
-    # source_type too short (min_length=2)
     resp = await client.post(
-        "/api/v2/memory/snapshots/import",
+        f"{MEMORY_PREFIX}/snapshots/import",
         headers=_agent_auth(token),
         json={
-            "source_type": "x",
+            "source_type": "x",  # min_length=2
             "label": "test",
             "records": [{"id": "r1"}],
         },
@@ -176,11 +192,28 @@ async def test_import_memory_snapshot_source_type_length(client, make_agent):
     assert resp.status_code == 422
 
 
+async def test_import_memory_snapshot_creator_token_rejected(client, make_creator):
+    """POST /snapshots/import rejects creator tokens (agent-only)."""
+    _, creator_token = await make_creator()
+
+    resp = await client.post(
+        f"{MEMORY_PREFIX}/snapshots/import",
+        headers=_agent_auth(creator_token),
+        json={
+            "source_type": "sdk",
+            "label": "test",
+            "records": [{"id": "r1"}],
+        },
+    )
+    assert resp.status_code == 401
+
+
 # ---------------------------------------------------------------------------
-# POST /api/v2/memory/snapshots/{snapshot_id}/verify — verify snapshot
+# POST /api/v2/memory/snapshots/{snapshot_id}/verify -- verify snapshot
 # ---------------------------------------------------------------------------
 
 async def test_verify_memory_snapshot_success(client, make_agent):
+    """POST /snapshots/{id}/verify runs verification and returns result."""
     agent, token = await make_agent()
 
     with patch(
@@ -189,7 +222,7 @@ async def test_verify_memory_snapshot_success(client, make_agent):
         return_value=_MOCK_VERIFY_RESULT,
     ):
         resp = await client.post(
-            f"/api/v2/memory/snapshots/{_new_id()}/verify",
+            f"{MEMORY_PREFIX}/snapshots/{_new_id()}/verify",
             headers=_agent_auth(token),
             json={"sample_size": 5},
         )
@@ -200,6 +233,7 @@ async def test_verify_memory_snapshot_success(client, make_agent):
 
 
 async def test_verify_memory_snapshot_not_found(client, make_agent):
+    """POST /snapshots/{id}/verify returns 404 for unknown snapshot."""
     agent, token = await make_agent()
 
     with patch(
@@ -208,7 +242,7 @@ async def test_verify_memory_snapshot_not_found(client, make_agent):
         side_effect=ValueError("Snapshot snap-xxx not found"),
     ):
         resp = await client.post(
-            f"/api/v2/memory/snapshots/{_new_id()}/verify",
+            f"{MEMORY_PREFIX}/snapshots/{_new_id()}/verify",
             headers=_agent_auth(token),
             json={"sample_size": 5},
         )
@@ -217,6 +251,7 @@ async def test_verify_memory_snapshot_not_found(client, make_agent):
 
 
 async def test_verify_memory_snapshot_permission_denied(client, make_agent):
+    """POST /snapshots/{id}/verify returns 403 for wrong agent."""
     agent, token = await make_agent()
 
     with patch(
@@ -225,7 +260,7 @@ async def test_verify_memory_snapshot_permission_denied(client, make_agent):
         side_effect=PermissionError("Cannot verify a snapshot owned by another agent"),
     ):
         resp = await client.post(
-            f"/api/v2/memory/snapshots/{_new_id()}/verify",
+            f"{MEMORY_PREFIX}/snapshots/{_new_id()}/verify",
             headers=_agent_auth(token),
             json={"sample_size": 5},
         )
@@ -234,19 +269,21 @@ async def test_verify_memory_snapshot_permission_denied(client, make_agent):
 
 
 async def test_verify_memory_snapshot_no_auth(client):
+    """POST /snapshots/{id}/verify without auth returns 401."""
     resp = await client.post(
-        f"/api/v2/memory/snapshots/{_new_id()}/verify",
+        f"{MEMORY_PREFIX}/snapshots/{_new_id()}/verify",
         json={"sample_size": 5},
     )
     assert resp.status_code == 401
 
 
 async def test_verify_memory_snapshot_sample_size_validation(client, make_agent):
+    """POST /snapshots/{id}/verify rejects sample_size outside [1, 100]."""
     agent, token = await make_agent()
 
     # sample_size too large (> 100)
     resp = await client.post(
-        f"/api/v2/memory/snapshots/{_new_id()}/verify",
+        f"{MEMORY_PREFIX}/snapshots/{_new_id()}/verify",
         headers=_agent_auth(token),
         json={"sample_size": 200},
     )
@@ -254,7 +291,7 @@ async def test_verify_memory_snapshot_sample_size_validation(client, make_agent)
 
     # sample_size too small (< 1)
     resp = await client.post(
-        f"/api/v2/memory/snapshots/{_new_id()}/verify",
+        f"{MEMORY_PREFIX}/snapshots/{_new_id()}/verify",
         headers=_agent_auth(token),
         json={"sample_size": 0},
     )
@@ -262,10 +299,11 @@ async def test_verify_memory_snapshot_sample_size_validation(client, make_agent)
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v2/memory/snapshots/{snapshot_id} — get snapshot details
+# GET /api/v2/memory/snapshots/{snapshot_id} -- get snapshot details
 # ---------------------------------------------------------------------------
 
 async def test_get_memory_snapshot_success(client, make_agent):
+    """GET /snapshots/{id} returns snapshot details."""
     agent, token = await make_agent()
 
     with patch(
@@ -274,16 +312,18 @@ async def test_get_memory_snapshot_success(client, make_agent):
         return_value={**_MOCK_SNAPSHOT, "agent_id": agent.id},
     ):
         resp = await client.get(
-            f"/api/v2/memory/snapshots/{_new_id()}",
+            f"{MEMORY_PREFIX}/snapshots/{_new_id()}",
             headers=_agent_auth(token),
         )
     assert resp.status_code == 200
     body = resp.json()
     assert body["agent_id"] == agent.id
     assert body["source_type"] == "sdk"
+    assert body["status"] == "imported"
 
 
 async def test_get_memory_snapshot_not_found(client, make_agent):
+    """GET /snapshots/{id} returns 404 for unknown snapshot."""
     agent, token = await make_agent()
 
     with patch(
@@ -292,7 +332,7 @@ async def test_get_memory_snapshot_not_found(client, make_agent):
         side_effect=ValueError("Snapshot not found"),
     ):
         resp = await client.get(
-            f"/api/v2/memory/snapshots/{_new_id()}",
+            f"{MEMORY_PREFIX}/snapshots/{_new_id()}",
             headers=_agent_auth(token),
         )
     assert resp.status_code == 404
@@ -300,5 +340,6 @@ async def test_get_memory_snapshot_not_found(client, make_agent):
 
 
 async def test_get_memory_snapshot_no_auth(client):
-    resp = await client.get(f"/api/v2/memory/snapshots/{_new_id()}")
+    """GET /snapshots/{id} without auth returns 401."""
+    resp = await client.get(f"{MEMORY_PREFIX}/snapshots/{_new_id()}")
     assert resp.status_code == 401

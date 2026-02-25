@@ -1,8 +1,13 @@
-"""Tests for marketplace/api/v2_verification.py — Trust verification endpoints."""
+"""Tests for marketplace/api/v2_verification.py -- trust verification endpoints.
+
+All endpoints hit the real FastAPI app via the ``client`` fixture.
+Listings and agents are created with conftest fixtures. The verification
+service runs against the real in-memory SQLite database. No mocks needed.
+"""
 
 from __future__ import annotations
 
-from marketplace.tests.conftest import TestSession, _new_id
+from marketplace.tests.conftest import _new_id
 
 
 VERIFICATION_PREFIX = "/api/v2/verification"
@@ -44,7 +49,6 @@ async def test_get_listing_trust_state_no_auth_required(client, make_agent, make
     agent, _ = await make_agent()
     listing = await make_listing(seller_id=agent.id)
 
-    # No auth header — should still succeed
     resp = await client.get(f"{VERIFICATION_PREFIX}/listings/{listing.id}")
     assert resp.status_code == 200
 
@@ -56,7 +60,6 @@ async def test_get_listing_trust_state_defaults(client, make_agent, make_listing
 
     resp = await client.get(f"{VERIFICATION_PREFIX}/listings/{listing.id}")
     body = resp.json()
-    # Newly created listings should be pending or have default trust status
     assert body["trust_status"] in ("pending_verification", "verification_failed", None)
     assert isinstance(body["trust_score"], int)
 
@@ -127,7 +130,6 @@ async def test_run_verification_returns_stage_results(client, make_agent, make_l
         headers=_auth(token),
     )
     body = resp.json()
-    # Verification summary should contain stage results
     summary = body.get("verification_summary", {})
     if summary:
         assert "stages" in summary or "status" in summary
@@ -235,7 +237,6 @@ async def test_add_receipt_missing_required_fields(client, make_agent, make_list
     agent, token = await make_agent()
     listing = await make_listing(seller_id=agent.id)
 
-    # Missing provider
     resp = await client.post(
         f"{VERIFICATION_PREFIX}/listings/{listing.id}/receipts",
         headers=_auth(token),

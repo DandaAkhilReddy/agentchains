@@ -3,12 +3,15 @@
 Covers server registration CRUD, health checks, tool refresh, aggregated tool
 and resource discovery, federated tool/resource calls, and the federation
 health overview endpoint.
+
+All tests make real HTTP requests via the client fixture. External httpx calls
+to federated servers are mocked (genuine external dependency).
 """
 
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -51,6 +54,8 @@ async def _create_server(
     health_score: int = 100,
     tools_json: str | None = None,
     resources_json: str | None = None,
+    auth_type: str = "none",
+    auth_credential_ref: str = "",
 ) -> MCPServerEntry:
     """Directly insert an MCPServerEntry."""
     async with TestSession() as db:
@@ -62,7 +67,8 @@ async def _create_server(
             description="test server",
             status=status,
             health_score=health_score,
-            auth_type="none",
+            auth_type=auth_type,
+            auth_credential_ref=auth_credential_ref,
             registered_by=registered_by,
             tools_json=tools_json or "[]",
             resources_json=resources_json or "[]",
@@ -77,9 +83,9 @@ def _auth(jwt: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {jwt}"}
 
 
-# ═══════════════════════════════════════════════════════════════════
-# POST /federation/servers — register server
-# ═══════════════════════════════════════════════════════════════════
+# ===================================================================
+# POST /federation/servers -- register server
+# ===================================================================
 
 
 async def test_register_server_201(client):
@@ -119,6 +125,24 @@ async def test_register_server_bearer_auth(client):
     )
     assert resp.status_code == 201
     assert resp.json()["auth_type"] == "bearer"
+
+
+async def test_register_server_api_key_auth(client):
+    _, jwt = await _create_agent()
+
+    resp = await client.post(
+        f"{FED}/servers",
+        json={
+            "name": "API Key MCP",
+            "base_url": "http://apikey.example.com/mcp",
+            "namespace": "apikey",
+            "auth_type": "api_key",
+            "auth_credential_ref": "key-abc123",
+        },
+        headers=_auth(jwt),
+    )
+    assert resp.status_code == 201
+    assert resp.json()["auth_type"] == "api_key"
 
 
 async def test_register_server_invalid_url(client):
@@ -179,9 +203,62 @@ async def test_register_server_invalid_auth_type(client):
     assert resp.status_code == 422
 
 
-# ═══════════════════════════════════════════════════════════════════
-# GET /federation/servers — list servers
-# ═══════════════════════════════════════════════════════════════════
+async def test_register_server_missing_required_fields(client):
+    _, jwt = await _create_agent()
+
+    # Missing base_url and namespace
+    resp = await client.post(
+        f"{FED}/servers",
+        json={"name": "Incomplete"},
+        headers=_auth(jwt),
+    )
+    assert resp.status_code == 422
+
+
+async def test_register_server_response_fields(client):
+    """Verify all expected fields in the registration response."""
+    _, jwt = await _create_agent()
+
+    resp = await client.post(
+        f"{FED}/servers",
+        json={
+            "name": "Full Fields",
+            "base_url": "http://full.example.com/mcp",
+            "namespace": "fullns",
+            "description": "Full description",
+        },
+        headers=_auth(jwt),
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert "id" in body
+    assert body["description"] == "Full description"
+    assert "registered_by" in body
+    assert "health_score" in body
+    assert "created_at" in body
+    assert "updated_at" in body
+
+
+async def test_register_server_with_description(client):
+    _, jwt = await _create_agent()
+
+    resp = await client.post(
+        f"{FED}/servers",
+        json={
+            "name": "Desc Server",
+            "base_url": "http://desc.example.com/mcp",
+            "namespace": "descns",
+            "description": "A server with a description",
+        },
+        headers=_auth(jwt),
+    )
+    assert resp.status_code == 201
+    assert resp.json()["description"] == "A server with a description"
+
+
+# ===================================================================
+# GET /federation/servers -- list servers
+# ===================================================================
 
 
 async def test_list_servers_empty(client):
@@ -236,9 +313,33 @@ async def test_list_servers_filter_status(client):
     assert body["servers"][0]["status"] == "inactive"
 
 
-# ═══════════════════════════════════════════════════════════════════
-# GET /federation/servers/{id} — get single server
-# ═══════════════════════════════════════════════════════════════════
+async def test_list_servers_with_limit(client):
+    agent_id, jwt = await _create_agent()
+    for i in range(5):
+        await _create_server(agent_id, name=f"srv-lim-{i}", namespace=f"ns{i}")
+
+    resp = await client.get(
+        f"{FED}/servers",
+        params={"limit": 2},
+        headers=_auth(jwt),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 2
+
+
+async def test_list_servers_response_shape(client):
+    _, jwt = await _create_agent()
+    resp = await client.get(f"{FED}/servers", headers=_auth(jwt))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "servers" in body
+    assert "total" in body
+
+
+# ===================================================================
+# GET /federation/servers/{id} -- get single server
+# ===================================================================
 
 
 async def test_get_server_200(client):
@@ -260,9 +361,27 @@ async def test_get_server_404(client):
     assert resp.status_code == 404
 
 
-# ═══════════════════════════════════════════════════════════════════
-# PUT /federation/servers/{id} — update server
-# ═══════════════════════════════════════════════════════════════════
+async def test_get_server_response_fields(client):
+    """Verify all fields in the server detail response."""
+    agent_id, jwt = await _create_agent()
+    srv = await _create_server(agent_id, name="detail-srv", namespace="detailns")
+
+    resp = await client.get(
+        f"{FED}/servers/{srv.id}", headers=_auth(jwt),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == srv.id
+    assert body["base_url"] is not None
+    assert body["namespace"] == "detailns"
+    assert "health_score" in body
+    assert "auth_type" in body
+    assert "registered_by" in body
+
+
+# ===================================================================
+# PUT /federation/servers/{id} -- update server
+# ===================================================================
 
 
 async def test_update_server_200(client):
@@ -354,9 +473,77 @@ async def test_update_server_change_auth(client):
     assert resp.json()["auth_type"] == "api_key"
 
 
-# ═══════════════════════════════════════════════════════════════════
-# DELETE /federation/servers/{id} — unregister
-# ═══════════════════════════════════════════════════════════════════
+async def test_update_server_only_description(client):
+    """Partial update with just description."""
+    agent_id, jwt = await _create_agent()
+    srv = await _create_server(agent_id, name="partial-upd")
+
+    resp = await client.put(
+        f"{FED}/servers/{srv.id}",
+        json={"description": "Only desc changed"},
+        headers=_auth(jwt),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "partial-upd"
+    assert body["description"] == "Only desc changed"
+
+
+async def test_update_server_empty_body(client):
+    """Update with no fields should succeed (no-op)."""
+    agent_id, jwt = await _create_agent()
+    srv = await _create_server(agent_id, name="noop-upd")
+
+    resp = await client.put(
+        f"{FED}/servers/{srv.id}",
+        json={},
+        headers=_auth(jwt),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "noop-upd"
+
+
+async def test_update_server_url_trailing_slash_stripped(client):
+    """base_url should have trailing slash stripped."""
+    agent_id, jwt = await _create_agent()
+    srv = await _create_server(agent_id, name="slash-upd")
+
+    resp = await client.put(
+        f"{FED}/servers/{srv.id}",
+        json={"base_url": "http://new-host.example.com/mcp/"},
+        headers=_auth(jwt),
+    )
+    assert resp.status_code == 200
+    assert not resp.json()["base_url"].endswith("/")
+
+
+async def test_update_server_multiple_fields(client):
+    """Update multiple fields at once."""
+    agent_id, jwt = await _create_agent()
+    srv = await _create_server(agent_id, name="multi-upd")
+
+    resp = await client.put(
+        f"{FED}/servers/{srv.id}",
+        json={
+            "name": "Multi Updated",
+            "namespace": "multins",
+            "description": "Multi desc",
+            "auth_type": "bearer",
+            "auth_credential_ref": "tok-456",
+        },
+        headers=_auth(jwt),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "Multi Updated"
+    assert body["namespace"] == "multins"
+    assert body["description"] == "Multi desc"
+    assert body["auth_type"] == "bearer"
+
+
+# ===================================================================
+# DELETE /federation/servers/{id} -- unregister
+# ===================================================================
 
 
 async def test_unregister_server_200(client):
@@ -396,9 +583,20 @@ async def test_unregister_server_403_non_registrant(client):
     assert resp.status_code == 403
 
 
-# ═══════════════════════════════════════════════════════════════════
-# POST /federation/servers/{id}/health — trigger health check
-# ═══════════════════════════════════════════════════════════════════
+async def test_unregister_server_response_includes_id(client):
+    agent_id, jwt = await _create_agent()
+    srv = await _create_server(agent_id, name="del-id")
+
+    resp = await client.delete(
+        f"{FED}/servers/{srv.id}", headers=_auth(jwt),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["server_id"] == srv.id
+
+
+# ===================================================================
+# POST /federation/servers/{id}/health -- trigger health check
+# ===================================================================
 
 
 async def test_trigger_health_check_success(client):
@@ -439,6 +637,7 @@ async def test_trigger_health_check_failure(client):
     body = resp.json()
     assert body["healthy"] is False
     assert "error" in body
+    assert body["health_score"] == 60  # 80 - 20
 
 
 async def test_trigger_health_check_404(client):
@@ -449,9 +648,31 @@ async def test_trigger_health_check_404(client):
     assert resp.status_code == 404
 
 
-# ═══════════════════════════════════════════════════════════════════
-# POST /federation/servers/{id}/refresh — refresh tools
-# ═══════════════════════════════════════════════════════════════════
+async def test_trigger_health_check_failure_low_score(client):
+    """Health check failure with already low score clamps at 0."""
+    agent_id, jwt = await _create_agent()
+    srv = await _create_server(agent_id, name="health-low", health_score=10)
+
+    with patch(
+        "marketplace.services.mcp_federation_service.refresh_server_tools",
+        new_callable=AsyncMock,
+        return_value={"error": "timeout"},
+    ), patch(
+        "marketplace.services.mcp_federation_service.update_health_score",
+        new_callable=AsyncMock,
+    ):
+        resp = await client.post(
+            f"{FED}/servers/{srv.id}/health", headers=_auth(jwt),
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["healthy"] is False
+    assert body["health_score"] == 0  # max(0, 10 - 20) = 0
+
+
+# ===================================================================
+# POST /federation/servers/{id}/refresh -- refresh tools
+# ===================================================================
 
 
 async def test_refresh_server_tools_success(client):
@@ -496,9 +717,29 @@ async def test_refresh_server_tools_404(client):
     assert resp.status_code == 404
 
 
-# ═══════════════════════════════════════════════════════════════════
-# GET /federation/tools — list aggregated tools
-# ═══════════════════════════════════════════════════════════════════
+async def test_refresh_server_tools_response_shape(client):
+    """Verify the refresh response includes server_id, tools_refreshed, tools."""
+    agent_id, jwt = await _create_agent()
+    srv = await _create_server(agent_id, name="refresh-shape")
+
+    with patch(
+        "marketplace.services.mcp_federation_service.refresh_server_tools",
+        new_callable=AsyncMock,
+        return_value={"tools": [], "count": 0},
+    ):
+        resp = await client.post(
+            f"{FED}/servers/{srv.id}/refresh", headers=_auth(jwt),
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["server_id"] == srv.id
+    assert body["tools_refreshed"] == 0
+    assert body["tools"] == []
+
+
+# ===================================================================
+# GET /federation/tools -- list aggregated tools
+# ===================================================================
 
 
 async def test_list_federated_tools_empty(client):
@@ -569,9 +810,49 @@ async def test_list_federated_tools_inactive_server_excluded(client):
     assert resp.json()["total"] == 0
 
 
-# ═══════════════════════════════════════════════════════════════════
-# POST /federation/tools/call — call a federated tool
-# ═══════════════════════════════════════════════════════════════════
+async def test_list_federated_tools_from_multiple_servers(client):
+    agent_id, jwt = await _create_agent()
+    await _create_server(
+        agent_id,
+        name="multi-1",
+        namespace="alpha",
+        tools_json=json.dumps([{"name": "tool_a"}]),
+    )
+    await _create_server(
+        agent_id,
+        name="multi-2",
+        namespace="beta",
+        tools_json=json.dumps([{"name": "tool_b"}, {"name": "tool_c"}]),
+    )
+
+    resp = await client.get(f"{FED}/tools", headers=_auth(jwt))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 3
+    names = {t["name"] for t in body["tools"]}
+    assert "alpha.tool_a" in names
+    assert "beta.tool_b" in names
+    assert "beta.tool_c" in names
+
+
+async def test_list_federated_tools_degraded_server_excluded(client):
+    """Degraded servers are not 'active' so their tools should be excluded."""
+    agent_id, jwt = await _create_agent()
+    await _create_server(
+        agent_id,
+        name="degraded-tools",
+        status="degraded",
+        tools_json=json.dumps([{"name": "hidden"}]),
+    )
+
+    resp = await client.get(f"{FED}/tools", headers=_auth(jwt))
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 0
+
+
+# ===================================================================
+# POST /federation/tools/call -- call a federated tool
+# ===================================================================
 
 
 async def test_call_federated_tool_success(client):
@@ -625,9 +906,29 @@ async def test_call_federated_tool_no_auth(client):
     assert resp.status_code in (401, 403)
 
 
-# ═══════════════════════════════════════════════════════════════════
-# GET /federation/resources — list aggregated resources
-# ═══════════════════════════════════════════════════════════════════
+async def test_call_federated_tool_with_arguments(client):
+    _, jwt = await _create_agent()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.route_tool_call",
+        new_callable=AsyncMock,
+        return_value={"result": "computed"},
+    ):
+        resp = await client.post(
+            f"{FED}/tools/call",
+            json={
+                "tool_name": "compute.calculate",
+                "arguments": {"x": 10, "y": 20, "op": "add"},
+            },
+            headers=_auth(jwt),
+        )
+    assert resp.status_code == 200
+    assert resp.json()["result"] == "computed"
+
+
+# ===================================================================
+# GET /federation/resources -- list aggregated resources
+# ===================================================================
 
 
 async def test_list_federated_resources_empty(client):
@@ -712,9 +1013,59 @@ async def test_list_resources_malformed_json_ignored(client):
     assert resp.json()["total"] == 0
 
 
-# ═══════════════════════════════════════════════════════════════════
-# POST /federation/resources/read — read a federated resource
-# ═══════════════════════════════════════════════════════════════════
+async def test_list_resources_includes_server_id(client):
+    """Each resource should include _server_id metadata."""
+    agent_id, jwt = await _create_agent()
+    srv = await _create_server(
+        agent_id,
+        name="res-sid",
+        namespace="sidns",
+        resources_json=json.dumps([{"uri": "sidns://test"}]),
+    )
+
+    resp = await client.get(f"{FED}/resources", headers=_auth(jwt))
+    assert resp.status_code == 200
+    resource = resp.json()["resources"][0]
+    assert resource["_server_id"] == srv.id
+
+
+async def test_list_resources_multiple_from_one_server(client):
+    """Server with multiple resources should list them all."""
+    agent_id, jwt = await _create_agent()
+    resources = [
+        {"uri": "multi://a", "name": "A"},
+        {"uri": "multi://b", "name": "B"},
+        {"uri": "multi://c", "name": "C"},
+    ]
+    await _create_server(
+        agent_id,
+        name="multi-res",
+        namespace="multi",
+        resources_json=json.dumps(resources),
+    )
+
+    resp = await client.get(f"{FED}/resources", headers=_auth(jwt))
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 3
+
+
+async def test_list_resources_empty_json_array(client):
+    """Server with empty resources_json should contribute 0 resources."""
+    agent_id, jwt = await _create_agent()
+    await _create_server(
+        agent_id,
+        name="empty-res",
+        resources_json="[]",
+    )
+
+    resp = await client.get(f"{FED}/resources", headers=_auth(jwt))
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 0
+
+
+# ===================================================================
+# POST /federation/resources/read -- read a federated resource
+# ===================================================================
 
 
 async def test_read_federated_resource_no_server_404(client):
@@ -755,8 +1106,6 @@ async def test_read_federated_resource_success(client):
         base_url="http://data.example.com/mcp",
     )
 
-    from unittest.mock import MagicMock
-
     # httpx Response methods (json, raise_for_status) are sync, not async
     mock_response = MagicMock()
     mock_response.json.return_value = {"contents": [{"text": "hello"}]}
@@ -782,9 +1131,58 @@ async def test_read_federated_resource_success(client):
     assert body["contents"][0]["text"] == "hello"
 
 
-# ═══════════════════════════════════════════════════════════════════
-# GET /federation/health — public health overview
-# ═══════════════════════════════════════════════════════════════════
+async def test_read_federated_resource_no_auth(client):
+    resp = await client.post(
+        f"{FED}/resources/read",
+        json={"uri": "test://resource"},
+    )
+    assert resp.status_code in (401, 403)
+
+
+async def test_read_federated_resource_servers_sorted_by_health(client):
+    """Servers are tried in order of health score (highest first)."""
+    agent_id, jwt = await _create_agent()
+    # Create two servers with different health scores
+    await _create_server(
+        agent_id,
+        name="low-health",
+        namespace="sort",
+        base_url="http://low.example.com/mcp",
+        health_score=30,
+    )
+    await _create_server(
+        agent_id,
+        name="high-health",
+        namespace="sort",
+        base_url="http://high.example.com/mcp",
+        health_score=90,
+    )
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"data": "from-high"}
+    mock_response.raise_for_status.return_value = None
+    mock_response.status_code = 200
+
+    mock_http_client = AsyncMock()
+    mock_http_client.post = AsyncMock(return_value=mock_response)
+
+    with patch("httpx.AsyncClient") as mock_cls:
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        resp = await client.post(
+            f"{FED}/resources/read",
+            json={"uri": "sort://test"},
+            headers=_auth(jwt),
+        )
+    assert resp.status_code == 200
+    # Should get data from the first server tried (highest health)
+    assert resp.json()["data"] == "from-high"
+
+
+# ===================================================================
+# GET /federation/health -- public health overview
+# ===================================================================
 
 
 async def test_federation_health_no_auth(client):
@@ -856,21 +1254,67 @@ async def test_federation_health_malformed_tools_json(client):
     assert body["total_tool_count"] == 0
 
 
-# ═══════════════════════════════════════════════════════════════════
-# Edge cases
-# ═══════════════════════════════════════════════════════════════════
-
-
-async def test_register_server_missing_required_fields(client):
-    _, jwt = await _create_agent()
-
-    # Missing base_url and namespace
-    resp = await client.post(
-        f"{FED}/servers",
-        json={"name": "Incomplete"},
-        headers=_auth(jwt),
+async def test_federation_health_active_low_score_not_healthy(client):
+    """Active server with health_score < 50 is not counted as healthy."""
+    agent_id, _ = await _create_agent()
+    await _create_server(
+        agent_id,
+        name="health-low-active",
+        status="active",
+        health_score=40,
     )
-    assert resp.status_code == 422
+
+    resp = await client.get(f"{FED}/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["server_count"] == 1
+    assert body["healthy_count"] == 0
+
+
+async def test_federation_health_multiple_active_servers(client):
+    """Multiple active servers with different scores."""
+    agent_id, _ = await _create_agent()
+    tools_a = [{"name": "t1"}, {"name": "t2"}]
+    tools_b = [{"name": "t3"}]
+
+    await _create_server(
+        agent_id, name="ha1", status="active", health_score=90,
+        tools_json=json.dumps(tools_a),
+    )
+    await _create_server(
+        agent_id, name="ha2", status="active", health_score=60,
+        tools_json=json.dumps(tools_b),
+    )
+    await _create_server(
+        agent_id, name="ha3", status="active", health_score=20,
+    )
+
+    resp = await client.get(f"{FED}/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["server_count"] == 3
+    assert body["healthy_count"] == 2  # score >= 50: ha1 (90), ha2 (60)
+    assert body["total_tool_count"] == 3  # t1, t2, t3
+
+
+async def test_federation_health_null_tools_json(client):
+    """Server with None/null tools_json should contribute 0 tools."""
+    agent_id, _ = await _create_agent()
+    await _create_server(
+        agent_id,
+        name="health-null-tools",
+        tools_json=None,
+    )
+
+    resp = await client.get(f"{FED}/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_tool_count"] == 0
+
+
+# ===================================================================
+# Edge cases and roundtrips
+# ===================================================================
 
 
 async def test_register_and_list_roundtrip(client):
@@ -929,28 +1373,3 @@ async def test_delete_then_list(client):
     list_resp = await client.get(f"{FED}/servers", headers=headers)
     ids = [s["id"] for s in list_resp.json()["servers"]]
     assert srv.id not in ids
-
-
-async def test_tools_from_multiple_servers_aggregated(client):
-    agent_id, jwt = await _create_agent()
-    await _create_server(
-        agent_id,
-        name="multi-1",
-        namespace="alpha",
-        tools_json=json.dumps([{"name": "tool_a"}]),
-    )
-    await _create_server(
-        agent_id,
-        name="multi-2",
-        namespace="beta",
-        tools_json=json.dumps([{"name": "tool_b"}, {"name": "tool_c"}]),
-    )
-
-    resp = await client.get(f"{FED}/tools", headers=_auth(jwt))
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["total"] == 3
-    names = {t["name"] for t in body["tools"]}
-    assert "alpha.tool_a" in names
-    assert "beta.tool_b" in names
-    assert "beta.tool_c" in names

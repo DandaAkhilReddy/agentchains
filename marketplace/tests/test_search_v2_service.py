@@ -155,6 +155,12 @@ class TestIndexNaming:
         assert "domain" in field_names
         assert "success_rate" in field_names
 
+    async def test_build_search_fields_returns_empty_without_sdk(self):
+        """10c. _build_search_fields returns empty list when Azure SDK not installed."""
+        result = SearchV2Service._build_search_fields(_listings_fields())
+        # Without Azure SDK installed, this returns an empty list
+        assert isinstance(result, list)
+
 
 # ===========================================================================
 # 3. DOCUMENT INDEXING (tests 11-15)
@@ -432,6 +438,53 @@ class TestSyncFunctions:
         assert "Agent-A" in names
         assert "Agent-B" in names
 
+    async def test_sync_listings_with_tags(
+        self, db: AsyncSession, make_agent, make_listing
+    ):
+        """24b. sync_listings_index handles listings with valid JSON tags."""
+        agent, _ = await make_agent()
+        listing = await make_listing(agent.id, title="Tagged Listing")
+        listing.tags = '["python", "tutorial"]'
+        await db.commit()
+
+        mock_client = MagicMock()
+        with patch(
+            "marketplace.services.search_v2_service.get_search_service"
+        ) as mock_get_svc:
+            mock_svc = MagicMock(spec=SearchV2Service)
+            mock_svc._get_search_client.return_value = mock_client
+            mock_get_svc.return_value = mock_svc
+
+            result = await sync_listings_index(db)
+
+        assert result["synced"] == 1
+        docs = mock_client.merge_or_upload_documents.call_args[1]["documents"]
+        assert docs[0]["tags"] == ["python", "tutorial"]
+
+    async def test_sync_listings_with_invalid_tags(
+        self, db: AsyncSession, make_agent, make_listing
+    ):
+        """24c. sync_listings_index handles listings with invalid JSON tags gracefully."""
+        agent, _ = await make_agent()
+        listing = await make_listing(agent.id, title="Bad Tags Listing")
+        listing.tags = "not valid json{{"
+        await db.commit()
+
+        mock_client = MagicMock()
+        with patch(
+            "marketplace.services.search_v2_service.get_search_service"
+        ) as mock_get_svc:
+            mock_svc = MagicMock(spec=SearchV2Service)
+            mock_svc._get_search_client.return_value = mock_client
+            mock_get_svc.return_value = mock_svc
+
+            result = await sync_listings_index(db)
+
+        assert result["synced"] == 1
+        docs = mock_client.merge_or_upload_documents.call_args[1]["documents"]
+        # Invalid JSON tags should fall back to empty list
+        assert docs[0]["tags"] == []
+
     async def test_sync_listings_handles_upload_failure(
         self, db: AsyncSession, make_agent, make_listing
     ):
@@ -498,6 +551,102 @@ class TestSyncFunctions:
 # ===========================================================================
 # 6. SINGLETON FACTORY (bonus)
 # ===========================================================================
+
+
+class TestSyncAgentsWithUploadFailure:
+    """Verify sync functions handle upload failures for agents and tools."""
+
+    async def test_sync_agents_handles_upload_failure(
+        self, db: AsyncSession, make_agent
+    ):
+        """25e. sync_agents_index returns error status on upload failure."""
+        await make_agent(name="Agent-Fail")
+
+        mock_client = MagicMock()
+        mock_client.merge_or_upload_documents.side_effect = RuntimeError("agent upload failed")
+
+        with patch(
+            "marketplace.services.search_v2_service.get_search_service"
+        ) as mock_get_svc:
+            mock_svc = MagicMock(spec=SearchV2Service)
+            mock_svc._get_search_client.return_value = mock_client
+            mock_get_svc.return_value = mock_svc
+
+            result = await sync_agents_index(db)
+
+        assert result["status"] == "error"
+        assert "agent upload failed" in result["error"]
+
+    async def test_sync_tools_handles_upload_failure(
+        self, db: AsyncSession, make_creator
+    ):
+        """25f. sync_tools_index returns error status on upload failure."""
+        from marketplace.models.webmcp_tool import WebMCPTool
+
+        creator, _ = await make_creator()
+        tool = WebMCPTool(
+            id=_uid(),
+            name="Fail Tool",
+            description="A tool that fails to sync",
+            domain="fail.com",
+            endpoint_url="https://fail.com/mcp",
+            creator_id=creator.id,
+            category="research",
+            version="1.0.0",
+            status="approved",
+        )
+        db.add(tool)
+        await db.commit()
+
+        mock_client = MagicMock()
+        mock_client.merge_or_upload_documents.side_effect = RuntimeError("tools upload failed")
+
+        with patch(
+            "marketplace.services.search_v2_service.get_search_service"
+        ) as mock_get_svc:
+            mock_svc = MagicMock(spec=SearchV2Service)
+            mock_svc._get_search_client.return_value = mock_client
+            mock_get_svc.return_value = mock_svc
+
+            result = await sync_tools_index(db)
+
+        assert result["status"] == "error"
+        assert "tools upload failed" in result["error"]
+
+    async def test_sync_agents_no_active_agents_returns_zero(
+        self, db: AsyncSession
+    ):
+        """25g. sync_agents_index returns synced=0 when no active agents."""
+        mock_client = MagicMock()
+        with patch(
+            "marketplace.services.search_v2_service.get_search_service"
+        ) as mock_get_svc:
+            mock_svc = MagicMock(spec=SearchV2Service)
+            mock_svc._get_search_client.return_value = mock_client
+            mock_get_svc.return_value = mock_svc
+
+            result = await sync_agents_index(db)
+
+        assert result["status"] == "ok"
+        assert result["synced"] == 0
+        mock_client.merge_or_upload_documents.assert_not_called()
+
+    async def test_sync_tools_no_approved_tools_returns_zero(
+        self, db: AsyncSession
+    ):
+        """25h. sync_tools_index returns synced=0 when no approved/active tools."""
+        mock_client = MagicMock()
+        with patch(
+            "marketplace.services.search_v2_service.get_search_service"
+        ) as mock_get_svc:
+            mock_svc = MagicMock(spec=SearchV2Service)
+            mock_svc._get_search_client.return_value = mock_client
+            mock_get_svc.return_value = mock_svc
+
+            result = await sync_tools_index(db)
+
+        assert result["status"] == "ok"
+        assert result["synced"] == 0
 
 
 class TestSingletonFactory:
