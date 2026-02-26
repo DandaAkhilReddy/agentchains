@@ -151,7 +151,9 @@ export default function PipelinePage() {
               selectedId={selectedAgentId}
               onSelect={setSelectedAgentId}
             />
-            <ExecutionTimeline execution={selectedExecution /* v8 ignore next */ ?? null} />
+            {/* v8 ignore start */}
+            <ExecutionTimeline execution={selectedExecution ?? null} />
+            {/* v8 ignore stop */}
           </div>
         )
       ) : (

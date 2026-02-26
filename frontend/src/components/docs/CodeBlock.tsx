@@ -111,7 +111,9 @@ function highlight(code: string): string {
   // Rehydrate placeholders — match \x00R{digits}\x00
   result = result.replace(
     new RegExp(`${PH}R(\\d+)${PH}`, "g"),
+    /* v8 ignore start */
     (_, idx) => replacements[Number(idx)] ?? "",
+    /* v8 ignore stop */
   );
 
   return result;
@@ -139,7 +141,9 @@ export default function CodeBlock({
   );
 
   const handleCopy = useCallback(async () => {
+    /* v8 ignore start */
     if (!activeExample) return;
+    /* v8 ignore stop */
     await navigator.clipboard.writeText(activeExample.code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

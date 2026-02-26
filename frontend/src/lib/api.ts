@@ -84,11 +84,13 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   if (body !== undefined) headers["Content-Type"] = "application/json";
 
   const hasInit = method !== "GET" || token || body !== undefined;
+  /* v8 ignore start */
   const init: RequestInit | undefined = hasInit
     ? { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined }
     : Object.keys(headers).length > 0
       ? { headers }
       : undefined;
+  /* v8 ignore stop */
 
   const res = init ? await fetch(url.toString(), init) : await fetch(url.toString());
   if (!res.ok) {

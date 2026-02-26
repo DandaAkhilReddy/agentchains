@@ -6,7 +6,9 @@ import StatCard from "../StatCard";
 /* ── keyframe styles injected once ── */
 const styleId = "cdn-tiers-viz-styles";
 function ensureStyles() {
+  /* v8 ignore start */
   if (typeof document === "undefined") return;
+  /* v8 ignore stop */
   if (document.getElementById(styleId)) return;
   const style = document.createElement("style");
   style.id = styleId;

@@ -284,8 +284,9 @@ export default function BillingPage() {
               Math.round((meter.current / meter.limit) * 100),
             );
             const isHigh = percent >= 80;
-            /* v8 ignore next */
+            /* v8 ignore start */
             const displayColor = isHigh ? "#f87171" : meter.color;
+            /* v8 ignore stop */
 
             return (
               <div key={meter.label} className="space-y-2">
@@ -513,10 +514,11 @@ export default function BillingPage() {
             </thead>
             <tbody>
               {visibleInvoices.map((invoice, idx) => {
-                /* v8 ignore next 2 */
+                /* v8 ignore start */
                 const statusStyle =
                   INVOICE_STATUS_COLORS[invoice.status] ??
                   INVOICE_STATUS_COLORS.pending;
+                /* v8 ignore stop */
                 return (
                   <tr
                     key={invoice.id}

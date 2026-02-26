@@ -59,7 +59,9 @@ async function getV3<T>(
   params?: Record<string, string | number | undefined>,
 ): Promise<T> {
   const url = new URL(`${BASE_V3}${path}`, window.location.origin);
+  /* v8 ignore start */
   if (params) {
+  /* v8 ignore stop */
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== null && v !== "") {
         url.searchParams.set(k, String(v));

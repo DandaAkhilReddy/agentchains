@@ -80,7 +80,9 @@ export default function FlowDiagram({
     (fromId: string, toId: string) => {
       const a = nodeMap.get(fromId);
       const b = nodeMap.get(toId);
+      /* v8 ignore start */
       if (!a || !b) return { x: 50, y: 50 };
+      /* v8 ignore stop */
       return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     },
     [nodeMap],

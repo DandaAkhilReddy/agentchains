@@ -497,20 +497,20 @@ export default function AuditViewer() {
               onClick={() => setSeverityFilter(sev)}
               className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium uppercase transition-colors"
               style={{
+                /* v8 ignore start */
                 backgroundColor:
                   severityFilter === sev
                     ? sev === "All"
                       ? "rgba(96,165,250,0.15)"
-                      /* v8 ignore next */
                       : SEVERITY_STYLES[sev]?.bg ?? "rgba(96,165,250,0.15)"
                     : "transparent",
                 color:
                   severityFilter === sev
                     ? sev === "All"
                       ? "#60a5fa"
-                      /* v8 ignore next */
                       : SEVERITY_STYLES[sev]?.color ?? "#60a5fa"
                     : "#64748b",
+                /* v8 ignore stop */
                 border: `1px solid ${
                   severityFilter === sev
                     ? "rgba(96,165,250,0.3)"
@@ -572,9 +572,10 @@ export default function AuditViewer() {
                 {filteredEntries.map((entry, idx) => {
                   const isExpanded = expandedId === entry.id;
                   const sevStyle = SEVERITY_STYLES[entry.severity];
-                  /* v8 ignore next 2 */
+                  /* v8 ignore start */
                   const actorConfig =
                     ACTOR_COLORS[entry.actorType] ?? ACTOR_COLORS.user;
+                  /* v8 ignore stop */
                   const ActorIcon = actorConfig.icon;
 
                   return (

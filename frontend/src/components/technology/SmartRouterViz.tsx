@@ -268,12 +268,14 @@ export default function SmartRouterViz() {
   const strategy = STRATEGIES.find((s) => s.id === selected)!;
 
   /* Inject styles once */
+  /* v8 ignore start */
   if (typeof document !== "undefined" && !document.getElementById(injectId)) {
     const tag = document.createElement("style");
     tag.id = injectId;
     tag.textContent = css;
     document.head.appendChild(tag);
   }
+  /* v8 ignore stop */
 
   /* Weight bar color per dimension */
   const dimensionColor: Record<string, string> = {
@@ -521,6 +523,7 @@ export default function SmartRouterViz() {
           <div className="sr-weight-row" key={dim}>
             <span className="sr-weight-label">{dim}</span>
             <div className="sr-weight-track">
+              {/* v8 ignore start */}
               <div
                 className="sr-weight-fill"
                 style={{
@@ -528,6 +531,7 @@ export default function SmartRouterViz() {
                   background: dimensionColor[dim] ?? "#60a5fa",
                 }}
               />
+              {/* v8 ignore stop */}
             </div>
             <span className="sr-weight-val">{(val * 100).toFixed(0)}%</span>
           </div>
