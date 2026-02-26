@@ -1611,3 +1611,680 @@ async def test_templates_alias_returns_same_as_workflow_templates(client):
     assert r1.status_code == 200
     assert r2.status_code == 200
     assert r1.json()["total"] == r2.json()["total"]
+
+
+# ===========================================================================
+# Direct route-handler invocation tests -- bypasses ASGI to ensure coverage
+# ===========================================================================
+# These tests import the route functions and call them directly with real DB
+# sessions so that coverage.py's tracer records every branch inside the
+# handler bodies.
+# ===========================================================================
+
+
+from marketplace.api.v3_orchestration import (  # noqa: E402
+    WorkflowCreateRequest,
+    WorkflowUpdateRequest,
+    WorkflowExecuteRequest,
+    create_workflow as route_create_workflow,
+    list_workflows as route_list_workflows,
+    get_workflow as route_get_workflow,
+    update_workflow as route_update_workflow,
+    delete_workflow as route_delete_workflow,
+    execute_workflow as route_execute_workflow,
+    get_execution as route_get_execution,
+    get_execution_nodes as route_get_execution_nodes,
+    pause_execution as route_pause_execution,
+    resume_execution as route_resume_execution,
+    cancel_execution as route_cancel_execution,
+    get_execution_cost as route_get_execution_cost,
+    list_workflow_templates as route_list_workflow_templates,
+    list_templates as route_list_templates,
+)
+import pytest
+from fastapi import HTTPException
+
+
+# ── create_workflow ──────────────────────────────────────────────────────────
+
+async def test_direct_create_workflow_returns_dict(db):
+    """Direct call: create_workflow returns a serialised workflow dict (line 183)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Direct WF", graph_json=_simple_graph())
+    result = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    assert result["name"] == "Direct WF"
+    assert result["owner_id"] == owner_id
+    assert result["status"] == "draft"
+
+
+async def test_direct_create_workflow_invalid_json_raises(db):
+    """Direct call: invalid graph_json raises HTTPException 400 (line 172-173)."""
+    req = WorkflowCreateRequest(name="Bad", graph_json='{"broken":')
+    with pytest.raises(HTTPException) as exc_info:
+        await route_create_workflow(req=req, db=db, agent_id=_new_id())
+    assert exc_info.value.status_code == 400
+
+
+async def test_direct_create_workflow_with_budget(db):
+    """Direct call: max_budget_usd is stored and returned (line 181)."""
+    req = WorkflowCreateRequest(
+        name="Budgeted WF", graph_json=_simple_graph(), max_budget_usd=10.0,
+    )
+    result = await route_create_workflow(req=req, db=db, agent_id=_new_id())
+    assert result["max_budget_usd"] == 10.0
+
+
+# ── list_workflows ───────────────────────────────────────────────────────────
+
+async def test_direct_list_workflows_offset_slicing(db):
+    """Direct call: offset slicing applies correctly (lines 204-205)."""
+    owner_id = _new_id()
+    # Insert 3 workflows directly
+    for i in range(3):
+        req = WorkflowCreateRequest(name=f"WF-list-{i}", graph_json=_simple_graph())
+        await route_create_workflow(req=req, db=db, agent_id=owner_id)
+
+    # offset=1 should skip the first item
+    result = await route_list_workflows(
+        owner_id=None, status=None, limit=50, offset=1, db=db, agent_id=owner_id,
+    )
+    assert result["total"] == 3
+    assert result["offset"] == 1
+    assert len(result["workflows"]) == 2
+
+
+async def test_direct_list_workflows_empty(db):
+    """Direct call: empty list returned for new agent (lines 204-205)."""
+    owner_id = _new_id()
+    result = await route_list_workflows(
+        owner_id=None, status=None, limit=50, offset=0, db=db, agent_id=owner_id,
+    )
+    assert result["workflows"] == []
+    assert result["total"] == 0
+
+
+# ── get_workflow ─────────────────────────────────────────────────────────────
+
+async def test_direct_get_workflow_success(db):
+    """Direct call: returns serialised workflow (lines 220-225)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Get Me", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    result = await route_get_workflow(workflow_id=wf_id, db=db, agent_id=owner_id)
+    assert result["id"] == wf_id
+    assert result["name"] == "Get Me"
+
+
+async def test_direct_get_workflow_not_found_raises(db):
+    """Direct call: missing workflow raises 404 (line 221-222)."""
+    with pytest.raises(HTTPException) as exc_info:
+        await route_get_workflow(workflow_id="no-such-id", db=db, agent_id=_new_id())
+    assert exc_info.value.status_code == 404
+
+
+async def test_direct_get_workflow_wrong_owner_raises(db):
+    """Direct call: different owner raises 404 (lines 223-224)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Owner Only", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_get_workflow(workflow_id=wf_id, db=db, agent_id=_new_id())
+    assert exc_info.value.status_code == 404
+
+
+# ── update_workflow ──────────────────────────────────────────────────────────
+
+async def test_direct_update_workflow_name(db):
+    """Direct call: update name returns updated dict (lines 237-259)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Old", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    upd = WorkflowUpdateRequest(name="New Name")
+    result = await route_update_workflow(workflow_id=wf_id, req=upd, db=db, agent_id=owner_id)
+    assert result["name"] == "New Name"
+
+
+async def test_direct_update_workflow_not_found_raises(db):
+    """Direct call: missing workflow raises 404 (lines 237-238)."""
+    upd = WorkflowUpdateRequest(name="X")
+    with pytest.raises(HTTPException) as exc_info:
+        await route_update_workflow(
+            workflow_id="no-such", req=upd, db=db, agent_id=_new_id(),
+        )
+    assert exc_info.value.status_code == 404
+
+
+async def test_direct_update_workflow_wrong_owner_raises(db):
+    """Direct call: wrong owner raises 403 (lines 239-240)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Protected", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    upd = WorkflowUpdateRequest(name="Hijack")
+    with pytest.raises(HTTPException) as exc_info:
+        await route_update_workflow(
+            workflow_id=wf_id, req=upd, db=db, agent_id=_new_id(),
+        )
+    assert exc_info.value.status_code == 403
+
+
+async def test_direct_update_workflow_invalid_graph_raises(db):
+    """Direct call: invalid graph_json raises 400 (lines 247-250)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Orig", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    upd = WorkflowUpdateRequest(graph_json="not-valid-json")
+    with pytest.raises(HTTPException) as exc_info:
+        await route_update_workflow(
+            workflow_id=wf_id, req=upd, db=db, agent_id=owner_id,
+        )
+    assert exc_info.value.status_code == 400
+
+
+async def test_direct_update_workflow_all_fields(db):
+    """Direct call: all optional fields applied (lines 242-255)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Multi-field", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    upd = WorkflowUpdateRequest(
+        name="Renamed",
+        description="New desc",
+        graph_json=_two_node_graph(),
+        status="active",
+        max_budget_usd=99.0,
+    )
+    result = await route_update_workflow(
+        workflow_id=wf_id, req=upd, db=db, agent_id=owner_id,
+    )
+    assert result["name"] == "Renamed"
+    assert result["description"] == "New desc"
+    assert result["status"] == "active"
+    assert result["max_budget_usd"] == 99.0
+
+
+# ── delete_workflow ──────────────────────────────────────────────────────────
+
+async def test_direct_delete_workflow_archives(db):
+    """Direct call: workflow is archived (lines 270-277)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="To Archive", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    result = await route_delete_workflow(workflow_id=wf_id, db=db, agent_id=owner_id)
+    assert result["detail"] == "Workflow archived"
+    assert result["workflow_id"] == wf_id
+
+
+async def test_direct_delete_workflow_not_found_raises(db):
+    """Direct call: missing workflow raises 404 (lines 270-271)."""
+    with pytest.raises(HTTPException) as exc_info:
+        await route_delete_workflow(workflow_id="no-such", db=db, agent_id=_new_id())
+    assert exc_info.value.status_code == 404
+
+
+async def test_direct_delete_workflow_wrong_owner_raises(db):
+    """Direct call: wrong owner raises 403 (lines 272-273)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Protected Del", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_delete_workflow(workflow_id=wf_id, db=db, agent_id=_new_id())
+    assert exc_info.value.status_code == 403
+
+
+# ── execute_workflow ─────────────────────────────────────────────────────────
+
+async def test_direct_execute_workflow_success(db):
+    """Direct call: returns execution_id and status (lines 291-301)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Exec WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest(input_data={"k": "v"})
+    result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    assert "execution_id" in result
+    assert "status" in result
+
+
+async def test_direct_execute_workflow_not_found_raises(db):
+    """Direct call: missing workflow raises 404 (lines 298-299)."""
+    exec_req = WorkflowExecuteRequest()
+    with pytest.raises(HTTPException) as exc_info:
+        await route_execute_workflow(
+            workflow_id="no-such", req=exec_req, db=db, agent_id=_new_id(),
+        )
+    assert exc_info.value.status_code == 404
+
+
+# ── get_execution ─────────────────────────────────────────────────────────────
+
+async def test_direct_get_execution_success(db):
+    """Direct call: returns serialised execution (lines 311-316)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Exec Get WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    result = await route_get_execution(execution_id=exec_id, db=db, agent_id=owner_id)
+    assert result["id"] == exec_id
+    assert result["workflow_id"] == wf_id
+
+
+async def test_direct_get_execution_not_found_raises(db):
+    """Direct call: missing execution raises 404 (lines 312-313)."""
+    with pytest.raises(HTTPException) as exc_info:
+        await route_get_execution(execution_id="no-such", db=db, agent_id=_new_id())
+    assert exc_info.value.status_code == 404
+
+
+async def test_direct_get_execution_wrong_initiator_raises(db):
+    """Direct call: wrong initiator raises 403 (lines 314-315)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Initiator WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_get_execution(execution_id=exec_id, db=db, agent_id=_new_id())
+    assert exc_info.value.status_code == 403
+
+
+# ── get_execution_nodes ──────────────────────────────────────────────────────
+
+async def test_direct_get_execution_nodes_success(db):
+    """Direct call: returns nodes list (lines 326-336)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Nodes WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    result = await route_get_execution_nodes(
+        execution_id=exec_id, db=db, agent_id=owner_id,
+    )
+    assert result["execution_id"] == exec_id
+    assert "nodes" in result
+    assert "total" in result
+
+
+async def test_direct_get_execution_nodes_not_found_raises(db):
+    """Direct call: missing execution raises 404 (lines 327-328)."""
+    with pytest.raises(HTTPException) as exc_info:
+        await route_get_execution_nodes(
+            execution_id="no-such", db=db, agent_id=_new_id(),
+        )
+    assert exc_info.value.status_code == 404
+
+
+async def test_direct_get_execution_nodes_wrong_initiator_raises(db):
+    """Direct call: wrong initiator raises 403 (lines 329-330)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Nodes Auth WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_get_execution_nodes(
+            execution_id=exec_id, db=db, agent_id=_new_id(),
+        )
+    assert exc_info.value.status_code == 403
+
+
+# ── pause_execution ──────────────────────────────────────────────────────────
+
+async def test_direct_pause_execution_success(db):
+    """Direct call: running execution is paused (lines 346-357)."""
+    from marketplace.models.workflow import WorkflowExecution
+    from sqlalchemy import select
+
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Pause WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    # Force status to "running" so pause can succeed
+    r = await db.execute(select(WorkflowExecution).where(WorkflowExecution.id == exec_id))
+    ex_obj = r.scalar_one()
+    ex_obj.status = "running"
+    await db.commit()
+
+    result = await route_pause_execution(
+        execution_id=exec_id, db=db, agent_id=owner_id,
+    )
+    assert result["detail"] == "Execution paused"
+    assert result["execution_id"] == exec_id
+
+
+async def test_direct_pause_execution_not_found_raises(db):
+    """Direct call: missing execution raises 404 (lines 347-348)."""
+    with pytest.raises(HTTPException) as exc_info:
+        await route_pause_execution(execution_id="no-such", db=db, agent_id=_new_id())
+    assert exc_info.value.status_code == 404
+
+
+async def test_direct_pause_execution_wrong_initiator_raises(db):
+    """Direct call: wrong initiator raises 403 (lines 349-350)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Pause Auth WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_pause_execution(
+            execution_id=exec_id, db=db, agent_id=_new_id(),
+        )
+    assert exc_info.value.status_code == 403
+
+
+async def test_direct_pause_execution_not_running_raises(db):
+    """Direct call: pausing a non-running execution raises 409 (lines 352-356)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Pause 409 WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    # Execution is in "completed" or "pending" state — pause should fail
+    with pytest.raises(HTTPException) as exc_info:
+        await route_pause_execution(
+            execution_id=exec_id, db=db, agent_id=owner_id,
+        )
+    assert exc_info.value.status_code == 409
+
+
+# ── resume_execution ─────────────────────────────────────────────────────────
+
+async def test_direct_resume_execution_success(db):
+    """Direct call: paused execution is resumed (lines 367-378)."""
+    from marketplace.models.workflow import WorkflowExecution
+    from sqlalchemy import select
+
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Resume WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    # Force status to "paused"
+    r = await db.execute(select(WorkflowExecution).where(WorkflowExecution.id == exec_id))
+    ex_obj = r.scalar_one()
+    ex_obj.status = "paused"
+    await db.commit()
+
+    result = await route_resume_execution(
+        execution_id=exec_id, db=db, agent_id=owner_id,
+    )
+    assert result["detail"] == "Execution resumed"
+    assert result["execution_id"] == exec_id
+
+
+async def test_direct_resume_execution_not_found_raises(db):
+    """Direct call: missing execution raises 404 (lines 368-369)."""
+    with pytest.raises(HTTPException) as exc_info:
+        await route_resume_execution(execution_id="no-such", db=db, agent_id=_new_id())
+    assert exc_info.value.status_code == 404
+
+
+async def test_direct_resume_execution_wrong_initiator_raises(db):
+    """Direct call: wrong initiator raises 403 (lines 370-371)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Resume Auth WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_resume_execution(
+            execution_id=exec_id, db=db, agent_id=_new_id(),
+        )
+    assert exc_info.value.status_code == 403
+
+
+async def test_direct_resume_execution_not_paused_raises(db):
+    """Direct call: resuming a non-paused execution raises 409 (lines 373-377)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Resume 409 WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    # Execution is completed/pending — resume should fail
+    with pytest.raises(HTTPException) as exc_info:
+        await route_resume_execution(
+            execution_id=exec_id, db=db, agent_id=owner_id,
+        )
+    assert exc_info.value.status_code == 409
+
+
+# ── cancel_execution ─────────────────────────────────────────────────────────
+
+async def test_direct_cancel_execution_success(db):
+    """Direct call: pending execution is cancelled (lines 388-399)."""
+    from marketplace.models.workflow import WorkflowExecution
+    from sqlalchemy import select
+
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Cancel WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    # Force status to "pending" so cancel can succeed
+    r = await db.execute(select(WorkflowExecution).where(WorkflowExecution.id == exec_id))
+    ex_obj = r.scalar_one()
+    ex_obj.status = "pending"
+    await db.commit()
+
+    result = await route_cancel_execution(
+        execution_id=exec_id, db=db, agent_id=owner_id,
+    )
+    assert result["detail"] == "Execution cancelled"
+    assert result["execution_id"] == exec_id
+
+
+async def test_direct_cancel_execution_not_found_raises(db):
+    """Direct call: missing execution raises 404 (lines 389-390)."""
+    with pytest.raises(HTTPException) as exc_info:
+        await route_cancel_execution(
+            execution_id="no-such", db=db, agent_id=_new_id(),
+        )
+    assert exc_info.value.status_code == 404
+
+
+async def test_direct_cancel_execution_wrong_initiator_raises(db):
+    """Direct call: wrong initiator raises 403 (lines 391-392)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Cancel Auth WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_cancel_execution(
+            execution_id=exec_id, db=db, agent_id=_new_id(),
+        )
+    assert exc_info.value.status_code == 403
+
+
+async def test_direct_cancel_execution_already_completed_raises(db):
+    """Direct call: cancelling a completed execution raises 409 (lines 394-398)."""
+    from marketplace.models.workflow import WorkflowExecution
+    from sqlalchemy import select
+
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Cancel 409 WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    # Force to "completed" so cancel returns False
+    r = await db.execute(select(WorkflowExecution).where(WorkflowExecution.id == exec_id))
+    ex_obj = r.scalar_one()
+    ex_obj.status = "completed"
+    await db.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_cancel_execution(
+            execution_id=exec_id, db=db, agent_id=owner_id,
+        )
+    assert exc_info.value.status_code == 409
+
+
+# ── get_execution_cost ────────────────────────────────────────────────────────
+
+async def test_direct_get_execution_cost_success(db):
+    """Direct call: returns cost breakdown (lines 409-428)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Cost WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    result = await route_get_execution_cost(
+        execution_id=exec_id, db=db, agent_id=owner_id,
+    )
+    assert result["execution_id"] == exec_id
+    assert result["workflow_id"] == wf_id
+    assert "total_cost_usd" in result
+    assert "node_costs" in result
+    assert "status" in result
+
+
+async def test_direct_get_execution_cost_not_found_raises(db):
+    """Direct call: missing execution raises 404 (lines 410-411)."""
+    with pytest.raises(HTTPException) as exc_info:
+        await route_get_execution_cost(
+            execution_id="no-such", db=db, agent_id=_new_id(),
+        )
+    assert exc_info.value.status_code == 404
+
+
+async def test_direct_get_execution_cost_wrong_initiator_raises(db):
+    """Direct call: wrong initiator raises 403 (lines 412-413)."""
+    owner_id = _new_id()
+    req = WorkflowCreateRequest(name="Cost Auth WF", graph_json=_simple_graph())
+    created = await route_create_workflow(req=req, db=db, agent_id=owner_id)
+    wf_id = created["id"]
+
+    exec_req = WorkflowExecuteRequest()
+    exec_result = await route_execute_workflow(
+        workflow_id=wf_id, req=exec_req, db=db, agent_id=owner_id,
+    )
+    exec_id = exec_result["execution_id"]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_get_execution_cost(
+            execution_id=exec_id, db=db, agent_id=_new_id(),
+        )
+    assert exc_info.value.status_code == 403
+
+
+# ── template endpoints (no DB needed) ────────────────────────────────────────
+
+async def test_direct_list_workflow_templates():
+    """Direct call: returns all 3 built-in templates (line 443)."""
+    result = await route_list_workflow_templates()
+    assert result["total"] == 3
+    keys = [t["key"] for t in result["templates"]]
+    assert "sequential-pipeline" in keys
+    assert "fan-out-fan-in" in keys
+    assert "human-in-the-loop" in keys
+
+
+async def test_direct_list_templates_alias():
+    """Direct call: alias returns same result as workflow-templates (line 449)."""
+    wt = await route_list_workflow_templates()
+    t = await route_list_templates()
+    assert wt == t
