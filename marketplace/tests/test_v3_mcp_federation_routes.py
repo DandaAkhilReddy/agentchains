@@ -1598,3 +1598,977 @@ async def test_register_server_with_full_options(client):
     body = resp.json()
     assert body["description"] == "Fully configured server"
     assert body["auth_type"] == "bearer"
+
+
+# ===========================================================================
+# Direct function-call tests — bypass HTTP/ASGI to guarantee coverage
+#
+# pytest-asyncio + httpx ASGI transport does not always resume coroutine
+# tracing after `await` in Python 3.13 / coverage 7.x without
+# `concurrency = asyncio`.  Calling route functions directly ensures every
+# line inside the coroutine body is measured.
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# register_server — ValueError branch (lines 99-101)
+# ---------------------------------------------------------------------------
+
+
+async def test_register_server_value_error_from_service():
+    """register_server raises HTTPException(400) when service raises ValueError."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import (
+        ServerRegisterRequest,
+        register_server,
+    )
+
+    req = ServerRegisterRequest(
+        name="err-srv",
+        base_url="http://example.com/mcp",
+        namespace="errns",
+    )
+    mock_db = AsyncMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.register_server",
+        new_callable=AsyncMock,
+        side_effect=ValueError("duplicate namespace"),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await register_server(req=req, db=mock_db, agent_id="agent-x")
+
+    assert exc_info.value.status_code == 400
+    assert "duplicate namespace" in exc_info.value.detail
+
+
+# ---------------------------------------------------------------------------
+# list_servers — return statement (line 116)
+# ---------------------------------------------------------------------------
+
+
+async def test_list_servers_return_direct():
+    """list_servers returns correct dict shape directly."""
+    from marketplace.api.v3_mcp_federation import list_servers
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+    fake_srv.id = "srv-1"
+    fake_srv.name = "direct-srv"
+    fake_srv.base_url = "http://x.com"
+    fake_srv.namespace = "dirns"
+    fake_srv.description = "d"
+    fake_srv.status = "active"
+    fake_srv.health_score = 100
+    fake_srv.auth_type = "none"
+    fake_srv.last_health_check = None
+    fake_srv.registered_by = "agent-y"
+    fake_srv.created_at = None
+    fake_srv.updated_at = None
+
+    with patch(
+        "marketplace.services.mcp_federation_service.list_servers",
+        new_callable=AsyncMock,
+        return_value=[fake_srv],
+    ):
+        result = await list_servers(db=mock_db, agent_id="agent-y")
+
+    assert result["total"] == 1
+    assert result["servers"][0]["name"] == "direct-srv"
+
+
+# ---------------------------------------------------------------------------
+# get_server — 404 branch (lines 130-132) + success path (line 132)
+# ---------------------------------------------------------------------------
+
+
+async def test_get_server_not_found_direct():
+    """get_server raises HTTPException(404) when service returns None."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import get_server
+
+    mock_db = AsyncMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await get_server(server_id="missing", db=mock_db, agent_id="agent-z")
+
+    assert exc_info.value.status_code == 404
+
+
+async def test_get_server_found_direct():
+    """get_server returns serialised server dict when found."""
+    from marketplace.api.v3_mcp_federation import get_server
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+    fake_srv.id = "srv-found"
+    fake_srv.name = "found-srv"
+    fake_srv.base_url = "http://found.com"
+    fake_srv.namespace = "foundns"
+    fake_srv.description = "desc"
+    fake_srv.status = "active"
+    fake_srv.health_score = 90
+    fake_srv.auth_type = "none"
+    fake_srv.last_health_check = None
+    fake_srv.registered_by = "owner"
+    fake_srv.created_at = None
+    fake_srv.updated_at = None
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ):
+        result = await get_server(server_id="srv-found", db=mock_db, agent_id="owner")
+
+    assert result["id"] == "srv-found"
+    assert result["name"] == "found-srv"
+
+
+# ---------------------------------------------------------------------------
+# update_server — 404, 403, field updates, URL strip (lines 144-170)
+# ---------------------------------------------------------------------------
+
+
+async def test_update_server_not_found_direct():
+    """update_server raises HTTPException(404) when server missing."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import ServerUpdateRequest, update_server
+
+    mock_db = AsyncMock()
+    req = ServerUpdateRequest(name="new-name")
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await update_server(
+                server_id="missing", req=req, db=mock_db, agent_id="agent-1",
+            )
+
+    assert exc_info.value.status_code == 404
+
+
+async def test_update_server_forbidden_direct():
+    """update_server raises HTTPException(403) for non-owner."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import ServerUpdateRequest, update_server
+
+    mock_db = AsyncMock()
+    req = ServerUpdateRequest(name="hijack")
+
+    fake_srv = MagicMock()
+    fake_srv.registered_by = "real-owner"
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await update_server(
+                server_id="srv-x", req=req, db=mock_db, agent_id="intruder",
+            )
+
+    assert exc_info.value.status_code == 403
+
+
+async def test_update_server_all_fields_direct():
+    """update_server applies all optional fields and commits."""
+    from marketplace.api.v3_mcp_federation import ServerUpdateRequest, update_server
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+    fake_srv.registered_by = "owner-a"
+    fake_srv.id = "srv-all"
+    fake_srv.name = "old-name"
+    fake_srv.base_url = "http://old.com"
+    fake_srv.namespace = "oldns"
+    fake_srv.description = "old"
+    fake_srv.status = "active"
+    fake_srv.health_score = 80
+    fake_srv.auth_type = "none"
+    fake_srv.auth_credential_ref = ""
+    fake_srv.last_health_check = None
+    fake_srv.created_at = None
+    fake_srv.updated_at = None
+
+    req = ServerUpdateRequest(
+        name="new-name",
+        base_url="http://new.example.com/mcp/",
+        namespace="newns",
+        description="new-desc",
+        auth_type="bearer",
+        auth_credential_ref="tok-abc",
+    )
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ):
+        result = await update_server(
+            server_id="srv-all", req=req, db=mock_db, agent_id="owner-a",
+        )
+
+    # name updated
+    assert fake_srv.name == "new-name"
+    # base_url trailing slash stripped
+    assert not fake_srv.base_url.endswith("/")
+    assert fake_srv.namespace == "newns"
+    assert fake_srv.description == "new-desc"
+    assert fake_srv.auth_type == "bearer"
+    assert fake_srv.auth_credential_ref == "tok-abc"
+    # db.commit and db.refresh were awaited
+    mock_db.commit.assert_awaited()
+    mock_db.refresh.assert_awaited_with(fake_srv)
+
+
+async def test_update_server_invalid_url_direct():
+    """update_server raises HTTPException(400) for invalid base_url."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import ServerUpdateRequest, update_server
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+    fake_srv.registered_by = "owner-b"
+
+    req = ServerUpdateRequest(base_url="ftp://bad-url.com")
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await update_server(
+                server_id="srv-b", req=req, db=mock_db, agent_id="owner-b",
+            )
+
+    assert exc_info.value.status_code == 400
+
+
+async def test_update_server_no_registered_by_allows_anyone():
+    """update_server with registered_by=None allows any agent to update."""
+    from marketplace.api.v3_mcp_federation import ServerUpdateRequest, update_server
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+    fake_srv.registered_by = None  # no owner restriction
+    fake_srv.id = "open-srv"
+    fake_srv.name = "open-srv"
+    fake_srv.base_url = "http://open.example.com"
+    fake_srv.namespace = "openns"
+    fake_srv.description = ""
+    fake_srv.status = "active"
+    fake_srv.health_score = 100
+    fake_srv.auth_type = "none"
+    fake_srv.auth_credential_ref = ""
+    fake_srv.last_health_check = None
+    fake_srv.created_at = None
+    fake_srv.updated_at = None
+
+    req = ServerUpdateRequest(description="updated by stranger")
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ):
+        result = await update_server(
+            server_id="open-srv", req=req, db=mock_db, agent_id="stranger",
+        )
+
+    assert fake_srv.description == "updated by stranger"
+
+
+# ---------------------------------------------------------------------------
+# unregister_server — 404, 403, deleted=False (lines 181-188)
+# ---------------------------------------------------------------------------
+
+
+async def test_unregister_server_not_found_direct():
+    """unregister_server raises HTTPException(404) when server missing."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import unregister_server
+
+    mock_db = AsyncMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await unregister_server(
+                server_id="missing", db=mock_db, agent_id="agent-del",
+            )
+
+    assert exc_info.value.status_code == 404
+
+
+async def test_unregister_server_forbidden_direct():
+    """unregister_server raises HTTPException(403) for non-owner."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import unregister_server
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+    fake_srv.registered_by = "real-owner"
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await unregister_server(
+                server_id="srv-del", db=mock_db, agent_id="intruder",
+            )
+
+    assert exc_info.value.status_code == 403
+
+
+async def test_unregister_server_service_returns_false():
+    """unregister_server raises HTTPException(404) when service returns False."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import unregister_server
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+    fake_srv.registered_by = "owner-c"
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ), patch(
+        "marketplace.services.mcp_federation_service.unregister_server",
+        new_callable=AsyncMock,
+        return_value=False,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await unregister_server(
+                server_id="ghost-srv", db=mock_db, agent_id="owner-c",
+            )
+
+    assert exc_info.value.status_code == 404
+
+
+async def test_unregister_server_success_direct():
+    """unregister_server returns success dict when deleted."""
+    from marketplace.api.v3_mcp_federation import unregister_server
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+    fake_srv.registered_by = "owner-d"
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ), patch(
+        "marketplace.services.mcp_federation_service.unregister_server",
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        result = await unregister_server(
+            server_id="real-srv", db=mock_db, agent_id="owner-d",
+        )
+
+    assert result["detail"] == "Server unregistered"
+    assert result["server_id"] == "real-srv"
+
+
+# ---------------------------------------------------------------------------
+# trigger_health_check — 404, error branch, success (lines 205-221)
+# ---------------------------------------------------------------------------
+
+
+async def test_trigger_health_check_not_found_direct():
+    """trigger_health_check raises HTTPException(404) when server missing."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import trigger_health_check
+
+    mock_db = AsyncMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await trigger_health_check(
+                server_id="missing", db=mock_db, agent_id="agent-hc",
+            )
+
+    assert exc_info.value.status_code == 404
+
+
+async def test_trigger_health_check_error_branch_direct():
+    """trigger_health_check returns healthy=False when refresh returns error."""
+    from marketplace.api.v3_mcp_federation import trigger_health_check
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+    fake_srv.health_score = 60
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ), patch(
+        "marketplace.services.mcp_federation_service.refresh_server_tools",
+        new_callable=AsyncMock,
+        return_value={"error": "timeout"},
+    ), patch(
+        "marketplace.services.mcp_federation_service.update_health_score",
+        new_callable=AsyncMock,
+    ):
+        result = await trigger_health_check(
+            server_id="hc-srv", db=mock_db, agent_id="agent-hc",
+        )
+
+    assert result["healthy"] is False
+    assert result["error"] == "timeout"
+    assert result["health_score"] == 40  # max(0, 60 - 20)
+
+
+async def test_trigger_health_check_success_direct():
+    """trigger_health_check returns healthy=True when refresh succeeds."""
+    from marketplace.api.v3_mcp_federation import trigger_health_check
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+    fake_srv.health_score = 80
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ), patch(
+        "marketplace.services.mcp_federation_service.refresh_server_tools",
+        new_callable=AsyncMock,
+        return_value={"tools": [{"name": "t1"}], "count": 1},
+    ):
+        result = await trigger_health_check(
+            server_id="hc-ok-srv", db=mock_db, agent_id="agent-hc",
+        )
+
+    assert result["healthy"] is True
+    assert result["tools_count"] == 1
+    assert result["health_score"] == 100
+
+
+# ---------------------------------------------------------------------------
+# refresh_server_tools route — 404, error 502, success (lines 237-244)
+# ---------------------------------------------------------------------------
+
+
+async def test_refresh_server_tools_not_found_direct():
+    """refresh_server_tools raises HTTPException(404) when server missing."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import refresh_server_tools
+
+    mock_db = AsyncMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await refresh_server_tools(
+                server_id="missing", db=mock_db, agent_id="agent-rf",
+            )
+
+    assert exc_info.value.status_code == 404
+
+
+async def test_refresh_server_tools_error_direct():
+    """refresh_server_tools raises HTTPException(502) on error."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import refresh_server_tools
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ), patch(
+        "marketplace.services.mcp_federation_service.refresh_server_tools",
+        new_callable=AsyncMock,
+        return_value={"error": "connection refused"},
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await refresh_server_tools(
+                server_id="err-rf-srv", db=mock_db, agent_id="agent-rf",
+            )
+
+    assert exc_info.value.status_code == 502
+    assert "connection refused" in exc_info.value.detail
+
+
+async def test_refresh_server_tools_success_direct():
+    """refresh_server_tools returns tool list dict on success."""
+    from marketplace.api.v3_mcp_federation import refresh_server_tools
+
+    mock_db = AsyncMock()
+    fake_srv = MagicMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.get_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ), patch(
+        "marketplace.services.mcp_federation_service.refresh_server_tools",
+        new_callable=AsyncMock,
+        return_value={"tools": [{"name": "a"}, {"name": "b"}], "count": 2},
+    ):
+        result = await refresh_server_tools(
+            server_id="ok-rf-srv", db=mock_db, agent_id="agent-rf",
+        )
+
+    assert result["server_id"] == "ok-rf-srv"
+    assert result["tools_refreshed"] == 2
+    assert len(result["tools"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# list_federated_tools — return statement (line 262)
+# ---------------------------------------------------------------------------
+
+
+async def test_list_federated_tools_return_direct():
+    """list_federated_tools return statement is executed and returns correct shape."""
+    from marketplace.api.v3_mcp_federation import list_federated_tools
+
+    mock_db = AsyncMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.discover_tools",
+        new_callable=AsyncMock,
+        return_value=[{"name": "ns.tool1"}, {"name": "ns.tool2"}],
+    ):
+        result = await list_federated_tools(
+            namespace=None, db=mock_db, agent_id="agent-lt",
+        )
+
+    assert result["total"] == 2
+    assert len(result["tools"]) == 2
+
+
+async def test_list_federated_tools_with_namespace_direct():
+    """list_federated_tools passes namespace filter to service."""
+    from marketplace.api.v3_mcp_federation import list_federated_tools
+
+    mock_db = AsyncMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.discover_tools",
+        new_callable=AsyncMock,
+        return_value=[{"name": "filtered.t"}],
+    ) as mock_discover:
+        result = await list_federated_tools(
+            namespace="filtered", db=mock_db, agent_id="agent-lt2",
+        )
+
+    mock_discover.assert_awaited_once_with(mock_db, namespace="filtered")
+    assert result["total"] == 1
+
+
+# ---------------------------------------------------------------------------
+# list_federated_resources — for-loop and JSON decode (lines 308-323)
+# ---------------------------------------------------------------------------
+
+
+async def test_list_federated_resources_loop_direct():
+    """list_federated_resources iterates servers and prefixes resources."""
+    from marketplace.api.v3_mcp_federation import list_federated_resources
+
+    fake_srv = MagicMock()
+    fake_srv.id = "loop-srv"
+    fake_srv.namespace = "loopns"
+    fake_srv.resources_json = json.dumps([
+        {"uri": "loopns://a", "name": "A"},
+        {"uri": "loopns://b", "name": "B"},
+    ])
+
+    # Mock the DB execute → result chain
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [fake_srv]
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    result = await list_federated_resources(
+        namespace=None, db=mock_db, agent_id="agent-lr",
+    )
+
+    assert result["total"] == 2
+    assert result["resources"][0]["_server_id"] == "loop-srv"
+    assert result["resources"][0]["_namespace"] == "loopns"
+
+
+async def test_list_federated_resources_json_decode_error_direct():
+    """list_federated_resources handles invalid resources_json gracefully."""
+    from marketplace.api.v3_mcp_federation import list_federated_resources
+
+    fake_srv = MagicMock()
+    fake_srv.id = "bad-json-srv"
+    fake_srv.namespace = "badns"
+    fake_srv.resources_json = "{invalid json{"
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [fake_srv]
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    result = await list_federated_resources(
+        namespace=None, db=mock_db, agent_id="agent-lr2",
+    )
+
+    assert result["total"] == 0
+
+
+async def test_list_federated_resources_none_json_direct():
+    """list_federated_resources handles None resources_json gracefully."""
+    from marketplace.api.v3_mcp_federation import list_federated_resources
+
+    fake_srv = MagicMock()
+    fake_srv.id = "none-json-srv"
+    fake_srv.namespace = "nonens"
+    fake_srv.resources_json = None
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [fake_srv]
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    result = await list_federated_resources(
+        namespace=None, db=mock_db, agent_id="agent-lr3",
+    )
+
+    assert result["total"] == 0
+
+
+async def test_list_federated_resources_with_namespace_filter_direct():
+    """list_federated_resources adds namespace filter to query when provided."""
+    from marketplace.api.v3_mcp_federation import list_federated_resources
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = []
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    result = await list_federated_resources(
+        namespace="targetns", db=mock_db, agent_id="agent-lr4",
+    )
+
+    assert result["total"] == 0
+    mock_db.execute.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# read_federated_resource — 404, sort+loop, httpx success (lines 356-373)
+# ---------------------------------------------------------------------------
+
+
+async def test_read_federated_resource_no_servers_direct():
+    """read_federated_resource raises HTTPException(404) when no servers found."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import ResourceReadRequest, read_federated_resource
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = []
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    req = ResourceReadRequest(uri="unknown://resource")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await read_federated_resource(req=req, db=mock_db, agent_id="agent-rr")
+
+    assert exc_info.value.status_code == 404
+
+
+async def test_read_federated_resource_httpx_success_direct():
+    """read_federated_resource proxies to first healthy server via httpx."""
+    import httpx as _httpx
+    from marketplace.api.v3_mcp_federation import ResourceReadRequest, read_federated_resource
+
+    fake_srv = MagicMock()
+    fake_srv.id = "httpx-srv"
+    fake_srv.namespace = "myns"
+    fake_srv.base_url = "http://myns.example.com"
+    fake_srv.health_score = 100
+    fake_srv.auth_type = "none"
+    fake_srv.auth_credential_ref = ""
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [fake_srv]
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"content": "result"}
+    mock_resp.raise_for_status.return_value = None
+
+    mock_http_client = AsyncMock()
+    mock_http_client.post = AsyncMock(return_value=mock_resp)
+
+    req = ResourceReadRequest(uri="myns://some/data")
+
+    with patch("httpx.AsyncClient") as mock_cls:
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await read_federated_resource(req=req, db=mock_db, agent_id="agent-rr")
+
+    assert result["content"] == "result"
+
+
+async def test_read_federated_resource_sort_by_health_direct():
+    """read_federated_resource tries servers in descending health score order."""
+    from marketplace.api.v3_mcp_federation import ResourceReadRequest, read_federated_resource
+
+    low_srv = MagicMock()
+    low_srv.id = "low-srv"
+    low_srv.namespace = "sortns"
+    low_srv.base_url = "http://low.example.com"
+    low_srv.health_score = 20
+    low_srv.auth_type = "none"
+    low_srv.auth_credential_ref = ""
+
+    high_srv = MagicMock()
+    high_srv.id = "high-srv"
+    high_srv.namespace = "sortns"
+    high_srv.base_url = "http://high.example.com"
+    high_srv.health_score = 95
+    high_srv.auth_type = "none"
+    high_srv.auth_credential_ref = ""
+
+    mock_result = MagicMock()
+    # Return low first, so we verify high gets tried first
+    mock_result.scalars.return_value.all.return_value = [low_srv, high_srv]
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"data": "sorted"}
+    mock_resp.raise_for_status.return_value = None
+
+    mock_http_client = AsyncMock()
+    mock_http_client.post = AsyncMock(return_value=mock_resp)
+
+    req = ResourceReadRequest(uri="sortns://test")
+
+    with patch("httpx.AsyncClient") as mock_cls:
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await read_federated_resource(req=req, db=mock_db, agent_id="agent-sort")
+
+    # First call should have used the high-health server URL
+    first_call_url = mock_http_client.post.call_args_list[0][0][0]
+    assert "high.example.com" in first_call_url
+    assert result["data"] == "sorted"
+
+
+async def test_read_federated_resource_all_fail_502_direct():
+    """read_federated_resource raises 502 when all servers fail."""
+    import httpx as _httpx
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import ResourceReadRequest, read_federated_resource
+
+    fake_srv = MagicMock()
+    fake_srv.id = "fail-srv"
+    fake_srv.namespace = "failns"
+    fake_srv.base_url = "http://fail.example.com"
+    fake_srv.health_score = 50
+    fake_srv.auth_type = "none"
+    fake_srv.auth_credential_ref = ""
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [fake_srv]
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    mock_http_client = AsyncMock()
+    mock_http_client.post = AsyncMock(
+        side_effect=_httpx.RequestError("connection refused"),
+    )
+
+    req = ResourceReadRequest(uri="failns://resource")
+
+    with patch("httpx.AsyncClient") as mock_cls:
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await read_federated_resource(req=req, db=mock_db, agent_id="agent-fail")
+
+    assert exc_info.value.status_code == 502
+
+
+async def test_read_federated_resource_no_scheme_direct():
+    """read_federated_resource with URI that has no :// uses no namespace filter."""
+    import pytest
+    from fastapi import HTTPException
+    from marketplace.api.v3_mcp_federation import ResourceReadRequest, read_federated_resource
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = []
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    # URI without :// — namespace should be None, no namespace filter added
+    req = ResourceReadRequest(uri="/just/a/path")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await read_federated_resource(req=req, db=mock_db, agent_id="agent-ns")
+
+    assert exc_info.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# federation_health_overview — tools loop (lines 395-405)
+# ---------------------------------------------------------------------------
+
+
+async def test_federation_health_overview_tools_loop_direct():
+    """federation_health_overview counts tools from tools_json for each server."""
+    from marketplace.api.v3_mcp_federation import federation_health_overview
+
+    srv_a = MagicMock()
+    srv_a.status = "active"
+    srv_a.health_score = 80
+    srv_a.tools_json = json.dumps([{"name": "t1"}, {"name": "t2"}])
+
+    srv_b = MagicMock()
+    srv_b.status = "degraded"
+    srv_b.health_score = 30
+    srv_b.tools_json = json.dumps([{"name": "t3"}])
+
+    srv_c = MagicMock()
+    srv_c.status = "inactive"
+    srv_c.health_score = 0
+    srv_c.tools_json = None  # None → 0 tools
+
+    mock_db = AsyncMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.list_servers",
+        new_callable=AsyncMock,
+        return_value=[srv_a, srv_b, srv_c],
+    ):
+        result = await federation_health_overview(db=mock_db)
+
+    assert result["server_count"] == 3
+    assert result["healthy_count"] == 1   # only srv_a (active + score >= 50)
+    assert result["degraded_count"] == 1
+    assert result["inactive_count"] == 1
+    assert result["total_tool_count"] == 3  # t1 + t2 + t3
+
+
+async def test_federation_health_overview_malformed_tools_json_direct():
+    """federation_health_overview skips malformed tools_json without crashing."""
+    from marketplace.api.v3_mcp_federation import federation_health_overview
+
+    srv = MagicMock()
+    srv.status = "active"
+    srv.health_score = 70
+    srv.tools_json = "{bad json{"
+
+    mock_db = AsyncMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.list_servers",
+        new_callable=AsyncMock,
+        return_value=[srv],
+    ):
+        result = await federation_health_overview(db=mock_db)
+
+    assert result["total_tool_count"] == 0
+    assert result["server_count"] == 1
+
+
+async def test_federation_health_overview_empty_direct():
+    """federation_health_overview with no servers returns all zeros."""
+    from marketplace.api.v3_mcp_federation import federation_health_overview
+
+    mock_db = AsyncMock()
+
+    with patch(
+        "marketplace.services.mcp_federation_service.list_servers",
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        result = await federation_health_overview(db=mock_db)
+
+    assert result["server_count"] == 0
+    assert result["healthy_count"] == 0
+    assert result["total_tool_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# register_server — success path (line 101: return _server_to_dict)
+# ---------------------------------------------------------------------------
+
+
+async def test_register_server_success_direct():
+    """register_server returns serialised server on successful service call."""
+    from marketplace.api.v3_mcp_federation import ServerRegisterRequest, register_server
+
+    req = ServerRegisterRequest(
+        name="ok-srv",
+        base_url="http://ok.example.com/mcp",
+        namespace="okns",
+    )
+    mock_db = AsyncMock()
+
+    fake_srv = MagicMock()
+    fake_srv.id = "srv-ok"
+    fake_srv.name = "ok-srv"
+    fake_srv.base_url = "http://ok.example.com/mcp"
+    fake_srv.namespace = "okns"
+    fake_srv.description = ""
+    fake_srv.status = "active"
+    fake_srv.health_score = 100
+    fake_srv.auth_type = "none"
+    fake_srv.last_health_check = None
+    fake_srv.registered_by = "agent-ok"
+    fake_srv.created_at = None
+    fake_srv.updated_at = None
+
+    with patch(
+        "marketplace.services.mcp_federation_service.register_server",
+        new_callable=AsyncMock,
+        return_value=fake_srv,
+    ):
+        result = await register_server(req=req, db=mock_db, agent_id="agent-ok")
+
+    assert result["id"] == "srv-ok"
+    assert result["name"] == "ok-srv"
+    assert result["namespace"] == "okns"
