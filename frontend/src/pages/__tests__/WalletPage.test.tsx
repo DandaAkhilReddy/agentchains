@@ -808,4 +808,101 @@ describe("WalletPage", () => {
       });
     });
   });
+
+  it("shows skeleton loading cards when balance is loading", () => {
+    mockAuthenticated();
+    // Make fetchWalletBalance never resolve so balLoading stays true
+    vi.mocked(api.fetchWalletBalance).mockImplementation(() => new Promise(() => {}));
+
+    renderWithProviders(<WalletPage />);
+
+    // The loading skeleton renders 4 SkeletonCard components
+    // SkeletonCard is rendered by @/components/Skeleton which we need to check
+    // Since balLoading is true, the skeleton section is shown instead of wallet content
+    // Check that the "Wallet" title (PageHeader) is NOT shown during loading
+    expect(screen.queryByText("Wallet")).not.toBeInTheDocument();
+    expect(screen.queryByText("Buy Credits")).not.toBeInTheDocument();
+  });
+
+  it("Enter key triggers login from auth gate", async () => {
+    const loginFn = vi.fn();
+    vi.spyOn(authModule, "useAuth").mockReturnValue({
+      token: "",
+      login: loginFn,
+      logout: vi.fn(),
+      isAuthenticated: false,
+    } as any);
+
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    // Type token and press Enter - this triggers handleConnect via onKeyDown
+    const input = screen.getByPlaceholderText("eyJhbGciOi...");
+    await user.type(input, "enter-key-token{Enter}");
+
+    expect(loginFn).toHaveBeenCalledWith("enter-key-token");
+  });
+
+  it("pressing Enter with empty input does not call login", async () => {
+    const loginFn = vi.fn();
+    vi.spyOn(authModule, "useAuth").mockReturnValue({
+      token: "",
+      login: loginFn,
+      logout: vi.fn(),
+      isAuthenticated: false,
+    } as any);
+
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    const input = screen.getByPlaceholderText("eyJhbGciOi...");
+    // Press Enter without typing anything - handleConnect is called but t is empty
+    await user.click(input);
+    await user.keyboard("{Enter}");
+
+    // login should NOT be called because t is empty
+    expect(loginFn).not.toHaveBeenCalled();
+  });
+
+  it("shows Processing... spinner when deposit mutation is pending", async () => {
+    mockAuthenticated();
+    // Make createDeposit never resolve so isPending stays true
+    vi.mocked(api.createDeposit).mockImplementation(() => new Promise(() => {}));
+
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Starter")).toBeInTheDocument();
+    });
+
+    // Click Starter package to set amount
+    await user.click(screen.getByText("Starter"));
+
+    // Click Buy Credits - this triggers mutation which stays pending
+    await user.click(screen.getByText("Buy Credits"));
+
+    // The spinner "Processing..." text should appear
+    await waitFor(() => {
+      expect(screen.getByText("Processing...")).toBeInTheDocument();
+    });
+  });
+
+  it("custom amount input shows deposit amount when no package selected", async () => {
+    mockAuthenticated();
+    const user = userEvent.setup();
+    renderWithProviders(<WalletPage />);
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Custom amount")).toBeInTheDocument();
+    });
+
+    // Type into custom input — selectedPackage should become null
+    const customInput = screen.getByPlaceholderText("Custom amount");
+    await user.type(customInput, "7");
+
+    // Buy button should be enabled
+    const buyBtn = screen.getByText("Buy Credits").closest("button");
+    expect(buyBtn).not.toBeDisabled();
+  });
 });

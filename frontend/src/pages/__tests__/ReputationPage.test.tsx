@@ -271,4 +271,162 @@ describe("ReputationPage", () => {
 
     expect(screen.getByText("No data yet")).toBeInTheDocument();
   });
+
+  it("triggers lookup on Enter key press when lookupId is set", async () => {
+    vi.spyOn(useReputationModule, "useReputation").mockReturnValue({
+      data: {
+        agent_id: "agent-kp-1",
+        agent_name: "Keypress Agent",
+        total_transactions: 10,
+        successful_deliveries: 9,
+        failed_deliveries: 1,
+        verified_count: 8,
+        verification_failures: 0,
+        avg_response_ms: 100,
+        total_volume_usdc: 500,
+        composite_score: 0.88,
+        last_calculated_at: "2025-01-01T00:00:00Z",
+      },
+      isLoading: false,
+    } as any);
+
+    renderWithProviders(<ReputationPage />);
+
+    const lookupInput = screen.getByPlaceholderText("Enter agent ID to look up...");
+    fireEvent.change(lookupInput, { target: { value: "agent-kp-1" } });
+
+    // Simulate Enter key — this should set activeId and show the detail card
+    fireEvent.keyDown(lookupInput, { key: "Enter" });
+
+    expect(await screen.findByText("Composite Score")).toBeInTheDocument();
+  });
+
+  it("does not trigger lookup on Enter key when lookupId is empty", async () => {
+    renderWithProviders(<ReputationPage />);
+
+    const lookupInput = screen.getByPlaceholderText("Enter agent ID to look up...");
+
+    // Empty input — Enter should not set activeId
+    fireEvent.keyDown(lookupInput, { key: "Enter" });
+
+    // No detail card should appear (activeId remains null)
+    expect(screen.queryByText("Composite Score")).not.toBeInTheDocument();
+  });
+
+  it("shows secondary_label from first multi-board entry as column header", () => {
+    vi.spyOn(useAnalyticsModule, "useMultiLeaderboard").mockReturnValue({
+      data: {
+        board_type: "earnings",
+        entries: [
+          {
+            rank: 1,
+            agent_id: "agent-001",
+            agent_name: "Alpha Agent",
+            primary_score: 95,
+            secondary_label: "Earnings Score",
+            total_transactions: 500,
+            helpfulness_score: 0.97,
+            total_earned_usdc: 5000,
+          },
+        ],
+      },
+      isLoading: false,
+    } as any);
+
+    renderWithProviders(<ReputationPage />);
+
+    // secondary_label is used as the column header in multiBoardColumns
+    expect(screen.getByText("Earnings Score")).toBeInTheDocument();
+  });
+
+  it("renders ScoreBar for primary_score > 1 (divides by 100)", () => {
+    // primary_score of 85 (> 1) → divides to 0.85
+    vi.spyOn(useAnalyticsModule, "useMultiLeaderboard").mockReturnValue({
+      data: {
+        board_type: "earnings",
+        entries: [
+          {
+            rank: 1,
+            agent_id: "agent-001",
+            agent_name: "Alpha Agent",
+            primary_score: 85,
+            secondary_label: "Earnings",
+            total_transactions: 100,
+            helpfulness_score: 0.85,
+            total_earned_usdc: 1000,
+          },
+        ],
+      },
+      isLoading: false,
+    } as any);
+
+    renderWithProviders(<ReputationPage />);
+
+    // The component renders a ScoreBar which shows percentage — 85%
+    expect(screen.getByText("85%")).toBeInTheDocument();
+  });
+
+  it("shows loading spinner inside detail card when repLoading is true", async () => {
+    vi.spyOn(useReputationModule, "useReputation").mockReturnValue({
+      data: undefined,
+      isLoading: true,
+    } as any);
+
+    renderWithProviders(<ReputationPage />);
+
+    const lookupInput = screen.getByPlaceholderText("Enter agent ID to look up...");
+    fireEvent.change(lookupInput, { target: { value: "agent-123" } });
+    fireEvent.click(screen.getByText("Look Up"));
+
+    // After clicking, activeId is set; detail card shows Spinner (role=status)
+    const spinners = await screen.findAllByRole("status");
+    expect(spinners.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows agent-not-found state when activeId set but agentRep is undefined", async () => {
+    vi.spyOn(useReputationModule, "useReputation").mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    } as any);
+
+    renderWithProviders(<ReputationPage />);
+
+    const lookupInput = screen.getByPlaceholderText("Enter agent ID to look up...");
+    fireEvent.change(lookupInput, { target: { value: "nonexistent-agent" } });
+    fireEvent.click(screen.getByText("Look Up"));
+
+    expect(await screen.findByText("Agent not found")).toBeInTheDocument();
+  });
+
+  it("rank > 3 renders plain number badge without medal", () => {
+    vi.spyOn(useReputationModule, "useLeaderboard").mockReturnValue({
+      data: {
+        entries: [
+          {
+            rank: 4,
+            agent_id: "agent-004",
+            agent_name: "Delta Agent",
+            composite_score: 0.60,
+            total_transactions: 50,
+            total_volume_usdc: 1000,
+          },
+        ],
+      },
+      isLoading: false,
+    } as any);
+    // Also override multiboard to be empty so no top-3 medals appear at all
+    vi.spyOn(useAnalyticsModule, "useMultiLeaderboard").mockReturnValue({
+      data: { board_type: "helpfulness", entries: [] },
+      isLoading: false,
+    } as any);
+
+    renderWithProviders(<ReputationPage />);
+
+    // Rank 4 renders as a number span (no title attribute for medal)
+    expect(screen.getByText("4")).toBeInTheDocument();
+    // Should NOT have medal titles (no top-3 entries in either table)
+    expect(screen.queryByTitle("Gold")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Silver")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Bronze")).not.toBeInTheDocument();
+  });
 });

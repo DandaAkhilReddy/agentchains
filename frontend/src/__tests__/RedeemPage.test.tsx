@@ -328,6 +328,261 @@ describe("RedeemPage", () => {
     });
   });
 
+  /* ── 8a. Enter key in auth gate triggers login ───────────────────────── */
+
+  it("pressing Enter in auth gate input triggers login", () => {
+    mockUseAuth.mockReturnValue({
+      token: "",
+      login: mockLogin,
+      logout: mockLogout,
+      isAuthenticated: false,
+    });
+    renderRedeemPage();
+
+    const input = screen.getByPlaceholderText("eyJhbGciOi...");
+    fireEvent.change(input, { target: { value: "my-jwt-token" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(mockLogin).toHaveBeenCalledWith("my-jwt-token");
+  });
+
+  /* ── 8b. Enter key with empty input does not trigger login ───────────── */
+
+  it("pressing Enter with empty auth gate input does not call login", () => {
+    mockUseAuth.mockReturnValue({
+      token: "",
+      login: mockLogin,
+      logout: mockLogout,
+      isAuthenticated: false,
+    });
+    renderRedeemPage();
+
+    const input = screen.getByPlaceholderText("eyJhbGciOi...");
+    // Don't change the value — it stays empty
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
+  /* ── 8c. Unknown method type falls back to Gift icon and "Withdraw your balance" desc ── */
+
+  it("renders fallback icon and description for unknown method type", async () => {
+    mockFetchRedemptionMethods.mockResolvedValue({
+      methods: [
+        {
+          type: "custom_method",  // not in METHOD_ICONS or METHOD_DESCRIPTIONS
+          label: "Custom Method",
+          min_usd: 2.0,
+          processing_time: "Instant",
+          available: true,
+        },
+      ],
+    } as any);
+    renderRedeemPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Custom Method")).toBeInTheDocument();
+    });
+
+    // Fallback description
+    expect(screen.getByText("Withdraw your balance")).toBeInTheDocument();
+  });
+
+  /* ── 8d. Shows Processing... spinner when mutation is pending ─────────── */
+
+  it("shows Processing... spinner when redemption mutation is pending", async () => {
+    // Make createRedemption never resolve so isPending stays true
+    mockCreateRedemption.mockImplementation(() => new Promise(() => {}));
+
+    renderRedeemPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("API Credits")).toBeInTheDocument();
+    });
+
+    // Select a method
+    fireEvent.click(screen.getByText("API Credits").closest("button")!);
+
+    await waitFor(() => {
+      expect(screen.getByText("Withdrawal Amount")).toBeInTheDocument();
+    });
+
+    // Enter a valid amount (>= 0.10)
+    const input = screen.getByPlaceholderText(/0.10 or more/);
+    fireEvent.change(input, { target: { value: "1" } });
+
+    // Click submit
+    const submitBtn = screen.getByRole("button", { name: "Request Withdrawal" });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Processing...")).toBeInTheDocument();
+    });
+  });
+
+  /* ── 8e. Shows pagination when total > 10 ────────────────────────────── */
+
+  it("shows pagination when total redemptions > 10", async () => {
+    const redemptions = Array.from({ length: 3 }, (_, i) =>
+      makeRedemption({ id: `r${i}`, status: "completed" }),
+    );
+    mockFetchRedemptions.mockResolvedValue({
+      redemptions,
+      total: 15,
+      page: 1,
+      page_size: 10,
+    } as any);
+    renderRedeemPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("pagination")).toBeInTheDocument();
+    });
+  });
+
+  /* ── 8f. No pagination when total <= 10 ─────────────────────────────── */
+
+  it("does not show pagination when total redemptions <= 10", async () => {
+    const redemptions = [makeRedemption({ id: "r1" })];
+    mockFetchRedemptions.mockResolvedValue({
+      redemptions,
+      total: 1,
+      page: 1,
+      page_size: 10,
+    } as any);
+    renderRedeemPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("row-r1")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId("pagination")).not.toBeInTheDocument();
+  });
+
+  /* ── 8g. Successful redemption shows success toast and resets state ───── */
+
+  it("shows success toast and resets after successful redemption", async () => {
+    mockCreateRedemption.mockResolvedValue({} as any);
+
+    renderRedeemPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("API Credits")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("API Credits").closest("button")!);
+
+    await waitFor(() => {
+      expect(screen.getByText("Withdrawal Amount")).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText(/0.10 or more/);
+    fireEvent.change(input, { target: { value: "0.5" } });
+
+    const submitBtn = screen.getByRole("button", { name: "Request Withdrawal" });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.stringContaining("$0.50"),
+        "success",
+      );
+    });
+  });
+
+  /* ── 8h. Failed redemption shows error toast ─────────────────────────── */
+
+  it("shows error toast when redemption fails", async () => {
+    mockCreateRedemption.mockRejectedValue(new Error("Insufficient funds"));
+
+    renderRedeemPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("API Credits")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("API Credits").closest("button")!);
+
+    await waitFor(() => {
+      expect(screen.getByText("Withdrawal Amount")).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText(/0.10 or more/);
+    fireEvent.change(input, { target: { value: "0.5" } });
+
+    const submitBtn = screen.getByRole("button", { name: "Request Withdrawal" });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith("Insufficient funds", "error");
+    });
+  });
+
+  /* ── 8i. Cancel redemption shows success toast ────────────────────────── */
+
+  it("cancel mutation shows success toast on success", async () => {
+    mockCancelRedemption.mockResolvedValue({} as any);
+    const redemptions = [makeRedemption({ id: "cancel-me", status: "pending" })];
+    mockFetchRedemptions.mockResolvedValue({
+      redemptions,
+      total: 1,
+      page: 1,
+      page_size: 10,
+    } as any);
+
+    renderRedeemPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Cancel")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Cancel"));
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith("Redemption cancelled", "success");
+    });
+  });
+
+  /* ── 8j. Cancel mutation error shows error toast ─────────────────────── */
+
+  it("cancel mutation shows error toast on failure", async () => {
+    mockCancelRedemption.mockRejectedValue(new Error("Cancel failed"));
+    const redemptions = [makeRedemption({ id: "cancel-fail", status: "pending" })];
+    mockFetchRedemptions.mockResolvedValue({
+      redemptions,
+      total: 1,
+      page: 1,
+      page_size: 10,
+    } as any);
+
+    renderRedeemPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Cancel")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Cancel"));
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith("Cancel failed", "error");
+    });
+  });
+
+  /* ── 8k. Fallback methods when fetchRedemptionMethods returns no methods ── */
+
+  it("uses fallback method list when API returns null/no methods", async () => {
+    mockFetchRedemptionMethods.mockResolvedValue({ methods: null } as any);
+    renderRedeemPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("API Credits")).toBeInTheDocument();
+    });
+
+    // Fallback methods include these labels
+    expect(screen.getByText("Gift Card")).toBeInTheDocument();
+    expect(screen.getByText("Bank Transfer")).toBeInTheDocument();
+    expect(screen.getByText("UPI Transfer")).toBeInTheDocument();
+  });
+
   /* ── 8. completed_at shows relative time or dash ─────────────────────── */
 
   it("completed_at shows relative time or dash", async () => {

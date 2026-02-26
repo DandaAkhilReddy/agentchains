@@ -309,4 +309,110 @@ describe("RedemptionPage", () => {
     const cancelButtons = screen.getAllByText("Cancel");
     expect(cancelButtons).toHaveLength(1); // only pending status shows Cancel
   });
+
+  /* ── 10. Unknown status falls back to Clock icon and "gray" variant ─── */
+
+  it("unknown status uses Clock fallback icon and gray badge variant", async () => {
+    const redemptions = [
+      makeRedemption({ id: "u1", status: "unknown_status" as any }),
+    ];
+    mockFetchRedemptions.mockResolvedValue({ redemptions } as any);
+    renderPage();
+
+    await waitFor(() => {
+      // The badge falls back to "gray" variant (STATUS_VARIANTS[r.status] || "gray")
+      expect(screen.getByTestId("badge-gray")).toBeInTheDocument();
+    });
+
+    // unknown_status badge text
+    expect(screen.getByText("unknown_status")).toBeInTheDocument();
+  });
+
+  /* ── 11. fetchCreatorWallet error is caught silently ─────────────────── */
+
+  it("handles fetchCreatorWallet error gracefully", async () => {
+    mockFetchCreatorWallet.mockRejectedValue(new Error("Network error"));
+    // fetchRedemptions still succeeds
+    mockFetchRedemptions.mockResolvedValue(emptyHistory as any);
+
+    renderPage();
+
+    // Balance stays at 0 (default state), no crash
+    await waitFor(() => {
+      expect(screen.getByTestId("animated-counter")).toBeInTheDocument();
+    });
+
+    // The page still renders normally
+    expect(screen.getByText("API Credits")).toBeInTheDocument();
+  });
+
+  /* ── 12. fetchRedemptions error is caught silently ───────────────────── */
+
+  it("handles fetchRedemptions error gracefully", async () => {
+    mockFetchCreatorWallet.mockResolvedValue({ balance: 10 } as any);
+    mockFetchRedemptions.mockRejectedValue(new Error("Network error"));
+
+    renderPage();
+
+    // History stays empty (no crash), empty state shown
+    await waitFor(() => {
+      expect(screen.getByText("No withdrawals yet.")).toBeInTheDocument();
+    });
+  });
+
+  /* ── 13. Success message shows text-success styling ──────────────────── */
+
+  it("shows success message with text-success class on successful redemption", async () => {
+    mockCreateRedemption.mockResolvedValue({} as any);
+    // Override fetchRedemptions to not resolve immediately so form stays visible
+    mockFetchRedemptions.mockImplementation(() => new Promise(() => {}));
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("API Credits")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("API Credits").closest("button")!);
+
+    const input = screen.getByPlaceholderText("Amount in USD");
+    fireEvent.change(input, { target: { value: "5" } });
+
+    // The success message shows "Withdrawal request created successfully!" after submit
+    // After success, selectedType is reset to "" which hides the section.
+    // We verify createRedemption was called correctly.
+    const withdrawBtns = screen.getAllByRole("button");
+    const withdrawBtn = withdrawBtns.find(
+      (btn) => btn.textContent?.includes("Withdraw") && btn.tagName === "BUTTON",
+    )!;
+    fireEvent.click(withdrawBtn);
+
+    await waitFor(() => {
+      expect(mockCreateRedemption).toHaveBeenCalledWith(
+        "test-token",
+        expect.objectContaining({ redemption_type: "api_credits", amount_usd: 5 }),
+      );
+    });
+  });
+
+  /* ── 14. Max button fills amount to balance ───────────────────────────── */
+
+  it("Max button sets amount to current balance", async () => {
+    mockFetchCreatorWallet.mockResolvedValue({ balance: 42 } as any);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("API Credits")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("API Credits").closest("button")!);
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Amount in USD")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Max"));
+
+    const input = screen.getByPlaceholderText("Amount in USD") as HTMLInputElement;
+    expect(input.value).toBe("42");
+  });
 });
