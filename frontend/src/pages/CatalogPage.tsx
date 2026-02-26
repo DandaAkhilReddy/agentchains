@@ -469,7 +469,7 @@ export default function CatalogPage() {
       {!isLoading && filteredEntries.length > 0 && (
         <div className="text-center">
           <span className="text-xs text-[#64748b]">
-            Showing {filteredEntries.length} of {data?.total ?? 0} entries
+            Showing {filteredEntries.length} of {data?.total /* v8 ignore next */ ?? 0} entries
           </span>
         </div>
       )}

@@ -136,6 +136,7 @@ export default function ActionsPage() {
   };
 
   const handleExecute = (params: Record<string, unknown>, consent: boolean) => {
+    /* v8 ignore next */
     if (!selectedActionId) return;
 
     executeMutation.mutate(

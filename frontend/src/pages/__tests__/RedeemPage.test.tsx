@@ -816,4 +816,94 @@ describe("RedeemPage", () => {
     expect(screen.queryByText("Next")).not.toBeInTheDocument();
     expect(screen.queryByText("Previous")).not.toBeInTheDocument();
   });
+
+  it("uses STATUS_CONFIG.pending fallback for unknown redemption status (covers line 131: ?? STATUS_CONFIG.pending)", async () => {
+    mockAuthenticated();
+    vi.mocked(api.fetchRedemptions).mockResolvedValue({
+      redemptions: [
+        {
+          id: "red-unknown-status",
+          creator_id: "c1",
+          redemption_type: "api_credits",
+          amount_usd: 7.5,
+          currency: "USD",
+          status: "unknown_custom_status" as any,
+          payout_ref: null,
+          admin_notes: "",
+          rejection_reason: "",
+          created_at: "2026-02-20T10:00:00Z",
+          processed_at: null,
+          completed_at: null,
+        },
+      ],
+      total: 1,
+    });
+
+    renderWithProviders(<RedeemPage />);
+
+    await waitFor(() => {
+      // STATUS_CONFIG["unknown_custom_status"] is undefined → falls back to STATUS_CONFIG.pending
+      // which has label "Pending"
+      expect(screen.getByText("Pending")).toBeInTheDocument();
+    });
+  });
+
+  it("minAmount defaults to 0 when no method is selected (covers line 210: selectedMethod ? ... : 0)", async () => {
+    mockAuthenticated();
+    renderWithProviders(<RedeemPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Redemption Methods")).toBeInTheDocument();
+    });
+
+    // With no selectedMethod, minAmount = 0 and parsedAmount is NaN (no input)
+    // so isValidAmount = false, and the Request Withdrawal button should not appear
+    expect(screen.queryByRole("button", { name: "Request Withdrawal" })).not.toBeInTheDocument();
+  });
+
+  it("METHOD_MINIMUMS ?? 0 fallback fires when selectedMethod has no entry (covers line 210: ?? 0)", async () => {
+    // Return a method type not in METHOD_MINIMUMS to trigger the ?? 0 fallback
+    mockAuthenticated();
+    vi.mocked(api.fetchRedemptionMethods).mockResolvedValue({
+      methods: [
+        { type: "crypto_wallet", label: "Crypto Wallet", min_usd: 0, processing_time: "Instant", available: true },
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderWithProviders(<RedeemPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Crypto Wallet")).toBeInTheDocument();
+    });
+
+    // Click the "Crypto Wallet" method — sets selectedMethod = "crypto_wallet"
+    // METHOD_MINIMUMS["crypto_wallet"] is undefined → ?? 0 fires → minAmount = 0
+    await user.click(screen.getByText("Crypto Wallet"));
+
+    // With minAmount = 0, any non-NaN amount >= 0 is valid
+    await waitFor(() => {
+      expect(screen.getByText("Withdrawal Amount")).toBeInTheDocument();
+    });
+  });
+
+  it("history?.redemptions ?? [] evaluates to [] when history is undefined during loading (covers line 530)", async () => {
+    // Make fetchRedemptions never resolve → history stays undefined (histLoading=true)
+    mockAuthenticated();
+    vi.mocked(api.fetchRedemptions).mockReturnValue(new Promise(() => {}) as any);
+
+    renderWithProviders(<RedeemPage />);
+
+    // Methods should still load (fetchRedemptionMethods resolves normally)
+    await waitFor(() => {
+      expect(screen.getByText("Redemption History")).toBeInTheDocument();
+    });
+
+    // With history undefined, data={history?.redemptions ?? []} = []
+    // DataTable receives [] and isLoading=true
+    // The ?? [] fallback is exercised; "No redemptions yet" should NOT appear since isLoading=true
+    expect(screen.queryByText("No redemptions yet")).not.toBeInTheDocument();
+    // The redemptions section renders without crashing despite history being undefined
+    expect(screen.getByText("Redemption History")).toBeInTheDocument();
+  });
 });

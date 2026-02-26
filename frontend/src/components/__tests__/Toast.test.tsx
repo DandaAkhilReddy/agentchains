@@ -196,6 +196,74 @@ describe("Toast Component", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument(); // No close buttons
   });
 
+  it("warning toast shows with correct amber styling", () => {
+    function WarningTrigger() {
+      const { toast } = useToast();
+      return (
+        <button onClick={() => toast("Warning message", "warning")}>Trigger</button>
+      );
+    }
+
+    render(
+      <ToastProvider>
+        <WarningTrigger />
+      </ToastProvider>
+    );
+
+    act(() => {
+      screen.getByText("Trigger").click();
+    });
+
+    const toastEl = screen.getByText("Warning message").closest("div");
+    // Warning color is #fbbf24
+    expect(toastEl?.getAttribute("style")).toContain("border-left: 4px solid rgb(251, 191, 36)");
+  });
+
+  it("progress bar reaches 0 and clears interval when toast expires (covers remaining <= 0 branch)", async () => {
+    render(
+      <ToastProvider>
+        <ToastTrigger message="Expiring toast" />
+      </ToastProvider>
+    );
+
+    act(() => {
+      screen.getByText("Trigger Toast").click();
+    });
+
+    expect(screen.getByText("Expiring toast")).toBeInTheDocument();
+
+    // Advance time well past TOAST_DURATION (4000ms) so remaining drops to 0
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    // Toast should have auto-dismissed (the setInterval clears and setVisible(false))
+    // Note: the setTimeout at 4000ms removes it from state, so it's gone
+    expect(screen.queryByText("Expiring toast")).not.toBeInTheDocument();
+  });
+
+  it("useEffect cleanup clears interval when ToastItem unmounts", async () => {
+    const { unmount } = render(
+      <ToastProvider>
+        <ToastTrigger message="Cleanup toast" />
+      </ToastProvider>
+    );
+
+    act(() => {
+      screen.getByText("Trigger Toast").click();
+    });
+
+    expect(screen.getByText("Cleanup toast")).toBeInTheDocument();
+
+    // Unmounting the provider unmounts ToastItem, triggering the useEffect cleanup
+    await act(async () => {
+      unmount();
+    });
+
+    // After unmount, the component is gone — just verify no throw occurred
+    expect(screen.queryByText("Cleanup toast")).not.toBeInTheDocument();
+  });
+
   it("toasts auto-dismiss independently", async () => {
     function StaggeredToasts() {
       const { toast } = useToast();

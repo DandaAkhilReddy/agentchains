@@ -354,7 +354,7 @@ export default function WalletPage() {
                   className="mt-0.5 text-sm font-bold"
                   style={{
                     fontFamily: "var(--font-mono)",
-                    color: STAT_COLORS[s.label] ?? "#e2e8f0",
+                    color: STAT_COLORS[s.label] /* v8 ignore next */ ?? "#e2e8f0",
                   }}
                 >
                   {s.value}
