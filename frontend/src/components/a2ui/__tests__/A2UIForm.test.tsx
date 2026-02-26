@@ -385,4 +385,183 @@ describe("A2UIForm", () => {
     expect(checkbox).toBeInTheDocument();
     expect(checkbox.type).toBe("checkbox");
   });
+
+  it("textarea onChange calls handleChange and updates submitted values (lines 97-107)", () => {
+    // Cover the textarea branch onChange handler at line 97:
+    // onChange={(e) => handleChange(field.name, e.target.value)}
+    const handleSubmit = vi.fn();
+    render(
+      <A2UIForm
+        componentId="form-1"
+        data={{
+          fields: [
+            { name: "bio", type: "textarea", label: "Bio" },
+          ],
+        }}
+        onSubmit={handleSubmit}
+      />
+    );
+    const textarea = screen.getByLabelText("Bio") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "My biography text" } });
+    fireEvent.click(screen.getByText("Submit"));
+    expect(handleSubmit).toHaveBeenCalledWith("form-1", { bio: "My biography text" });
+  });
+
+  it("textarea onChange with empty string submits empty value (covers line 97 empty path)", () => {
+    const handleSubmit = vi.fn();
+    render(
+      <A2UIForm
+        componentId="form-1"
+        data={{
+          fields: [
+            { name: "notes", type: "textarea", label: "Notes" },
+          ],
+        }}
+        onSubmit={handleSubmit}
+      />
+    );
+    const textarea = screen.getByLabelText("Notes") as HTMLTextAreaElement;
+    // Type then clear
+    fireEvent.change(textarea, { target: { value: "hello" } });
+    fireEvent.change(textarea, { target: { value: "" } });
+    fireEvent.click(screen.getByText("Submit"));
+    expect(handleSubmit).toHaveBeenCalledWith("form-1", { notes: "" });
+  });
+
+  it("checkbox onChange toggles checked state and submits correct boolean (line 124)", () => {
+    // Cover the checkbox onChange handler at line 124:
+    // onChange={(e) => handleChange(field.name, e.target.checked)}
+    const handleSubmit = vi.fn();
+    render(
+      <A2UIForm
+        componentId="form-1"
+        data={{
+          fields: [
+            { name: "accept", type: "checkbox", label: "Accept" },
+          ],
+        }}
+        onSubmit={handleSubmit}
+      />
+    );
+    const checkbox = document.getElementById("a2ui-form-1-accept") as HTMLInputElement;
+    // Default value is false (no default_value provided, type is checkbox)
+    expect(checkbox.checked).toBe(false);
+
+    // Simulate checking the checkbox
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+
+    // Submit and verify the boolean true is passed
+    fireEvent.click(screen.getByText("Submit"));
+    expect(handleSubmit).toHaveBeenCalledWith("form-1", { accept: true });
+  });
+
+  it("checkbox onChange toggles from true to false (covers the false branch of e.target.checked)", () => {
+    const handleSubmit = vi.fn();
+    render(
+      <A2UIForm
+        componentId="form-1"
+        data={{
+          fields: [
+            { name: "subscribe", type: "checkbox", label: "Subscribe", default_value: true },
+          ],
+        }}
+        onSubmit={handleSubmit}
+      />
+    );
+    const checkbox = document.getElementById("a2ui-form-1-subscribe") as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+
+    // Uncheck it
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+
+    fireEvent.click(screen.getByText("Submit"));
+    expect(handleSubmit).toHaveBeenCalledWith("form-1", { subscribe: false });
+  });
+
+  it("select onChange calls handleChange with the selected value (covers line 107 branch)", () => {
+    const handleSubmit = vi.fn();
+    render(
+      <A2UIForm
+        componentId="form-1"
+        data={{
+          fields: [
+            {
+              name: "priority",
+              type: "select",
+              label: "Priority",
+              options: ["Low", "Medium", "High"],
+            },
+          ],
+        }}
+        onSubmit={handleSubmit}
+      />
+    );
+    const select = screen.getByLabelText("Priority") as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "High" } });
+    fireEvent.click(screen.getByText("Submit"));
+    expect(handleSubmit).toHaveBeenCalledWith("form-1", { priority: "High" });
+  });
+
+  it("textarea value uses ?? '' when field value is undefined (covers line 96 ?? fallback)", () => {
+    // Render with empty fields first so useState initializes with no keys.
+    // Then rerender with a textarea field — values[field.name] will be undefined
+    // on the first render cycle, hitting the `?? ""` fallback at line 96.
+    const { rerender } = render(
+      <A2UIForm
+        componentId="form-x"
+        data={{ fields: [] }}
+      />
+    );
+    // Rerender with a textarea — values["notes"] is undefined since it wasn't in initial fields
+    rerender(
+      <A2UIForm
+        componentId="form-x"
+        data={{ fields: [{ name: "notes", type: "textarea", label: "Notes" }] }}
+      />
+    );
+    // The textarea should render with empty value (from ?? "")
+    const textarea = screen.getByLabelText("Notes") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("");
+  });
+
+  it("select value uses ?? '' when field value is undefined (covers line 106 ?? fallback)", () => {
+    // Same rerender trick to get values[field.name] = undefined for a select.
+    const { rerender } = render(
+      <A2UIForm
+        componentId="form-x"
+        data={{ fields: [] }}
+      />
+    );
+    rerender(
+      <A2UIForm
+        componentId="form-x"
+        data={{
+          fields: [{ name: "choice", type: "select", label: "Choice", options: ["A", "B"] }],
+        }}
+      />
+    );
+    const select = screen.getByLabelText("Choice") as HTMLSelectElement;
+    // The select value defaults to "" (from ?? "") so the default option is selected
+    expect(select.value).toBe("");
+  });
+
+  it("input value uses ?? '' when field value is undefined (covers line 133 ?? fallback)", () => {
+    // Same rerender trick to get values[field.name] = undefined for a regular input.
+    const { rerender } = render(
+      <A2UIForm
+        componentId="form-x"
+        data={{ fields: [] }}
+      />
+    );
+    rerender(
+      <A2UIForm
+        componentId="form-x"
+        data={{ fields: [{ name: "email", type: "email", label: "Email" }] }}
+      />
+    );
+    const input = screen.getByLabelText("Email") as HTMLInputElement;
+    expect(input.value).toBe("");
+  });
 });

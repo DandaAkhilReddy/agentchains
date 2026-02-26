@@ -153,4 +153,25 @@ describe("A2UINotification", () => {
     // Still visible because duration 0 means no auto-dismiss
     expect(screen.getByText("Test Notification")).toBeInTheDocument();
   });
+
+  it("falls back to info config for unknown level (covers line 46: LEVEL_CONFIG[level] ?? LEVEL_CONFIG.info)", () => {
+    // Pass an unknown level — the ?? fallback returns LEVEL_CONFIG.info
+    const notif = makeNotification({ level: "unknown" as any });
+    const { container } = render(<A2UINotification notifications={[notif]} />);
+
+    // Should still render and use info (blue) styling as fallback
+    const toast = container.querySelector(".animate-slide-in");
+    // info border is #60a5fa
+    expect(toast).toHaveStyle({ borderLeft: "4px solid #60a5fa" });
+    expect(screen.getByText("Test Notification")).toBeInTheDocument();
+  });
+
+  it("does not render countdown bar when duration is 0 (covers effectiveDuration > 0 branch)", () => {
+    const { container } = render(
+      <A2UINotification notifications={[makeNotification({ duration_ms: 0 })]} />
+    );
+    // With duration_ms=0, effectiveDuration=0, so the countdown bar should NOT render
+    const bar = container.querySelector(".absolute.bottom-0");
+    expect(bar).not.toBeInTheDocument();
+  });
 });

@@ -89,4 +89,59 @@ describe("Pagination", () => {
     await user.click(screen.getByText("3"));
     expect(onPageChange).toHaveBeenCalledWith(3);
   });
+
+  it("does NOT show leading ellipsis when page <= 3 with many pages (covers false branch of page > 3)", () => {
+    // totalPages > 7 and page = 2, so page <= 3 → no leading ellipsis
+    const { container } = render(
+      <Pagination page={2} totalPages={20} onPageChange={() => {}} />
+    );
+    // Ellipsis spans that contain "..."
+    const ellipses = container.querySelectorAll("span");
+    const dots = Array.from(ellipses).filter((s) => s.textContent === "...");
+    // With page=2 and 20 total pages: page <= 3, so no leading ellipsis
+    // Only trailing ellipsis (before page 20) should appear
+    expect(dots.length).toBe(1); // only trailing ellipsis
+    // Page 1 and pages around 2 should appear (1, 2, 3)
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+  });
+
+  it("shows page info text correctly", () => {
+    render(<Pagination page={1} totalPages={10} onPageChange={() => {}} />);
+    expect(screen.getByText("Page 1 of 10")).toBeInTheDocument();
+  });
+
+  it("returns null when totalPages is 0", () => {
+    const { container } = render(
+      <Pagination page={1} totalPages={0} onPageChange={() => {}} />
+    );
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("shows all page buttons when totalPages <= 7", () => {
+    render(<Pagination page={1} totalPages={7} onPageChange={() => {}} />);
+    // All 7 pages should appear as buttons
+    for (let i = 1; i <= 7; i++) {
+      expect(screen.getByText(String(i))).toBeInTheDocument();
+    }
+    // No ellipsis
+    const ellipses = Array.from(document.querySelectorAll("span")).filter(
+      (s) => s.textContent === "..."
+    );
+    expect(ellipses.length).toBe(0);
+  });
+
+  it("does NOT show trailing ellipsis when page is near the end (covers line 21: page >= totalPages - 2 false branch)", () => {
+    // With totalPages=20 and page=18, page >= totalPages-2 (18 >= 18) → no trailing ellipsis
+    const { container } = render(
+      <Pagination page={18} totalPages={20} onPageChange={() => {}} />
+    );
+    const ellipses = container.querySelectorAll("span");
+    const dots = Array.from(ellipses).filter((s) => s.textContent === "...");
+    // page=18 >= 20-2=18, so no trailing ellipsis
+    // page=18 > 3, so there IS a leading ellipsis
+    expect(dots.length).toBe(1); // only leading ellipsis
+    // Last page button should be present without trailing ellipsis
+    expect(screen.getByText("20")).toBeInTheDocument();
+  });
 });

@@ -1245,6 +1245,46 @@ describe("api.ts", () => {
     });
   });
 
+  describe("request() init branch at line 89 — GET with no token/body/headers", () => {
+    test("fetchHealth passes no init object when method=GET, no token, no body (covers line 91: undefined init)", async () => {
+      // fetchHealth calls get() -> request() with method=GET, no token, no body.
+      // hasInit = false (GET + no token + no body), headers = {} (empty).
+      // Object.keys(headers).length === 0, so init = undefined.
+      // This covers the 'undefined' branch at line 91.
+      await fetchHealth();
+      // fetch called with URL string only (no init/options object)
+      const callArgs = (fetch as any).mock.calls[0];
+      // callArgs[1] should be undefined (no init passed)
+      expect(callArgs[1]).toBeUndefined();
+    });
+
+    test("fetchAgents without params uses simple fetch with no init (covers line 91: undefined init)", async () => {
+      // Same: GET, no token, no body → init is undefined
+      await fetchAgents();
+      const callArgs = (fetch as any).mock.calls[0];
+      expect(callArgs[1]).toBeUndefined();
+    });
+
+    test("authGet uses init object (covers line 87: hasInit true branch)", async () => {
+      // authGet: token is set → hasInit = true → init = { method, headers, body: undefined }.
+      // This covers the hasInit=true branch at line 87 (opposite of line 89).
+      await fetchTransactions("my-token");
+      const callArgs = (fetch as any).mock.calls[0];
+      // init is defined (an object) because hasInit=true when token is set
+      expect(callArgs[1]).toBeDefined();
+      expect(callArgs[1].headers).toHaveProperty("Authorization", "Bearer my-token");
+    });
+
+    test("get() with no-op params exercises line 93 fetch without init object", async () => {
+      // Pure GET with no token, no body → init=undefined → fetch(url) path at line 93.
+      // The `init ? fetch(url, init) : fetch(url)` false branch is taken.
+      await fetchCDNStats();
+      const callArgs = (fetch as any).mock.calls[0];
+      expect(callArgs).toHaveLength(1); // only the URL arg, no init arg
+      expect(typeof callArgs[0]).toBe("string");
+    });
+  });
+
   describe("fetchSystemMetrics()", () => {
     test("calls both health and cdn endpoints", async () => {
       const healthData = { status: "healthy", version: "1.0" };

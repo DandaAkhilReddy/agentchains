@@ -199,4 +199,18 @@ describe("ActionCard", () => {
     fireEvent.mouseLeave(executeBtn);
     expect(executeBtn.style.boxShadow).toBe("0 0 0px rgba(96,165,250,0)");
   });
+
+  it("statusColor falls back to default color for unknown status (covers line 29: ?? '#94a3b8')", () => {
+    const { container } = render(
+      <ActionCard
+        action={makeAction({ status: "unknown-status" })}
+        onExecute={vi.fn()}
+      />,
+    );
+    // The dot should use the fallback color #94a3b8
+    const dot = screen.getByTitle("unknown-status");
+    expect(dot).toBeInTheDocument();
+    // #94a3b8 in RGB is rgb(148, 163, 184)
+    expect(dot.style.backgroundColor).toBe("rgb(148, 163, 184)");
+  });
 });

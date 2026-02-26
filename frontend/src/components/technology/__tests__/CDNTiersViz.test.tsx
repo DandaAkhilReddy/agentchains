@@ -240,4 +240,23 @@ describe("CDNTiersViz", () => {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
   });
+
+  it("ensureStyles guard: style tag injection is idempotent when already present (line 9 covers second branch of typeof check)", () => {
+    // Ensure the style tag is already present from a previous render
+    const existingEl = document.getElementById("cdn-tiers-viz-styles");
+    if (!existingEl) {
+      // Inject manually to simulate the style already being there
+      const tag = document.createElement("style");
+      tag.id = "cdn-tiers-viz-styles";
+      document.head.appendChild(tag);
+    }
+
+    // Render — ensureStyles() hits `document.getElementById(styleId)` truthy branch (line 10)
+    // and returns early without creating a duplicate
+    renderWithQuery(<CDNTiersViz />);
+    act(() => { vi.advanceTimersByTime(100); });
+
+    const styles = document.querySelectorAll("#cdn-tiers-viz-styles");
+    expect(styles.length).toBe(1);
+  });
 });

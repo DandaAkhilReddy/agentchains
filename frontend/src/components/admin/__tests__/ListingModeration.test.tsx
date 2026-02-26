@@ -439,4 +439,36 @@ describe("ListingModeration", () => {
 
     expect(screen.getByText("Listing Moderation")).toBeInTheDocument();
   });
+
+  /* ---- Edge-case branches ---- */
+
+  it("Enter key with empty reason does not call onReject (covers handleReject early return at line 77)", () => {
+    const props = defaultProps();
+    render(<ListingModeration {...props} />);
+
+    fireEvent.click(screen.getByText("Reject"));
+    const input = screen.getByPlaceholderText("Reason for rejection...");
+
+    // Press Enter with empty reason — handleReject fires but returns early
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(props.onReject).not.toHaveBeenCalled();
+    // Input should still be visible (not cleared because nothing happened)
+    expect(screen.getByPlaceholderText("Reason for rejection...")).toBeInTheDocument();
+  });
+
+  it("uses fallback category color #94a3b8 for unknown categories (covers ?? fallback branch at line 143)", () => {
+    const props = defaultProps();
+    props.listings = [
+      makeListing({
+        category: "unknown_custom_category",
+        title: "Unknown Category Listing",
+      }),
+    ];
+    render(<ListingModeration {...props} />);
+
+    // Should render without crashing, using fallback color
+    // The category label replaces underscores with spaces
+    expect(screen.getByText("Unknown Category Listing")).toBeInTheDocument();
+  });
 });

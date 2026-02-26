@@ -288,4 +288,59 @@ describe("CatalogPage", () => {
     expect(dataCatalogElements.length).toBeGreaterThanOrEqual(2);
     expect(await screen.findByText("Total Entries")).toBeInTheDocument();
   });
+
+  it("renders list view items via CatalogListItem when list view is selected (covers lines 472-505)", async () => {
+    renderWithProviders(<CatalogPage />);
+
+    await screen.findByText("Search API Results");
+
+    // Switch to list view
+    fireEvent.click(screen.getByTitle("List view"));
+
+    // CatalogListItem renders topic, namespace badge, quality %, and price
+    expect(screen.getByText("Search API Results")).toBeInTheDocument();
+    expect(screen.getByText("Code Review Data")).toBeInTheDocument();
+    expect(screen.getByText("News Aggregation")).toBeInTheDocument();
+
+    // List items should show quality percentages
+    expect(screen.getByText("85%")).toBeInTheDocument();
+    expect(screen.getByText("62%")).toBeInTheDocument();
+    expect(screen.getByText("35%")).toBeInTheDocument();
+  });
+
+  it("uses total_requests fallback of 1 when total_requests is 0 (covers line 64: total || 1)", async () => {
+    mockFetchCDNStats.mockResolvedValue({
+      ...mockCDNStats,
+      overview: {
+        ...mockCDNStats.overview,
+        total_requests: 0,
+      },
+    });
+
+    renderWithProviders(<CatalogPage />);
+
+    // With total_requests=0, the || 1 fallback prevents division by zero.
+    // CDN Performance card should still render without crashing.
+    expect(await screen.findByText("CDN Performance")).toBeInTheDocument();
+  });
+
+  it("shows description fallback 'No description provided' for entries with empty description (covers line 505)", async () => {
+    mockSearchCatalog.mockResolvedValue({
+      entries: [
+        makeCatalogEntry({ id: "cat-no-desc", topic: "No Desc Entry", description: "" }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+    });
+
+    renderWithProviders(<CatalogPage />);
+
+    await screen.findByText("No Desc Entry");
+
+    // Switch to list view to render CatalogListItem which shows the fallback
+    fireEvent.click(screen.getByTitle("List view"));
+
+    expect(screen.getByText("No description provided")).toBeInTheDocument();
+  });
 });

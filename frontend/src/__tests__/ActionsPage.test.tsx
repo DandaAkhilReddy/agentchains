@@ -438,4 +438,104 @@ describe("ActionsPage", () => {
       expect.any(Object),
     );
   });
+
+  /* ── 15. execData undefined — covers lines 162 and 364 ──────────────── */
+
+  it("handles execData undefined gracefully (line 162 false branch, line 364 ?? [])", () => {
+    // When useExecutions returns {data: undefined}, execData is undefined:
+    //   - line 162: execTotalPages = 0 (the `: 0` branch)
+    //   - line 364: execData?.executions ?? [] → []
+    mockUseExecutions.mockReturnValue({
+      data: undefined,
+    } as any);
+
+    renderPage();
+
+    // No pagination for exec history (execTotalPages = 0, not > 1)
+    // ExecutionHistory still renders with empty array
+    expect(screen.getByTestId("execution-history")).toBeInTheDocument();
+    // No badge since execData is undefined
+    expect(screen.queryByText(/total/)).toBeNull();
+  });
+
+  /* ── 16. onSuccess callback sets selectedActionId to null and toasts ── */
+
+  it("onSuccess callback: toasts success and clears selectedActionId", async () => {
+    // Set up mutate to call onSuccess immediately
+    mockMutate.mockImplementation((_payload: any, { onSuccess }: any) => {
+      onSuccess({ execution_id: "exec-xyz-999" });
+    });
+
+    renderPage();
+
+    fireEvent.click(screen.getByTestId("action-a1"));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("execute-btn").length).toBeGreaterThanOrEqual(1);
+    });
+
+    fireEvent.click(screen.getAllByTestId("execute-btn")[0]);
+
+    expect(mockToast).toHaveBeenCalledWith(
+      "Execution started! ID: exec-xyz-999",
+      "success",
+    );
+
+    // After success, execution panel should close (selectedActionId = null)
+    await waitFor(() => {
+      expect(screen.queryByTestId("execution-form")).toBeNull();
+    });
+  });
+
+  /* ── 17. onError callback: toasts error message ───────────────────── */
+
+  it("onError callback: toasts error message from thrown error", async () => {
+    mockMutate.mockImplementation((_payload: any, { onError }: any) => {
+      onError(new Error("Server rejected"));
+    });
+
+    renderPage();
+
+    fireEvent.click(screen.getByTestId("action-a1"));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("execute-btn").length).toBeGreaterThanOrEqual(1);
+    });
+
+    fireEvent.click(screen.getAllByTestId("execute-btn")[0]);
+
+    expect(mockToast).toHaveBeenCalledWith("Server rejected", "error");
+  });
+
+  /* ── 18. Search resets page to 1 ─────────────────────────────────── */
+
+  it("search resets page to 1", async () => {
+    renderPage();
+
+    const searchInput = screen.getByTestId("search-input");
+    fireEvent.change(searchInput, { target: { value: "automation" } });
+
+    await waitFor(() => {
+      expect(mockUseActions).toHaveBeenCalledWith(
+        "automation",
+        undefined,
+        undefined,
+        1,
+      );
+    });
+  });
+
+  /* ── 19. execData with data but total=0 hides exec pagination ────── */
+
+  it("hides exec pagination when execTotalPages <= 1", () => {
+    mockUseExecutions.mockReturnValue({
+      data: { executions: [], total: 20, page: 1, page_size: 20 },
+    } as any);
+    renderPage();
+
+    // ceil(20/20) = 1, not > 1 → no pagination for executions
+    // Actions pagination may or may not show; exec pagination should not show
+    // With defaultActionsData total=2 (1 page), no pagination at all
+    expect(screen.queryByTestId("pagination")).toBeNull();
+  });
 });

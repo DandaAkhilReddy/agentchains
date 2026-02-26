@@ -186,4 +186,110 @@ describe("A2UITable", () => {
     const cells = screen.getAllByRole("cell");
     expect(cells[1].textContent).toBe("25");
   });
+
+  it("sort returns 0 for equal string values (line 48 return 0 branch)", () => {
+    // When strA === strB the sort comparator returns 0 (stable — no reordering).
+    // Use duplicate string values so the branch at line 48 is hit.
+    render(
+      <A2UITable
+        data={{
+          headers: ["Name", "Score"],
+          rows: [["Alice", 90], ["Alice", 85], ["Bob", 80]],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByText("Name")); // sort ascending by Name
+    // "Alice" appears twice — the two Alice rows have equal strA===strB, return 0.
+    // "Bob" should be last.
+    const cells = screen.getAllByRole("cell");
+    // Rows in order: Alice/90, Alice/85, Bob/80 (or Alice/85, Alice/90, Bob/80 — both valid)
+    // The important thing: Bob is last and the component doesn't crash.
+    const nameValues = cells
+      .filter((_, i) => i % 2 === 0)
+      .map((c) => c.textContent);
+    expect(nameValues.filter((n) => n === "Alice").length).toBe(2);
+    expect(nameValues[nameValues.length - 1]).toBe("Bob");
+  });
+
+  it("sort returns 0 for equal numeric values preserving relative order (numeric branch line 42)", () => {
+    // Equal numbers → valA - valB === 0 → returns 0 in the numeric branch (line 42)
+    render(
+      <A2UITable
+        data={{
+          headers: ["Score"],
+          rows: [[100], [100], [50]],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByText("Score")); // sort ascending
+    const cells = screen.getAllByRole("cell");
+    // 50 should be first; the two 100s follow in some order
+    expect(cells[0].textContent).toBe("50");
+    expect(cells[1].textContent).toBe("100");
+    expect(cells[2].textContent).toBe("100");
+  });
+
+  it("handleSort does nothing when isSortable is false (covers !isSortable early return)", () => {
+    // isSortable = sortable !== false && headers.length > 0
+    // If sortable=false, header clicks do nothing.
+    render(
+      <A2UITable
+        data={{
+          sortable: false,
+          headers: ["Name"],
+          rows: [["Charlie"], ["Alice"]],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByText("Name"));
+    // Rows remain in original order (no sort arrow, no reorder)
+    const cells = screen.getAllByRole("cell");
+    expect(cells[0].textContent).toBe("Charlie");
+    expect(cells[1].textContent).toBe("Alice");
+    // No sort indicator arrow
+    expect(document.querySelector("span.text-\\[\\#60a5fa\\]")).toBeNull();
+  });
+
+  it("sorts numeric column descending when sort toggled twice (covers line 42: sortAsc false branch valB - valA)", () => {
+    // Click twice on Score header: first click → ascending, second click → descending.
+    // Descending numeric sort hits `valB - valA` at line 42 (sortAsc=false branch).
+    render(
+      <A2UITable
+        data={{
+          headers: ["Score"],
+          rows: [[10], [30], [20]],
+        }}
+      />
+    );
+    const header = screen.getByText("Score");
+    fireEvent.click(header); // ascending: 10, 20, 30
+    fireEvent.click(header); // descending: 30, 20, 10 — hits valB - valA branch
+    const cells = screen.getAllByRole("cell");
+    expect(cells[0].textContent).toBe("30");
+    expect(cells[1].textContent).toBe("20");
+    expect(cells[2].textContent).toBe("10");
+  });
+
+  it("sort handles undefined/null cell values using ?? '' fallback (covers lines 39-40)", () => {
+    // When a row has fewer cells than the sort column index, a[sortCol] is undefined.
+    // The `?? ""` fallback at lines 39-40 converts it to "".
+    // Use rows where the first row has a missing cell for column 1.
+    render(
+      <A2UITable
+        data={{
+          headers: ["Name", "Score"],
+          rows: [
+            ["Alice"],       // row[1] is undefined → ?? "" → ""
+            ["Bob", 50],
+          ],
+        }}
+      />
+    );
+    // Click the "Score" header to trigger sort on column 1
+    fireEvent.click(screen.getByText("Score"));
+    // Alice (value "") sorts before Bob (value 50) in ascending string comparison
+    // The important thing: the component renders without crashing
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("Bob")).toBeInTheDocument();
+  });
 });

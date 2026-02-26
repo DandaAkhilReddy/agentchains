@@ -457,6 +457,67 @@ describe("MarketplaceFeed", () => {
     expect(wsInstances.length).toBeGreaterThan(0);
   });
 
+  test("connect() with token but response.ok=false falls back to legacy path", async () => {
+    // Default mock already returns ok: false
+    const { feed } = await import("../ws");
+    feed.setToken("fallback-jwt");
+    feed.connect();
+
+    await vi.runAllTimersAsync();
+
+    expect(wsInstances.length).toBe(1);
+    expect(wsInstances[0].url).toBe(
+      "ws://localhost:3000/ws/feed?token=fallback-jwt",
+    );
+  });
+
+  test("connect() uses default ws_url when stream_token response has no ws_url field", async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ stream_token: "tok-no-url" }),
+    } as Response);
+
+    const { feed } = await import("../ws");
+    feed.setToken("jwt-no-url");
+    feed.connect();
+
+    await vi.runAllTimersAsync();
+
+    expect(wsInstances.length).toBe(1);
+    // No ws_url in response, so falls back to default /ws/v2/events
+    expect(wsInstances[0].url).toBe(
+      "ws://localhost:3000/ws/v2/events?token=tok-no-url",
+    );
+  });
+
+  test("connect() skips when this.connecting is true (async token fetch in progress)", async () => {
+    // Delay the fetch resolution so connecting=true blocks a second call
+    let resolveFetch!: (v: Response) => void;
+    const pendingFetch = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      pendingFetch,
+    );
+
+    const { feed } = await import("../ws");
+    feed.setToken("my-token");
+
+    feed.connect(); // starts async fetch, sets connecting=true
+    feed.connect(); // should be a no-op while connecting=true
+
+    // Resolve fetch now
+    resolveFetch({
+      ok: false,
+      json: async () => ({}),
+    } as Response);
+
+    await vi.runAllTimersAsync();
+
+    // Only one WebSocket should be created despite two connect() calls
+    expect(wsInstances.length).toBe(1);
+  });
+
   test("reconnect creates new WebSocket instance after close", async () => {
     const { feed } = await import("../ws");
 
@@ -475,6 +536,42 @@ describe("MarketplaceFeed", () => {
     expect(wsInstances.length).toBe(2);
     expect(secondWS).not.toBe(firstWS);
     expect(secondWS.url).toBe(firstWS.url);
+  });
+
+  test("connect() falls back to legacy path when fetch throws (covers catch block at line 29-33)", async () => {
+    // When the fetch to /api/v2/events/stream-token throws a network error,
+    // the catch block runs and falls back to the legacy ws/feed path.
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("Network failure"),
+    );
+
+    const { feed } = await import("../ws");
+    feed.setToken("error-token");
+    feed.connect();
+
+    await vi.runAllTimersAsync();
+
+    expect(wsInstances.length).toBe(1);
+    // Should fall back to legacy path after catch
+    expect(wsInstances[0].url).toBe(
+      "ws://localhost:3000/ws/feed?token=error-token",
+    );
+  });
+
+  test("connect() with null token uses legacy path directly (token ?? '' fallback behavior)", async () => {
+    // When token is null, connect() takes the !this.token guard (lines 60-64),
+    // creating a WebSocket to /ws/feed without a token parameter.
+    // resolveSocketUrl is NOT called, so the `?? ""` at line 33 is not reached.
+    // This test verifies that null-token flows work correctly.
+    const { feed } = await import("../ws");
+    feed.setToken(null);
+    feed.connect();
+
+    await vi.runAllTimersAsync();
+
+    expect(wsInstances.length).toBe(1);
+    // No token in the URL since the guard took the direct path
+    expect(wsInstances[0].url).toBe("ws://localhost:3000/ws/feed");
   });
 
   test("messages sent to old WebSocket instance after reconnect are ignored", async () => {

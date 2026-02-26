@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import DashboardPage from "../DashboardPage";
@@ -10,6 +11,46 @@ import * as useLiveFeedModule from "../../hooks/useLiveFeed";
 vi.mock("../../hooks/useHealth");
 vi.mock("../../hooks/useReputation");
 vi.mock("../../hooks/useLiveFeed");
+
+// Mock recharts so that Tooltip renders its custom content (DarkTooltip) with
+// active=true and a payload — this covers lines 217-225 in DashboardPage.tsx
+// (the DarkTooltip component's non-null return branch).
+vi.mock("recharts", () => ({
+  BarChart: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="bar-chart">{children}</div>
+  ),
+  // AreaChart / Area are used by MiniChart (rendered inside StatCard)
+  AreaChart: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="area-chart">{children}</div>
+  ),
+  Area: () => null,
+  PieChart: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  Pie: () => null,
+  LineChart: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  Line: () => null,
+  Bar: () => null,
+  XAxis: () => null,
+  YAxis: () => null,
+  // Tooltip renders the DarkTooltip custom content with active=true so that
+  // lines 218-225 (the non-null return of DarkTooltip) are covered.
+  Tooltip: ({ content }: { content?: React.ReactElement }) => {
+    if (!content) return null;
+    return React.cloneElement(content, {
+      active: true,
+      payload: [{ value: 95, payload: { name: "TopAgent" } }],
+    } as any);
+  },
+  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  CartesianGrid: () => null,
+  Cell: () => null,
+  Legend: () => null,
+}));
 
 describe("DashboardPage", () => {
   const mockOnNavigate = vi.fn();
@@ -293,5 +334,20 @@ describe("DashboardPage", () => {
     // "Transactions" appears in both stat card and quick action button; use getAllByText
     expect(screen.getAllByText("Transactions").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Status")).toBeInTheDocument();
+  });
+
+  /* ── Coverage: lines 217-225 (DarkTooltip non-null return branch) ── */
+
+  it("DarkTooltip renders agent name and score when recharts calls it with active=true (lines 218-225)", () => {
+    // The recharts Tooltip mock at the top of this file calls cloneElement on the
+    // <DarkTooltip /> content prop with active=true and a payload. This causes
+    // DarkTooltip to skip the early `return null` and render its div with agent
+    // name and score — covering DashboardPage.tsx lines 218-225.
+    renderWithProviders(<DashboardPage onNavigate={mockOnNavigate} />);
+
+    // The mocked Tooltip renders DarkTooltip with payload[0].payload.name = "TopAgent"
+    // and payload[0].value = 95, so we expect these in the DOM.
+    expect(screen.getByText("TopAgent")).toBeInTheDocument();
+    expect(screen.getByText("95% score")).toBeInTheDocument();
   });
 });

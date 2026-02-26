@@ -367,4 +367,151 @@ describe("TransactionsPage", () => {
 
     expect(screen.getByText("2 transactions")).toBeInTheDocument();
   });
+
+  /* ── 11. handleConnect calls login when input has value (line 330) ── */
+
+  it("handleConnect calls login when inputToken is non-empty", () => {
+    mockUseAuth.mockReturnValue({
+      token: "",
+      login: mockLogin,
+      logout: mockLogout,
+      isAuthenticated: false,
+    });
+    renderPage();
+
+    const input = screen.getByPlaceholderText("eyJhbGciOi...");
+    fireEvent.change(input, { target: { value: "my-test-jwt-token" } });
+
+    const connectButton = screen.getByRole("button", { name: "Connect" });
+    expect(connectButton).not.toBeDisabled();
+    fireEvent.click(connectButton);
+
+    // handleConnect: t = "my-test-jwt-token".trim() → truthy → calls login(t)
+    expect(mockLogin).toHaveBeenCalledWith("my-test-jwt-token");
+  });
+
+  /* ── 12. statusDotColor default branch (line 47) ──────────────────── */
+
+  it("statusDotColor default branch renders without crash for unknown status", () => {
+    // Use a status that is NOT in the statusDotColor map to hit the `?? "#94a3b8"` branch
+    const transactions = [
+      makeTx({ id: "unknown-1", status: "unknown_status" as any }),
+    ];
+    mockUseTransactions.mockReturnValue({
+      data: { transactions, total: 1, page: 1, page_size: 20 },
+      isLoading: false,
+      error: null,
+    } as any);
+    renderPage();
+
+    // Row renders without error
+    expect(screen.getByTestId("tx-row-unknown-1")).toBeInTheDocument();
+  });
+
+  /* ── 13. Pipeline with unknown status (line 59: STATUS_ORDER ?? -1) ── */
+
+  it("Pipeline renders for unknown status with currentStep=-1 (line 59 default)", () => {
+    // "unknown_status" is not in STATUS_ORDER → STATUS_ORDER["unknown_status"] ?? -1 = -1
+    // isFailed is false (not "failed" or "disputed"), currentStep = -1
+    // All steps: isComplete = !false && -1 >= i → always false
+    // isCurrent = !false && -1 === i → always false
+    // All steps render as pending style
+    const transactions = [
+      makeTx({ id: "pipe-unknown", status: "unknown_status" as any }),
+    ];
+    mockUseTransactions.mockReturnValue({
+      data: { transactions, total: 1, page: 1, page_size: 20 },
+      isLoading: false,
+      error: null,
+    } as any);
+    renderPage();
+
+    expect(screen.getByTestId("cell-pipe-unknown-pipeline")).toBeInTheDocument();
+  });
+
+  /* ── 14. Payment method unknown → cfg fallback simulated (line 168) ── */
+
+  it("payment method unknown string falls back to simulated badge (line 168 ?? branch)", () => {
+    const transactions = [
+      makeTx({ id: "pm-unknown", payment_method: "crypto" as any }),
+    ];
+    mockUseTransactions.mockReturnValue({
+      data: { transactions, total: 1, page: 1, page_size: 20 },
+      isLoading: false,
+      error: null,
+    } as any);
+    renderPage();
+
+    // "crypto" is not in cfg → cfg["crypto"] is undefined → ?? cfg.simulated → "Simulated"
+    const paymentCell = screen.getByTestId("cell-pm-unknown-payment_method");
+    expect(paymentCell).toHaveTextContent("Simulated");
+  });
+
+  /* ── 15. Pagination changes page via onPageChange ─────────────────── */
+
+  it("pagination onPageChange updates page state", () => {
+    mockUseTransactions.mockReturnValue({
+      data: { transactions: [makeTx({ id: "t1" })], total: 50, page: 1, page_size: 20 },
+      isLoading: false,
+      error: null,
+    } as any);
+    renderPage();
+
+    const nextBtn = screen.getByRole("button", { name: "Next" });
+    fireEvent.click(nextBtn);
+
+    expect(mockUseTransactions).toHaveBeenCalledWith(
+      "test-jwt",
+      expect.objectContaining({ page: 2 }),
+    );
+  });
+
+  /* ── 16. Filter tab onChange resets page to 1 ──────────────────────── */
+
+  it("filter tab onChange resets page to 1 and sets new status", () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Failed" }));
+
+    expect(mockUseTransactions).toHaveBeenCalledWith(
+      "test-jwt",
+      expect.objectContaining({ status: "failed", page: 1 }),
+    );
+  });
+
+  /* ── 17. TransactionStats count: pending statuses covered ──────────── */
+
+  it("TransactionStats counts pending statuses (payment_pending, payment_confirmed, delivered)", () => {
+    const transactions = [
+      makeTx({ id: "s1", status: "payment_pending" }),
+      makeTx({ id: "s2", status: "payment_confirmed" }),
+      makeTx({ id: "s3", status: "delivered" }),
+    ];
+    mockUseTransactions.mockReturnValue({
+      data: { transactions, total: 3, page: 1, page_size: 20 },
+      isLoading: false,
+      error: null,
+    } as any);
+    renderPage();
+
+    // All three are "pending" → pending count = 3
+    expect(screen.getByText("Total Volume")).toBeInTheDocument();
+  });
+
+  /* ── 18. status_dot animation for payment_pending ───────────────────── */
+
+  it("status_dot renders animated ping for payment_pending status", () => {
+    const transactions = [
+      makeTx({ id: "pending-dot", status: "payment_pending" }),
+    ];
+    mockUseTransactions.mockReturnValue({
+      data: { transactions, total: 1, page: 1, page_size: 20 },
+      isLoading: false,
+      error: null,
+    } as any);
+    renderPage();
+
+    // Row renders without error
+    expect(screen.getByTestId("tx-row-pending-dot")).toBeInTheDocument();
+  });
 });

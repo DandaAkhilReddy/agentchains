@@ -124,4 +124,59 @@ describe("PipelineStepCard", () => {
 
     expect(screen.getByText(/Connection timed out/)).toBeInTheDocument();
   });
+
+  it("renders string output directly without JSON.stringify (covers line 76 true branch)", () => {
+    // When output is a string, it should be rendered as-is (not JSON.stringify'd)
+    const step = makeStep({
+      toolCall: {
+        name: "text_tool",
+        input: { text: "hello" },
+        output: "This is a plain text output",
+      },
+    });
+    render(<PipelineStepCard step={step} index={0} />);
+
+    // Expand
+    fireEvent.click(screen.getByRole("button"));
+
+    // The string output should appear verbatim
+    expect(
+      screen.getByText("This is a plain text output"),
+    ).toBeInTheDocument();
+    // It should NOT appear wrapped in quotes (JSON.stringify would add them)
+    expect(
+      screen.queryByText('"This is a plain text output"'),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides chevron when toolCall is absent (covers step.toolCall branch)", () => {
+    // When step has no toolCall, the ChevronDown/Right icons should not render
+    const step = makeStep({ toolCall: undefined });
+    const { container } = render(<PipelineStepCard step={step} index={0} />);
+
+    // Expand click still works but no tool details section appears
+    fireEvent.click(screen.getByRole("button"));
+
+    // No tool section should appear (expanded && step.toolCall is falsy)
+    expect(screen.queryByText("Input")).not.toBeInTheDocument();
+    expect(screen.queryByText("Output")).not.toBeInTheDocument();
+  });
+
+  it("does not show Output section when toolCall.output is null/undefined (covers output != null branch)", () => {
+    const step = makeStep({
+      toolCall: {
+        name: "no_output_tool",
+        input: { x: 1 },
+        output: null as any,
+      },
+    });
+    render(<PipelineStepCard step={step} index={0} />);
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(screen.getByText("no_output_tool")).toBeInTheDocument();
+    expect(screen.getByText("Input")).toBeInTheDocument();
+    // Output section should NOT appear when output is null
+    expect(screen.queryByText("Output")).not.toBeInTheDocument();
+  });
 });

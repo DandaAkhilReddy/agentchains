@@ -180,4 +180,35 @@ describe("ExecutionTimeline", () => {
     expect(screen.getByText(/2 steps/)).toBeInTheDocument();
     expect(screen.getByText(/Started/)).toBeInTheDocument();
   });
+
+  it("shows 0ms avg latency and 0 done when steps array is empty (covers empty-steps branch)", () => {
+    // When steps.length === 0, avgLatency = 0 and completedCount = 0
+    const execution = makeExecution({ steps: [] });
+    render(<ExecutionTimeline execution={execution} />);
+
+    // Header should still render
+    expect(screen.getByText("TestAgent")).toBeInTheDocument();
+    expect(screen.getByText(/0 steps/)).toBeInTheDocument();
+
+    // The mini stats section should show 0 for both done and 0ms for avg
+    const doneLabel = screen.getByText("done");
+    expect(doneLabel.parentElement?.textContent).toContain("0");
+
+    const avgLabel = screen.getByText("avg");
+    expect(avgLabel.parentElement?.textContent).toContain("0ms");
+  });
+
+  it("handles steps with undefined latencyMs gracefully (latencyMs ?? 0 branch)", () => {
+    const execution = makeExecution({
+      steps: [
+        makeStep({ id: "s1", latencyMs: undefined }),
+        makeStep({ id: "s2", latencyMs: 100 }),
+      ],
+    });
+    render(<ExecutionTimeline execution={execution} />);
+
+    // avg = (0 + 100) / 2 = 50ms
+    const avgLabel = screen.getByText("avg");
+    expect(avgLabel.parentElement?.textContent).toContain("50ms");
+  });
 });

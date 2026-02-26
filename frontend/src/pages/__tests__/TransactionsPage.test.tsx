@@ -340,6 +340,28 @@ describe("TransactionsPage", () => {
     expect(mockLogin).toHaveBeenCalledWith("my-jwt-token");
   });
 
+  it("does not call login when inputToken is empty (covers line 330: if (t) false branch)", async () => {
+    const mockLogin = vi.fn();
+    vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
+      token: "",
+      login: mockLogin,
+      logout: vi.fn(),
+      isAuthenticated: false,
+    });
+    vi.spyOn(useTransactionsModule, "useTransactions").mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderWithProviders(<TransactionsPage />);
+
+    // Connect button should be disabled when input is empty
+    const connectBtn = screen.getByText("Connect").closest("button");
+    expect(connectBtn).toBeDisabled();
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
   it("shows transaction summary stats when transactions exist", () => {
     vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
       token: "test-jwt-token",
