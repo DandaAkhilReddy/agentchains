@@ -199,4 +199,63 @@ describe("A2UIImageWidget", () => {
     });
     expect(imageButton).toBeInTheDocument();
   });
+
+  it("opens lightbox via Enter key press (line 75: onKeyDown Enter branch)", () => {
+    render(
+      <A2UIImageWidget src="https://example.com/photo.jpg" alt="Key test" />
+    );
+    const img = screen.getByRole("img");
+    // Load the image first so openLightbox works (hasError must be false)
+    fireEvent.load(img);
+
+    const imageButton = screen.getByRole("button", {
+      name: /view key test in fullscreen/i,
+    });
+    // Cover line 91-93: onKeyDown handler with Enter key
+    fireEvent.keyDown(imageButton, { key: "Enter" });
+    expect(screen.getByTitle("Close (Esc)")).toBeInTheDocument();
+  });
+
+  it("opens lightbox via Space key press (line 91-93: onKeyDown Space branch)", () => {
+    render(
+      <A2UIImageWidget src="https://example.com/photo.jpg" alt="Space test" />
+    );
+    const img = screen.getByRole("img");
+    fireEvent.load(img);
+
+    const imageButton = screen.getByRole("button", {
+      name: /view space test in fullscreen/i,
+    });
+    // Cover the ' ' (space) branch
+    fireEvent.keyDown(imageButton, { key: " " });
+    expect(screen.getByTitle("Close (Esc)")).toBeInTheDocument();
+  });
+
+  it("does not open lightbox on non-Enter/Space keydown (line 91: else branch is skipped)", () => {
+    render(
+      <A2UIImageWidget src="https://example.com/photo.jpg" alt="Tab test" />
+    );
+    const img = screen.getByRole("img");
+    fireEvent.load(img);
+
+    const imageButton = screen.getByRole("button", {
+      name: /view tab test in fullscreen/i,
+    });
+    fireEvent.keyDown(imageButton, { key: "Tab" });
+    // Lightbox should NOT open
+    expect(screen.queryByTitle("Close (Esc)")).not.toBeInTheDocument();
+  });
+
+  it("does not render dimensions when only height is provided (line 91-93: width && height requires both)", () => {
+    // Line 91: {width && height && <p>...} — only height provided means width is falsy
+    render(
+      <A2UIImageWidget
+        src="https://example.com/photo.jpg"
+        alt="Photo"
+        height={400}
+      />
+    );
+    // No dimension text should appear since width is not provided
+    expect(screen.queryByText(/x 400/)).not.toBeInTheDocument();
+  });
 });

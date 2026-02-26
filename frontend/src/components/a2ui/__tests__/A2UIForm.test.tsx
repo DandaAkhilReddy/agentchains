@@ -342,4 +342,47 @@ describe("A2UIForm", () => {
     );
     expect(screen.getByText("Submit")).toBeInTheDocument();
   });
+
+  it("renders select with no options (covers field.options ?? [] branch on line 112)", () => {
+    // When options is undefined the component uses `field.options ?? []` — an empty array.
+    render(
+      <A2UIForm
+        componentId="form-1"
+        data={{
+          fields: [
+            { name: "choice", type: "select", label: "Choice" },
+          ],
+        }}
+      />
+    );
+    const select = screen.getByLabelText("Choice") as HTMLSelectElement;
+    expect(select).toBeInTheDocument();
+    expect(select.tagName).toBe("SELECT");
+    // Only the default "Select..." option should be present (no extra options)
+    expect(select.options).toHaveLength(1);
+    expect(select.options[0].value).toBe("");
+  });
+
+  it("checkbox uses field.name as label text when placeholder is absent (line 127: ?? field.name)", () => {
+    // When a checkbox field has no placeholder, `field.placeholder ?? field.name` returns
+    // the field name itself. This was already covered by the existing 'checkbox uses field
+    // name as fallback text' test, but let's explicitly verify the ?? branch path.
+    render(
+      <A2UIForm
+        componentId="form-1"
+        data={{
+          fields: [
+            { name: "newsletter", type: "checkbox", label: "Newsletter" },
+          ],
+        }}
+      />
+    );
+    // field.placeholder is undefined → fallback to field.name = "newsletter"
+    expect(screen.getByText("newsletter")).toBeInTheDocument();
+    const checkbox = document.getElementById(
+      "a2ui-form-1-newsletter"
+    ) as HTMLInputElement;
+    expect(checkbox).toBeInTheDocument();
+    expect(checkbox.type).toBe("checkbox");
+  });
 });

@@ -304,4 +304,127 @@ describe("AuditViewer", () => {
     // URL.createObjectURL should have been called
     expect(global.URL.createObjectURL).toHaveBeenCalled();
   });
+
+  it("dateFrom filter hides entries before the given date (lines 280-283)", () => {
+    render(<AuditViewer />);
+
+    // Set dateFrom to 2026-02-22 — a date after all entries, so nothing should show
+    const dateFromInputs = document.querySelectorAll('input[type="date"]');
+    const fromInput = dateFromInputs[0] as HTMLInputElement;
+    fireEvent.change(fromInput, { target: { value: "2026-02-22" } });
+
+    // All 10 entries have timestamps on/before 2026-02-21 so they should all be filtered
+    expect(screen.queryByText("agent.deactivated")).not.toBeInTheDocument();
+    expect(screen.queryByText("plugin.installed")).not.toBeInTheDocument();
+
+    // Entry count shows 0
+    expect(screen.getByText("No audit entries found")).toBeInTheDocument();
+  });
+
+  it("dateTo filter hides entries after the given date (lines 284-288)", () => {
+    render(<AuditViewer />);
+
+    // Set dateTo to 2026-02-19 — before all entries, so nothing should show
+    const dateFromInputs = document.querySelectorAll('input[type="date"]');
+    const toInput = dateFromInputs[1] as HTMLInputElement;
+    fireEvent.change(toInput, { target: { value: "2026-02-19" } });
+
+    // All entries are after 2026-02-19 so they should all be filtered out
+    expect(screen.queryByText("agent.deactivated")).not.toBeInTheDocument();
+    expect(screen.queryByText("plugin.installed")).not.toBeInTheDocument();
+
+    // Empty state should appear
+    expect(screen.getByText("No audit entries found")).toBeInTheDocument();
+  });
+
+  it("dateFrom and dateTo together activate both date filter branches", () => {
+    render(<AuditViewer />);
+
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    const fromInput = dateInputs[0] as HTMLInputElement;
+    const toInput = dateInputs[1] as HTMLInputElement;
+
+    // Set both from and to dates to cover both filter code paths
+    // Use dates that produce an empty result for deterministic assertions
+    fireEvent.change(fromInput, { target: { value: "2026-02-22" } });
+    fireEvent.change(toInput, { target: { value: "2026-02-23" } });
+
+    // All entries are before fromDate so nothing should show
+    expect(screen.getByText("No audit entries found")).toBeInTheDocument();
+
+    // Both inputs should reflect the entered values
+    expect(fromInput.value).toBe("2026-02-22");
+    expect(toInput.value).toBe("2026-02-23");
+  });
+
+  it("renders actor type badges for all four actor types (lines 455-471)", () => {
+    const { container } = render(<AuditViewer />);
+
+    // ACTOR_COLORS has entries for: admin (purple), system (blue), agent (green), user (yellow).
+    // The static data has all four actorTypes. Each actor cell renders:
+    //   - a colored circle div with an icon
+    //   - a <p> showing the actor name
+    //   - a <span> showing actorType with an inline color style
+    //
+    // admin: actorType="admin" appears in evt-001, evt-004, evt-007, evt-009
+    const adminBadges = screen.getAllByText("admin");
+    expect(adminBadges.length).toBeGreaterThanOrEqual(1);
+
+    // system: actorType="system" appears in evt-002, evt-005, evt-008
+    const systemBadges = screen.getAllByText("system");
+    expect(systemBadges.length).toBeGreaterThanOrEqual(1);
+
+    // agent: actorType="agent" appears in evt-003, evt-006
+    const agentBadges = screen.getAllByText("agent");
+    expect(agentBadges.length).toBeGreaterThanOrEqual(1);
+
+    // user: actorType="user" appears in evt-010
+    const userBadges = screen.getAllByText("user");
+    expect(userBadges.length).toBeGreaterThanOrEqual(1);
+
+    // The actor icon circles are .rounded-full divs inside td cells.
+    // The actor column is the 3rd <td> (after expand-toggle and timestamp).
+    // Each data row has exactly one circle per actor column (not severity).
+    // Severity badges are <span> not <div>, so query for div.rounded-full in td.
+    const actorCircleDivs = container.querySelectorAll("td div.rounded-full");
+    // 10 entries = 10 actor icon circles
+    expect(actorCircleDivs.length).toBe(10);
+
+    // The first entry (agent.deactivated, actorType="admin") should have admin background
+    const firstCircle = actorCircleDivs[0] as HTMLElement;
+    expect(firstCircle).toHaveStyle({ backgroundColor: "rgba(167,139,250,0.15)" });
+  });
+
+  it("actor type badge spans use inline color from ACTOR_COLORS (lines 622-627)", () => {
+    const { container } = render(<AuditViewer />);
+
+    // The actorType badge spans have class "text-[9px] font-semibold uppercase" and inline color.
+    // Severity badge spans have additional classes like "inline-flex", "rounded-full", "px-2".
+    // We can distinguish the two by querying specifically for spans that are NOT inline-flex.
+    // The actorType spans are inside a <div> with class "flex items-center gap-2" in the actor <td>.
+    // They are children of <div> elements in the actor column.
+    const actorCells = container.querySelectorAll("tbody td:nth-child(3)");
+    expect(actorCells.length).toBe(10);
+
+    // Collect all actorType spans from the actor column cells
+    const actorTypeBadgeSpans = Array.from(actorCells).map(
+      (cell) => cell.querySelector("span.font-semibold.uppercase") as HTMLElement
+    ).filter(Boolean);
+    expect(actorTypeBadgeSpans.length).toBe(10);
+
+    // First entry (evt-001, actorType "admin") — color #a78bfa
+    const firstBadge = actorTypeBadgeSpans[0];
+    expect(firstBadge.textContent).toBe("admin");
+    expect(firstBadge).toHaveStyle({ color: "#a78bfa" });
+
+    // Find "user" span (evt-010)
+    const userSpan = actorTypeBadgeSpans.find((el) => el.textContent === "user");
+    expect(userSpan).toBeTruthy();
+    expect(userSpan!).toHaveStyle({ color: "#fbbf24" });
+
+    // Find an "agent" span (evt-003 or evt-006)
+    const agentSpan = actorTypeBadgeSpans.find((el) => el.textContent === "agent");
+    expect(agentSpan).toBeTruthy();
+    expect(agentSpan!).toHaveStyle({ color: "#34d399" });
+  });
 });
