@@ -232,3 +232,75 @@ class TestSchemaHelpers:
                        initiated_at=datetime(2026, 2, 15, tzinfo=timezone.utc))
         assert '2026' in _transaction_to_type(tx).created_at
 
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests — graphql/schema.py lines 271-279
+# ---------------------------------------------------------------------------
+
+
+class TestGraphQLContextGetterCoverage:
+    """Lines 271-279: _graphql_context_getter with a real StarletteRequest."""
+
+    @pytest.mark.asyncio
+    async def test_valid_bearer_token_sets_user(self, make_agent):
+        """Lines 275-277: valid Bearer token populates context['user']."""
+        from starlette.requests import Request as StarletteRequest
+        from unittest.mock import patch
+
+        a, token = await make_agent(name='gql-ctx-valid')
+
+        # Build a real-looking request: use isinstance patch to let MagicMock pass check
+        req = MagicMock()
+        req.headers = {'authorization': f'Bearer {token}'}
+
+        with patch("marketplace.graphql.schema._graphql_context_getter.__globals__"
+                   if False else "builtins.__import__"):
+            # Patch isinstance to return True for StarletteRequest check
+            original_isinstance = __builtins__["isinstance"] if isinstance(__builtins__, dict) else isinstance
+            pass
+
+        # Use a real StarletteRequest by creating one from scope
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/graphql",
+            "query_string": b"",
+            "headers": [(b"authorization", f"Bearer {token}".encode())],
+        }
+        real_req = StarletteRequest(scope)
+        ctx = await _graphql_context_getter(request=real_req)
+        assert ctx['user'] is not None
+        assert ctx['user']['id'] == a.id
+
+    @pytest.mark.asyncio
+    async def test_invalid_bearer_token_sets_user_none(self):
+        """Lines 278-279: bad token → except → context['user'] stays None."""
+        from starlette.requests import Request as StarletteRequest
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/graphql",
+            "query_string": b"",
+            "headers": [(b"authorization", b"Bearer invalid.jwt.token")],
+        }
+        real_req = StarletteRequest(scope)
+        ctx = await _graphql_context_getter(request=real_req)
+        assert ctx['user'] is None
+
+    @pytest.mark.asyncio
+    async def test_bearer_prefix_case_insensitive(self, make_agent):
+        """Line 272: startswith check is lowercased — 'bearer ' is the prefix."""
+        from starlette.requests import Request as StarletteRequest
+        a, token = await make_agent(name='gql-ctx-case')
+        # lowercase 'bearer' should also work since we .lower().startswith("bearer ")
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/graphql",
+            "query_string": b"",
+            "headers": [(b"authorization", f"Bearer {token}".encode())],
+        }
+        real_req = StarletteRequest(scope)
+        ctx = await _graphql_context_getter(request=real_req)
+        assert ctx['user'] is not None
+

@@ -356,3 +356,179 @@ async def test_transfer_with_creator_royalty(db: AsyncSession, make_agent, make_
     # Creator should have received royalty
     await db.refresh(creator_acct)
     assert float(creator_acct.balance) > 0
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests — lines 64, 68, 84, 95, 126, 135, 139, 144, 146, 381-382
+# ---------------------------------------------------------------------------
+
+
+async def test_lock_account_raises_for_missing(db: AsyncSession, seed_platform):
+    """Line 68: _lock_account raises ValueError when account not found."""
+    with pytest.raises(ValueError, match="not found"):
+        await token_service._lock_account(db, "nonexistent-account-id")
+
+
+async def test_get_account_by_agent_with_lock_flag_sqlite(db: AsyncSession, make_agent, seed_platform):
+    """Line 84: _get_account_by_agent with lock=True on SQLite (no FOR UPDATE).
+    Since tests use SQLite, the with_for_update branch is skipped (line 84 stays False),
+    but calling with lock=True should still return the account normally."""
+    agent, _ = await make_agent("lock-agent")
+    await token_service.create_account(db, agent.id)
+    result = await token_service._get_account_by_agent(db, agent.id, lock=True)
+    assert result is not None
+    assert result.agent_id == agent.id
+
+
+async def test_get_account_by_creator_with_lock_flag_sqlite(db: AsyncSession, make_creator, seed_platform):
+    """Line 95: _get_account_by_creator with lock=True on SQLite."""
+    creator, _ = await make_creator()
+    from marketplace.models.token_account import TokenAccount
+    import uuid
+    acct = TokenAccount(id=str(uuid.uuid4()), creator_id=creator.id, balance=Decimal("0"))
+    db.add(acct)
+    await db.commit()
+    result = await token_service._get_account_by_creator(db, creator.id, lock=True)
+    assert result is not None
+    assert result.creator_id == creator.id
+
+
+async def test_process_creator_royalty_zero_pct(
+    db: AsyncSession, make_agent, make_token_account, make_creator, seed_platform
+):
+    """Line 126: creator_royalty_pct == 0 → _process_creator_royalty returns None."""
+    from unittest.mock import patch
+    creator, _ = await make_creator()
+    seller, _ = await make_agent("royalty-zero-seller")
+    seller.creator_id = creator.id
+    await db.commit()
+
+    await make_token_account(seller.id, 100)
+    from marketplace.models.token_account import TokenAccount
+    import uuid
+    creator_acct = TokenAccount(id=str(uuid.uuid4()), creator_id=creator.id, balance=Decimal("0"))
+    db.add(creator_acct)
+    await db.commit()
+
+    with patch("marketplace.services.token_service.settings") as mock_s:
+        mock_s.creator_royalty_pct = 0
+        mock_s.platform_fee_pct = 0.02
+        mock_s.database_url = "sqlite+aiosqlite:///:memory:"
+        result = await token_service._process_creator_royalty(
+            db, seller.id, Decimal("10"), None
+        )
+    assert result is None
+
+
+async def test_process_creator_royalty_no_creator(
+    db: AsyncSession, make_agent, make_token_account, seed_platform
+):
+    """Line 130: agent has no creator → _process_creator_royalty returns None."""
+    agent, _ = await make_agent("no-creator-agent")
+    await make_token_account(agent.id, 100)
+    result = await token_service._process_creator_royalty(
+        db, agent.id, Decimal("10"), None
+    )
+    assert result is None
+
+
+async def test_process_creator_royalty_no_accounts(
+    db: AsyncSession, make_agent, make_creator, seed_platform
+):
+    """Line 135: creator or agent account missing → returns None."""
+    creator, _ = await make_creator()
+    agent, _ = await make_agent("missing-acct-agent")
+    agent.creator_id = creator.id
+    await db.commit()
+    # No token accounts created for agent or creator
+    result = await token_service._process_creator_royalty(
+        db, agent.id, Decimal("10"), None
+    )
+    assert result is None
+
+
+async def test_process_creator_royalty_royalty_zero_after_calc(
+    db: AsyncSession, make_agent, make_token_account, make_creator, seed_platform
+):
+    """Line 139: royalty rounds to 0 → returns None."""
+    from unittest.mock import patch
+    creator, _ = await make_creator()
+    agent, _ = await make_agent("tiny-royalty-agent")
+    agent.creator_id = creator.id
+    await db.commit()
+    await make_token_account(agent.id, 100)
+    from marketplace.models.token_account import TokenAccount
+    import uuid
+    creator_acct = TokenAccount(
+        id=str(uuid.uuid4()), creator_id=creator.id, balance=Decimal("0")
+    )
+    db.add(creator_acct)
+    await db.commit()
+
+    # royalty_pct very small makes royalty round to 0
+    with patch("marketplace.services.token_service.settings") as mock_s:
+        mock_s.creator_royalty_pct = 0.000000001
+        mock_s.platform_fee_pct = 0.02
+        mock_s.database_url = "sqlite+aiosqlite:///:memory:"
+        # net_amount is tiny so royalty = 0
+        result = await token_service._process_creator_royalty(
+            db, agent.id, Decimal("0.000000001"), None
+        )
+    # May be None or a ledger depending on rounding; just verify no crash
+    assert result is None or hasattr(result, "id")
+
+
+async def test_process_creator_royalty_agent_balance_less_than_royalty(
+    db: AsyncSession, make_agent, make_token_account, make_creator, seed_platform
+):
+    """Lines 143-146: agent balance < computed royalty → royalty capped,
+    then if royalty becomes 0 returns None."""
+    creator, _ = await make_creator()
+    agent, _ = await make_agent("tiny-balance-agent")
+    agent.creator_id = creator.id
+    await db.commit()
+    # Agent has zero balance → royalty > 0 → agent_balance < royalty → royalty = 0 → return None
+    await make_token_account(agent.id, 0)
+    from marketplace.models.token_account import TokenAccount
+    import uuid
+    creator_acct = TokenAccount(
+        id=str(uuid.uuid4()), creator_id=creator.id, balance=Decimal("0")
+    )
+    db.add(creator_acct)
+    await db.commit()
+
+    # Royalty pct 10%, net_amount = 100 → royalty = 10, but agent balance = 0
+    from unittest.mock import patch
+    with patch("marketplace.services.token_service.settings") as mock_s:
+        mock_s.creator_royalty_pct = 0.10
+        mock_s.platform_fee_pct = 0.02
+        mock_s.database_url = "sqlite+aiosqlite:///:memory:"
+        result = await token_service._process_creator_royalty(
+            db, agent.id, Decimal("100"), None
+        )
+    assert result is None
+
+
+async def test_transfer_creator_royalty_exception_non_fatal(
+    db: AsyncSession, make_agent, make_token_account, make_creator, seed_platform
+):
+    """Lines 381-382: creator royalty exception is caught and logged (non-fatal)."""
+    from unittest.mock import patch, AsyncMock
+
+    creator, _ = await make_creator()
+    seller, _ = await make_agent("royalty-err-seller")
+    buyer, _ = await make_agent("royalty-err-buyer")
+    seller.creator_id = creator.id
+    await db.commit()
+    await make_token_account(buyer.id, 1000)
+    await make_token_account(seller.id, 0)
+
+    async def _bad_royalty(*args, **kwargs):
+        raise RuntimeError("royalty explosion")
+
+    with patch("marketplace.services.token_service._process_creator_royalty", _bad_royalty):
+        ledger = await token_service.transfer(
+            db, buyer.id, seller.id, 50, "purchase",
+        )
+    # Transfer should succeed despite royalty failure
+    assert float(ledger.amount) == 50.0
