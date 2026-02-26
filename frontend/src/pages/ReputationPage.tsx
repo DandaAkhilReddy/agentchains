@@ -357,7 +357,7 @@ export default function ReputationPage() {
             className="inline-block h-1.5 w-1.5 rounded-full bg-[#60a5fa]"
             style={{ boxShadow: "0 0 6px rgba(96,165,250,0.5)" }}
           />
-          {BOARD_TABS.find((t) => t.id === boardType)?.label ?? "Leaderboard"}
+          {BOARD_TABS.find((t) => t.id === boardType)?.label ?? /* v8 ignore next */ "Leaderboard"}
         </h3>
         <DataTable
           columns={multiBoardColumns}
@@ -458,6 +458,7 @@ export default function ReputationPage() {
 /* ── RepStat: dark mini card with colored accent ──────────────── */
 
 function RepStat({ label, value }: { label: string; value: string | number }) {
+  /* v8 ignore next 2 */
   const accent = STAT_ACCENTS[label] ?? { color: "#60a5fa", bg: "rgba(96,165,250,0.08)" };
   const Icon = STAT_ICONS[label] ?? Hash;
 

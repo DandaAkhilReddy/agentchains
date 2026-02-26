@@ -64,19 +64,18 @@ function Pipeline({ status }: { status: TransactionStatus }) {
       {PIPELINE_STEPS.map((step, i) => {
         const isComplete = !isFailed && currentStep >= i;
         const isCurrent = !isFailed && currentStep === i;
+        const stepClass = isFailed
+          ? "border border-[rgba(248,113,113,0.3)] bg-[rgba(248,113,113,0.1)] text-[#f87171]"
+          : isComplete
+            ? "bg-[#60a5fa] text-[#0a0e1a] shadow-[0_0_8px_rgba(96,165,250,0.3)]"
+            /* v8 ignore next 2 */
+            : isCurrent
+              ? "border-2 border-[#60a5fa] text-[#60a5fa] animate-pulse"
+              : "border border-[rgba(255,255,255,0.08)] text-[#64748b]";
         return (
           <div key={step.key} className="flex items-center gap-1">
             <div
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
-                isFailed
-                  ? "border border-[rgba(248,113,113,0.3)] bg-[rgba(248,113,113,0.1)] text-[#f87171]"
-                  : isComplete
-                    ? "bg-[#60a5fa] text-[#0a0e1a] shadow-[0_0_8px_rgba(96,165,250,0.3)]"
-                    /* v8 ignore next 2 */
-                    : isCurrent
-                      ? "border-2 border-[#60a5fa] text-[#60a5fa] animate-pulse"
-                      : "border border-[rgba(255,255,255,0.08)] text-[#64748b]"
-              }`}
+              className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${stepClass}`}
               title={step.label}
             >
               {isComplete ? "\u2713" : i + 1}

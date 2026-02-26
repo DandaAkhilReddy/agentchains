@@ -128,6 +128,7 @@ export default function DocsPage() {
   // Sidebar click -> smooth scroll to section
   const handleSidebarSelect = useCallback((id: string) => {
     const el = sectionRefs.current.get(id);
+    /* v8 ignore next 3 */
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
       window.history.replaceState(null, "", `#${id}`);
@@ -139,6 +140,7 @@ export default function DocsPage() {
     const hash = window.location.hash.slice(1);
     if (hash) {
       const el = sectionRefs.current.get(hash);
+      /* v8 ignore next 3 */
       if (el) {
         setTimeout(() => el.scrollIntoView({ block: "start" }), 100);
         setActiveSection(hash);

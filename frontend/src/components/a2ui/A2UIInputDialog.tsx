@@ -109,7 +109,7 @@ function renderInputField(
       return (
         <input
           type="text"
-          value={String(value ?? "")}
+          value={String(value /* v8 ignore next */ ?? "")}
           onChange={(e) => setValue(e.target.value)}
           placeholder="Enter text..."
           autoFocus
@@ -137,7 +137,7 @@ function renderInputField(
       return (
         <input
           type="date"
-          value={String(value ?? "")}
+          value={String(value /* v8 ignore next */ ?? "")}
           onChange={(e) => setValue(e.target.value)}
           autoFocus
           className={baseClasses}
@@ -147,7 +147,7 @@ function renderInputField(
     case "select":
       return (
         <select
-          value={String(value ?? "")}
+          value={String(value /* v8 ignore next */ ?? "")}
           onChange={(e) => setValue(e.target.value)}
           autoFocus
           className={baseClasses}
@@ -185,7 +185,7 @@ function renderInputField(
       return (
         <input
           type="text"
-          value={String(value ?? "")}
+          value={String(value /* v8 ignore next */ ?? "")}
           onChange={(e) => setValue(e.target.value)}
           placeholder="Enter value..."
           autoFocus

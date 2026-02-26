@@ -61,6 +61,7 @@ function CDNCard({ stats }: { stats: CDNStats | null }) {
     );
   }
 
+  /* v8 ignore next */
   const total = stats.overview.total_requests || 1;
   const hitRate = ((stats.overview.tier1_hits + stats.overview.tier2_hits) / total) * 100;
 

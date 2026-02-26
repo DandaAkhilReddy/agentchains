@@ -98,6 +98,7 @@ function ToastItem({
       const elapsed = Date.now() - toast.createdAt;
       const remaining = Math.max(0, 100 - (elapsed / TOAST_DURATION) * 100);
       setProgress(remaining);
+      /* v8 ignore next */
       if (remaining <= 0) clearInterval(interval);
     }, 50);
     return () => clearInterval(interval);

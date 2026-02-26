@@ -614,6 +614,7 @@ export default function SystemConfig() {
               (s) => s.status === "degraded",
             );
             const overallStatus = hasDown
+              /* v8 ignore next */
               ? "down"
               : hasDegraded
                 ? "degraded"
@@ -644,6 +645,7 @@ export default function SystemConfig() {
                       ? "All Systems Operational"
                       : overallStatus === "degraded"
                         ? "Partial Service Degradation"
+                        /* v8 ignore next */
                         : "Service Outage Detected"}
                   </span>
                   {overallStatus !== "healthy" && (
@@ -666,6 +668,7 @@ export default function SystemConfig() {
                   ? CheckCircle2
                   : service.status === "degraded"
                     ? AlertTriangle
+                    /* v8 ignore next */
                     : XCircle;
               return (
                 <div

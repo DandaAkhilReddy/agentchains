@@ -323,8 +323,8 @@ export default function BillingPage() {
                   >
                     {percent}% used
                   </span>
-                  {/* v8 ignore next 3 */}
-                  {isHigh && (
+                  {/* v8 ignore next */
+                  isHigh && (
                     <span className="text-[10px] text-[#f87171]">
                       Approaching limit
                     </span>

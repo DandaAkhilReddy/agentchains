@@ -527,6 +527,69 @@ describe("App — authenticated creator", () => {
     });
   });
 
+  it("calls creatorAuth.register via CreatorLoginPage on creator tab when unauthenticated", async () => {
+    const registerFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: vi.fn(),
+      register: registerFn,
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("Creator"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoRegister"));
+    await waitFor(() => {
+      expect(registerFn).toHaveBeenCalledWith({ email: "test@test.com" });
+    });
+  });
+
+  it("calls creatorAuth.register via CreatorLoginPage on redeem tab when unauthenticated", async () => {
+    const registerFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: vi.fn(),
+      register: registerFn,
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("Redeem"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoRegister"));
+    await waitFor(() => {
+      expect(registerFn).toHaveBeenCalledWith({ email: "test@test.com" });
+    });
+  });
+
+  it("calls creatorAuth.register via CreatorLoginPage on adminDashboard tab when unauthenticated", async () => {
+    const registerFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: vi.fn(),
+      register: registerFn,
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("AdminDashboard"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoRegister"));
+    await waitFor(() => {
+      expect(registerFn).toHaveBeenCalledWith({ email: "test@test.com" });
+    });
+  });
+
   it("calls creatorAuth.login via CreatorLoginPage on redeem tab when unauthenticated", async () => {
     const loginFn = vi.fn().mockResolvedValue(undefined);
     mockUseCreatorAuth.mockReturnValue({

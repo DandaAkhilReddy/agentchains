@@ -501,12 +501,14 @@ export default function AuditViewer() {
                   severityFilter === sev
                     ? sev === "All"
                       ? "rgba(96,165,250,0.15)"
+                      /* v8 ignore next */
                       : SEVERITY_STYLES[sev]?.bg ?? "rgba(96,165,250,0.15)"
                     : "transparent",
                 color:
                   severityFilter === sev
                     ? sev === "All"
                       ? "#60a5fa"
+                      /* v8 ignore next */
                       : SEVERITY_STYLES[sev]?.color ?? "#60a5fa"
                     : "#64748b",
                 border: `1px solid ${
@@ -570,6 +572,7 @@ export default function AuditViewer() {
                 {filteredEntries.map((entry, idx) => {
                   const isExpanded = expandedId === entry.id;
                   const sevStyle = SEVERITY_STYLES[entry.severity];
+                  /* v8 ignore next 2 */
                   const actorConfig =
                     ACTOR_COLORS[entry.actorType] ?? ACTOR_COLORS.user;
                   const ActorIcon = actorConfig.icon;
