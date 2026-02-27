@@ -47,6 +47,7 @@ from . import (
     v3_webmcp,
     v4_a2ui,
     v5_chains,
+    v5_judge,
     wallet,
     webhooks,
     zkp,
@@ -117,6 +118,7 @@ API_V5_PREFIX = "/api/v5"
 
 API_V5_ROUTERS: tuple[APIRouter, ...] = (
     v5_chains.router,
+    v5_judge.router,
 )
 
 __all__ = [
