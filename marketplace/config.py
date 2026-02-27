@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     admin_creator_ids: str = ""  # Comma-separated creator IDs with admin access
     jwt_expire_hours: int = 1  # 1 hour — short-lived access tokens
+    refresh_token_expire_days: int = 7  # 7-day refresh tokens
 
     # Payments
     payment_mode: str = "simulated"  # simulated | testnet | mainnet

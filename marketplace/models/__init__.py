@@ -55,6 +55,12 @@ from marketplace.models.chain_provenance import ChainProvenanceEntry
 from marketplace.models.chain_policy import ChainPolicy
 from marketplace.models.webhook_v2 import DeadLetterEntry, DeliveryAttempt
 from marketplace.models.billing import BillingPlan, Subscription, UsageMeter, Invoice
+from marketplace.models.judge import JudgeEvaluation, JudgePipelineRun
+from marketplace.models.revoked_token import RevokedToken
+from marketplace.models.refresh_token import RefreshToken
+from marketplace.models.role import ActorRole, Role
+from marketplace.models.api_key import ApiKey
+from marketplace.models.auth_event import AuthEvent
 
 __all__ = [
     "RegisteredAgent",
@@ -116,4 +122,12 @@ __all__ = [
     "ChainExecution",
     "ChainProvenanceEntry",
     "ChainPolicy",
+    "JudgeEvaluation",
+    "JudgePipelineRun",
+    "RevokedToken",
+    "RefreshToken",
+    "ActorRole",
+    "Role",
+    "ApiKey",
+    "AuthEvent",
 ]
