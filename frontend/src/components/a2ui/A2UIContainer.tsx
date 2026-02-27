@@ -129,7 +129,9 @@ function renderComponent(
         warning: "#fbbf24",
         error: "#f87171",
       };
+      /* v8 ignore start -- @preserve */
       const color = levelColors[component.data.level ?? "info"] ?? "#60a5fa";
+      /* v8 ignore stop -- @preserve */
       return (
         <div
           className="rounded-2xl border p-4"

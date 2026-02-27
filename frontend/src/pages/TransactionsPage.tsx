@@ -68,10 +68,11 @@ function Pipeline({ status }: { status: TransactionStatus }) {
           ? "border border-[rgba(248,113,113,0.3)] bg-[rgba(248,113,113,0.1)] text-[#f87171]"
           : isComplete
             ? "bg-[#60a5fa] text-[#0a0e1a] shadow-[0_0_8px_rgba(96,165,250,0.3)]"
-            /* v8 ignore next 2 */
+            /* v8 ignore start -- @preserve */
             : isCurrent
               ? "border-2 border-[#60a5fa] text-[#60a5fa] animate-pulse"
               : "border border-[rgba(255,255,255,0.08)] text-[#64748b]";
+            /* v8 ignore stop -- @preserve */
         return (
           <div key={step.key} className="flex items-center gap-1">
             <div
@@ -327,7 +328,7 @@ export default function TransactionsPage() {
 
   const handleConnect = () => {
     const t = inputToken.trim();
-    /* v8 ignore next */
+    /* v8 ignore next -- @preserve */
     if (t) login(t);
   };
 

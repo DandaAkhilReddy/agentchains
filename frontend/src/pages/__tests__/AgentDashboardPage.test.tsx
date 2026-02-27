@@ -29,6 +29,21 @@ describe("AgentDashboardPage", () => {
     expect(screen.getByRole("button", { name: /Sign In/i })).toBeInTheDocument();
   });
 
+  it("calls login with trimmed token on Sign In click", async () => {
+    const login = vi.fn();
+    vi.spyOn(authModule, "useAuth").mockReturnValue({
+      token: null,
+      login,
+      logout: vi.fn(),
+    } as any);
+
+    renderWithProviders(<AgentDashboardPage />);
+    const user = userEvent.setup();
+    await user.type(screen.getByPlaceholderText("Bearer token"), "  tok-123  ");
+    await user.click(screen.getByRole("button", { name: /Sign In/i }));
+    expect(login).toHaveBeenCalledWith("tok-123");
+  });
+
   it("loads and renders dashboard metrics for authenticated agent", async () => {
     const logout = vi.fn();
     vi.spyOn(authModule, "useAuth").mockReturnValue({

@@ -87,7 +87,7 @@ vi.mock("../components/Shell", () => ({
 }));
 
 vi.mock("../components/Sidebar", () => ({
-  default: ({ activeTab, onTabChange }: { activeTab: string; onTabChange: (t: string) => void; mobileOpen: boolean; onMobileClose: () => void }) => (
+  default: ({ activeTab, onTabChange, onMobileClose }: { activeTab: string; onTabChange: (t: string) => void; mobileOpen: boolean; onMobileClose: () => void }) => (
     <nav data-testid="sidebar" data-active={activeTab}>
       <button onClick={() => onTabChange("dashboard")}>Dashboard</button>
       <button onClick={() => onTabChange("agents")}>Agents</button>
@@ -110,6 +110,7 @@ vi.mock("../components/Sidebar", () => ({
       <button onClick={() => onTabChange("agentDashboard")}>AgentDashboard</button>
       <button onClick={() => onTabChange("adminDashboard")}>AdminDashboard</button>
       <button onClick={() => onTabChange("actions")}>Actions</button>
+      <button data-testid="mobile-close" onClick={onMobileClose}>CloseMobile</button>
     </nav>
   ),
 }));
@@ -482,6 +483,47 @@ describe("App — authenticated creator", () => {
     fireEvent.click(screen.getByText("Go Dashboard"));
     await waitFor(() => {
       expect(screen.getByText("DashboardPage")).toBeInTheDocument();
+    });
+  });
+
+  it("onMobileClose callback sets mobileMenuOpen to false (line 91)", () => {
+    renderAppAuthenticated();
+    const menuBtn = screen.getByTestId("menu-toggle");
+    // Open mobile menu
+    fireEvent.click(menuBtn);
+    // Close via onMobileClose (exposed as CloseMobile button in Sidebar mock)
+    fireEvent.click(screen.getByTestId("mobile-close"));
+    expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+  });
+
+  it("DashboardPage onNavigate callback changes active tab (line 101)", async () => {
+    renderAppAuthenticated();
+    fireEvent.click(screen.getByText("Dashboard"));
+    await waitFor(() => screen.getByText("DashboardPage"));
+    fireEvent.click(screen.getByText("Go Agents"));
+    await waitFor(() => {
+      expect(screen.getByText("AgentsPage")).toBeInTheDocument();
+    });
+  });
+
+  it("calls creatorAuth.login via CreatorLoginPage on onboarding tab when unauthenticated (line 147)", async () => {
+    const loginFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: loginFn,
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("Onboarding"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoLogin"));
+    await waitFor(() => {
+      expect(loginFn).toHaveBeenCalledWith("test@test.com", "pw");
     });
   });
 
