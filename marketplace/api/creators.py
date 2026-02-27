@@ -1,13 +1,17 @@
 """Creator account API endpoints."""
+from __future__ import annotations
+
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from marketplace.core.creator_auth import get_current_creator_id
+from marketplace.core.password_validation import validate_password_strength
 from marketplace.database import get_db
-from marketplace.services import creator_service
+from marketplace.services import auth_event_service, creator_service
 
 router = APIRouter(prefix="/creators", tags=["creators"])
 
@@ -45,6 +49,7 @@ async def register_creator(
     db: AsyncSession = Depends(get_db),
 ):
     """Register a new creator account."""
+    validate_password_strength(req.password)
     try:
         result = await creator_service.register_creator(
             db, req.email, req.password, req.display_name,
@@ -57,12 +62,37 @@ async def register_creator(
 @router.post("/login")
 async def login_creator(
     req: CreatorLoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Login with email and password."""
+    ip_address = request.client.host if request.client else None
+    is_brute_force = await auth_event_service.detect_brute_force(
+        db,
+        ip_address=ip_address,
+        window_minutes=5,
+        threshold=10,
+    )
+    if is_brute_force:
+        raise HTTPException(status_code=429, detail="Too many login attempts. Please try again later.")
     try:
-        return await creator_service.login_creator(db, req.email, req.password)
+        result = await creator_service.login_creator(db, req.email, req.password)
+        await auth_event_service.log_auth_event(
+            db,
+            actor_id=result["creator"]["id"],
+            actor_type="creator",
+            event_type="login_success",
+            ip_address=ip_address,
+        )
+        return result
     except Exception:
+        await auth_event_service.log_auth_event(
+            db,
+            actor_type="creator",
+            event_type="login_failure",
+            ip_address=ip_address,
+            details={"email": req.email},
+        )
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
 

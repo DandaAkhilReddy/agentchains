@@ -11,6 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.models.role import ActorRole, Role
+from marketplace.services import auth_event_service
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,13 @@ async def assign_role(
     db.add(assignment)
     await db.commit()
     await db.refresh(assignment)
+    await auth_event_service.log_auth_event(
+        db,
+        actor_id=actor_id,
+        actor_type=actor_type,
+        event_type="role_change",
+        details={"action": "assign", "role": role_name, "granted_by": granted_by},
+    )
     return assignment
 
 
@@ -217,6 +225,12 @@ async def revoke_role(
     if result.rowcount == 0:
         raise ValueError(f"Actor does not have role '{role_name}'")
     await db.commit()
+    await auth_event_service.log_auth_event(
+        db,
+        actor_id=actor_id,
+        event_type="role_change",
+        details={"action": "revoke", "role": role_name},
+    )
 
 
 async def get_roles_for_actor(db: AsyncSession, actor_id: str) -> list[Role]:

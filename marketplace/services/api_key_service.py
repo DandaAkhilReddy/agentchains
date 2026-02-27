@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marketplace.core.auth_context import AuthContext
 from marketplace.core.exceptions import UnauthorizedError
 from marketplace.models.api_key import ApiKey
+from marketplace.services import auth_event_service
 
 _API_KEY_PREFIX = "ac_live_"
 
@@ -56,6 +57,13 @@ async def create_api_key(
     db.add(row)
     await db.commit()
     await db.refresh(row)
+    await auth_event_service.log_auth_event(
+        db,
+        actor_id=actor_id,
+        actor_type=actor_type,
+        event_type="api_key_create",
+        details={"key_id": row.id, "name": name, "key_prefix": key_prefix},
+    )
     return key_plaintext, row
 
 
@@ -106,6 +114,13 @@ async def revoke_api_key(db: AsyncSession, key_id: str, actor_id: str) -> None:
         raise ValueError("Not authorized to revoke this API key")
     row.revoked = True
     await db.commit()
+    await auth_event_service.log_auth_event(
+        db,
+        actor_id=actor_id,
+        actor_type=row.actor_type,
+        event_type="api_key_revoke",
+        details={"key_id": key_id, "key_prefix": row.key_prefix, "name": row.name},
+    )
 
 
 async def list_api_keys(db: AsyncSession, actor_id: str) -> list[ApiKey]:

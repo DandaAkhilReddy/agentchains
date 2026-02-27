@@ -7,9 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth_context import AuthContext
 from marketplace.core.auth_dependencies import require_auth
+from marketplace.core.password_validation import validate_password_strength
 from marketplace.core.refresh_tokens import refresh_access_token, revoke_refresh_tokens_for_actor
 from marketplace.core.token_revocation import revoke_all_for_actor, revoke_token
 from marketplace.database import get_db
+from marketplace.services import auth_event_service
 from marketplace.schemas.auth import (
     AuthMeResponse,
     ChangePasswordRequest,
@@ -27,6 +29,10 @@ async def refresh_token(
 ):
     """Exchange a refresh token for a new access + refresh token pair."""
     pair = await refresh_access_token(db, req.refresh_token)
+    await auth_event_service.log_auth_event(
+        db,
+        event_type="token_refresh",
+    )
     return TokenPairResponse(
         access_token=pair.access_token,
         refresh_token=pair.refresh_token,
@@ -44,6 +50,12 @@ async def revoke_current_token(
         from datetime import datetime, timedelta, timezone
         expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
         await revoke_token(db, ctx.token_jti, ctx.actor_id, expires_at)
+    await auth_event_service.log_auth_event(
+        db,
+        actor_id=ctx.actor_id,
+        actor_type=ctx.actor_type,
+        event_type="token_revoke",
+    )
 
 
 @router.post("/revoke-all", status_code=204)
@@ -54,6 +66,13 @@ async def revoke_all_tokens(
     """Revoke all tokens (access + refresh) for the current actor."""
     await revoke_all_for_actor(db, ctx.actor_id)
     await revoke_refresh_tokens_for_actor(db, ctx.actor_id)
+    await auth_event_service.log_auth_event(
+        db,
+        actor_id=ctx.actor_id,
+        actor_type=ctx.actor_type,
+        event_type="token_revoke",
+        details={"scope": "all tokens"},
+    )
 
 
 @router.post("/change-password", status_code=204)
@@ -63,6 +82,7 @@ async def change_password(
     ctx: AuthContext = Depends(require_auth),
 ):
     """Change password and revoke all existing tokens."""
+    validate_password_strength(req.new_password)
     from marketplace.core.creator_auth import hash_password, verify_password
 
     if ctx.is_creator:
@@ -89,6 +109,13 @@ async def change_password(
     # Revoke all tokens
     await revoke_all_for_actor(db, ctx.actor_id)
     await revoke_refresh_tokens_for_actor(db, ctx.actor_id)
+
+    await auth_event_service.log_auth_event(
+        db,
+        actor_id=ctx.actor_id,
+        actor_type=ctx.actor_type,
+        event_type="password_change",
+    )
 
 
 @router.get("/me", response_model=AuthMeResponse)
