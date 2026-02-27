@@ -1,0 +1,90 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://agentchains:${POSTGRES_PASSWORD:-changeme}@postgres:5432/agentchains
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRE_HOURS=1
+      - EVENT_SIGNING_SECRET=${EVENT_SIGNING_SECRET:?EVENT_SIGNING_SECRET is required}
+      - MEMORY_ENCRYPTION_KEY=${MEMORY_ENCRYPTION_KEY:?MEMORY_ENCRYPTION_KEY is required}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - CONTENT_STORE_PATH=/app/data/content_store
+      - PAYMENT_MODE=${PAYMENT_MODE:-simulated}
+      - PLATFORM_FEE_PCT=${PLATFORM_FEE_PCT:-0.02}
+      - SIGNUP_BONUS_USD=${SIGNUP_BONUS_USD:-0.10}
+      - OTEL_ENABLED=${OTEL_ENABLED:-false}
+      - OTEL_EXPORTER_ENDPOINT=${OTEL_EXPORTER_ENDPOINT:-http://localhost:4317}
+      - OTEL_SERVICE_NAME=agentchains-marketplace
+      - MCP_ENABLED=${MCP_ENABLED:-true}
+      - A2UI_ENABLED=${A2UI_ENABLED:-true}
+      - ORCHESTRATION_ENABLED=${ORCHESTRATION_ENABLED:-true}
+    volumes:
+      - app_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/v1/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agentchains
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: agentchains
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentchains -d agentchains"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+volumes:
+  pg_data:
+    driver: local
+  redis_data:
+    driver: local
+  app_data:
+    driver: local

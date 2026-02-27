@@ -1,0 +1,31 @@
+version: "3.9"
+
+# Development overrides — auto-loaded by `docker compose up`
+# Mounts source code for live reload and enables debug port.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=sqlite+aiosqlite:///./data/marketplace.db
+      - JWT_SECRET_KEY=dev-secret-change-in-production
+      - EVENT_SIGNING_SECRET=dev-event-signing-secret-change-in-production
+      - MEMORY_ENCRYPTION_KEY=dev-memory-encryption-key-change-in-production
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+    volumes:
+      - ./marketplace:/app/marketplace
+      - ./agents:/app/agents
+      - app_data:/app/data
+    ports:
+      - "8080:8080"
+      - "5678:5678"  # debugpy remote attach
+    command: >
+      uvicorn marketplace.main:app
+      --host 0.0.0.0
+      --port 8080
+      --reload
+      --reload-dir /app/marketplace
+    depends_on: {}  # Override: no postgres/redis dependency in dev mode
