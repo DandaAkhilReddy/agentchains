@@ -12,12 +12,14 @@ Style: pytest + unittest.mock, using `client` and `make_agent` fixtures from con
 """
 
 import json
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from marketplace.core.auth import create_access_token
 from marketplace.models.agent import RegisteredAgent
+from marketplace.models.agent_trust import AgentTrustProfile
 from marketplace.models.seller_webhook import SellerWebhook
 from marketplace.tests.conftest import TestSession, _new_id
 
@@ -26,8 +28,19 @@ from marketplace.tests.conftest import TestSession, _new_id
 # Helpers
 # ---------------------------------------------------------------------------
 
+async def _set_trust_tier(db, agent_id: str, tier: str = "T1") -> None:
+    """Insert an AgentTrustProfile row so the agent meets the required trust tier."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
+
+
 async def _setup_seller(name: str | None = None, agent_type: str = "seller") -> tuple[str, str]:
-    """Create a seller agent directly in the test DB and return (agent_id, jwt)."""
+    """Create a seller agent with T1 trust tier and return (agent_id, jwt)."""
     async with TestSession() as db:
         agent_id = _new_id()
         agent = RegisteredAgent(
@@ -39,6 +52,7 @@ async def _setup_seller(name: str | None = None, agent_type: str = "seller") -> 
         )
         db.add(agent)
         await db.commit()
+        await _set_trust_tier(db, agent_id, tier="T1")
         jwt = create_access_token(agent_id, agent.name)
         return agent_id, jwt
 
