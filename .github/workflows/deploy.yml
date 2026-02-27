@@ -108,6 +108,22 @@ jobs:
             exit 1
           fi
 
+          # Judge pipeline endpoint smoke test
+          JUDGE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$FQDN/api/v5/judge/evaluations?page=1&page_size=1")
+          if [ "$JUDGE_STATUS" = "401" ] || [ "$JUDGE_STATUS" = "200" ]; then
+            echo "Judge endpoint responding (status: $JUDGE_STATUS)"
+          else
+            echo "Judge endpoint unexpected status: $JUDGE_STATUS"
+            exit 1
+          fi
+
+          # Agent registry count smoke test
+          AGENT_COUNT=$(curl -s "https://$FQDN/api/v1/registry" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('total', d.get('count', 0)))" 2>/dev/null || echo "0")
+          echo "Registered agents: $AGENT_COUNT"
+          if [ "$AGENT_COUNT" -lt 5 ]; then
+            echo "WARNING: Expected at least 5 registered agents, got $AGENT_COUNT"
+          fi
+
       - name: Promote traffic to new revision
         run: |
           LATEST_REVISION=$(az containerapp revision list \
