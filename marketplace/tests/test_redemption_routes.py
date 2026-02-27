@@ -478,7 +478,14 @@ async def test_cancel_unauthenticated(client):
 
 async def test_admin_approve_gift_card(client):
     """Admin approve moves gift_card from pending to processing."""
+    from marketplace.services.role_service import assign_role, seed_system_roles
+
     creator_id, jwt = await _seed_creator(balance=20.0)
+
+    # Grant admin role so the endpoint allows the action
+    async with TestSession() as db:
+        await seed_system_roles(db)
+        await assign_role(db, creator_id, "creator", "admin", "system")
 
     # Create gift_card redemption
     create_resp = await client.post(
@@ -506,7 +513,14 @@ async def test_admin_approve_gift_card(client):
 
 async def test_admin_reject_with_refund(client):
     """Admin reject refunds USD and sets the rejection reason."""
+    from marketplace.services.role_service import assign_role, seed_system_roles
+
     creator_id, jwt = await _seed_creator(balance=20.0)
+
+    # Grant admin role so the endpoint allows the action
+    async with TestSession() as db:
+        await seed_system_roles(db)
+        await assign_role(db, creator_id, "creator", "admin", "system")
 
     # Create gift_card redemption
     create_resp = await client.post(

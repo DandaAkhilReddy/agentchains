@@ -460,9 +460,25 @@ async def test_full_happy_path_via_http(
     client, make_agent, make_listing, auth_header
 ):
     """End-to-end via HTTP: initiate -> confirm -> deliver -> verify -> completed."""
+    import uuid
+    from marketplace.models.agent_trust import AgentTrustProfile
+    from marketplace.tests.conftest import TestSession
+
     seller, seller_token = await make_agent(name="http-seller", agent_type="seller")
     buyer, buyer_token = await make_agent(name="http-buyer", agent_type="buyer")
     content = "http-happy-path-content"
+
+    # Elevate seller and buyer to T1 so listing creation and transaction
+    # initiation pass the trust tier gate.
+    async with TestSession() as db:
+        db.add(AgentTrustProfile(
+            id=str(uuid.uuid4()), agent_id=seller.id, trust_tier="T1"
+        ))
+        db.add(AgentTrustProfile(
+            id=str(uuid.uuid4()), agent_id=buyer.id, trust_tier="T1"
+        ))
+        await db.commit()
+
     listing = await make_listing(seller.id, price_usdc=4.0, content=content)
 
     # 1. Initiate

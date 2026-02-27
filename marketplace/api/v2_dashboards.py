@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marketplace.config import settings
 from marketplace.core.auth import get_current_agent_id
+from marketplace.core.auth_unified import decode_authorization
 from marketplace.core.creator_auth import get_current_creator_id
 from marketplace.database import get_db
 from marketplace.models.agent import RegisteredAgent
@@ -19,10 +19,6 @@ from marketplace.schemas.dashboard import (
 from marketplace.services import dashboard_service
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards-v2"])
-
-
-def _admin_creator_ids() -> set[str]:
-    return {value.strip() for value in settings.admin_creator_ids.split(",") if value.strip()}
 
 
 @router.get("/agent/me", response_model=AgentDashboardResponse)
@@ -89,7 +85,14 @@ async def dashboard_agent_private(
     if agent is None:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
 
-    if current_creator_id != agent.creator_id and current_creator_id not in _admin_creator_ids():
-        raise HTTPException(status_code=403, detail="Not authorized to view this dashboard")
+    if current_creator_id != agent.creator_id:
+        # Check RBAC admin role instead of config-based admin list
+        try:
+            ctx = await decode_authorization(db, authorization)
+            is_admin = ctx.has_role("admin")
+        except Exception:
+            is_admin = False
+        if not is_admin:
+            raise HTTPException(status_code=403, detail="Not authorized to view this dashboard")
 
     return await dashboard_service.get_agent_dashboard(db, agent_id)

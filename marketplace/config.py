@@ -138,6 +138,7 @@ _INSECURE_SECRETS = {
     "dev-secret-change-in-production",
     "change-me-to-a-random-string",
     "change-me-to-a-random-64-char-string",
+    "<GENERATE-64-CHAR-RANDOM-STRING>",
     "dev-event-signing-secret-change-in-production",
     "dev-memory-encryption-key-change-in-production",
 }

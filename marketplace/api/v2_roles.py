@@ -11,7 +11,6 @@ from marketplace.core.auth_context import AuthContext
 from marketplace.core.auth_dependencies import require_role
 from marketplace.database import get_db
 from marketplace.schemas.auth import (
-    ActorRoleResponse,
     AssignRoleRequest,
     RoleCreateRequest,
     RoleResponse,
@@ -105,7 +104,7 @@ async def assign_role_to_actor(
     ctx: AuthContext = Depends(require_role("admin")),
 ):
     try:
-        assignment = await role_service.assign_role(
+        await role_service.assign_role(
             db, actor_id=actor_id, actor_type="unknown",
             role_name=req.role_name, granted_by=ctx.actor_id,
         )

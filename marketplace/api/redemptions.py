@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.api.deprecations import apply_legacy_v1_deprecation_headers
+from marketplace.core.auth_unified import decode_authorization
 from marketplace.core.creator_auth import get_current_creator_id
 from marketplace.database import get_db
 from marketplace.services import redemption_service
@@ -125,10 +126,17 @@ async def admin_approve(
     apply_legacy_v1_deprecation_headers(response)
     from marketplace.config import settings
     creator_id = get_current_creator_id(authorization)
-    admin_ids = [a.strip() for a in getattr(settings, "admin_creator_ids", "").split(",") if a.strip()]
-    if not admin_ids:
-        raise HTTPException(status_code=403, detail="No admin accounts configured")
-    if creator_id not in admin_ids:
+    # Check RBAC admin role first, fall back to legacy config-based admin list
+    is_admin = False
+    try:
+        ctx = await decode_authorization(db, authorization)
+        is_admin = ctx.has_role("admin")
+    except Exception:
+        pass
+    if not is_admin:
+        admin_ids = [a.strip() for a in getattr(settings, "admin_creator_ids", "").split(",") if a.strip()]
+        is_admin = bool(admin_ids) and creator_id in admin_ids
+    if not is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     try:
         return await redemption_service.admin_approve_redemption(
@@ -150,10 +158,17 @@ async def admin_reject(
     apply_legacy_v1_deprecation_headers(response)
     from marketplace.config import settings
     creator_id = get_current_creator_id(authorization)
-    admin_ids = [a.strip() for a in getattr(settings, "admin_creator_ids", "").split(",") if a.strip()]
-    if not admin_ids:
-        raise HTTPException(status_code=403, detail="No admin accounts configured")
-    if creator_id not in admin_ids:
+    # Check RBAC admin role first, fall back to legacy config-based admin list
+    is_admin = False
+    try:
+        ctx = await decode_authorization(db, authorization)
+        is_admin = ctx.has_role("admin")
+    except Exception:
+        pass
+    if not is_admin:
+        admin_ids = [a.strip() for a in getattr(settings, "admin_creator_ids", "").split(",") if a.strip()]
+        is_admin = bool(admin_ids) and creator_id in admin_ids
+    if not is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     try:
         return await redemption_service.admin_reject_redemption(

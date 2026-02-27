@@ -747,8 +747,8 @@ async def test_dashboard_agent_private_non_owner_forbidden(client, db, make_agen
     assert response.status_code == 403
 
 
-async def test_dashboard_agent_private_admin_can_access(client, db, make_agent, make_creator, monkeypatch):
-    from marketplace.config import settings
+async def test_dashboard_agent_private_admin_can_access(client, db, make_agent, make_creator):
+    from marketplace.services.role_service import assign_role, seed_system_roles
 
     owner_creator, _ = await make_creator()
     admin_creator, admin_token = await make_creator()
@@ -756,7 +756,9 @@ async def test_dashboard_agent_private_admin_can_access(client, db, make_agent, 
     agent.creator_id = owner_creator.id
     await db.commit()
 
-    monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+    await seed_system_roles(db)
+    await assign_role(db, admin_creator.id, "creator", "admin", "system")
+
     response = await client.get(
         f"/api/v2/dashboards/agent/{agent.id}",
         headers={"Authorization": f"Bearer {admin_token}"},

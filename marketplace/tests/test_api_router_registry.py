@@ -38,6 +38,10 @@ from marketplace.api import (
     v2_sellers,
     v2_users,
     v2_verification,
+    v2_roles,
+    v2_api_keys,
+    v2_auth,
+    v2_auth_events,
     wallet,
     webhooks,
     zkp,
@@ -98,5 +102,9 @@ def test_v2_router_registry_order_and_membership():
         v2_sellers.router,
         v2_users.router,
         v2_verification.router,
+        v2_roles.router,
+        v2_api_keys.router,
+        v2_auth.router,
+        v2_auth_events.router,
     )
     assert API_V2_ROUTERS == expected

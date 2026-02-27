@@ -6,7 +6,6 @@ Decodes JWT tokens (agent/creator/user), API keys, and returns an
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
 

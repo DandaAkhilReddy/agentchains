@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-from marketplace.config import settings
 from marketplace.core.auth import decode_stream_token
 from marketplace.services import dashboard_service
+from marketplace.services.role_service import assign_role, seed_system_roles
 
 
 async def test_v2_admin_overview_requires_allowlisted_creator(
     client,
+    db,
     make_creator,
-    monkeypatch,
 ):
     admin_creator, admin_token = await make_creator()
     _, non_admin_token = await make_creator()
-    monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+    await seed_system_roles(db)
+    await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
     forbidden = await client.get(
         "/api/v2/admin/overview",
@@ -35,11 +36,12 @@ async def test_v2_admin_overview_requires_allowlisted_creator(
 
 async def test_v2_admin_stream_token_is_scoped_to_admin_topics(
     client,
+    db,
     make_creator,
-    monkeypatch,
 ):
     admin_creator, admin_token = await make_creator()
-    monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+    await seed_system_roles(db)
+    await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
     response = await client.get(
         "/api/v2/admin/events/stream-token",
@@ -82,7 +84,6 @@ async def test_v2_agent_private_dashboard_enforces_owner_or_admin(
     db,
     make_agent,
     make_creator,
-    monkeypatch,
 ):
     owner_creator, owner_token = await make_creator()
     other_creator, other_token = await make_creator()
@@ -102,7 +103,8 @@ async def test_v2_agent_private_dashboard_enforces_owner_or_admin(
     )
     assert owner_allowed.status_code == 200
 
-    monkeypatch.setattr(settings, "admin_creator_ids", other_creator.id)
+    await seed_system_roles(db)
+    await assign_role(db, other_creator.id, "creator", "admin", "system")
     admin_allowed = await client.get(
         f"/api/v2/dashboards/agent/{agent.id}",
         headers={"Authorization": f"Bearer {other_token}"},
