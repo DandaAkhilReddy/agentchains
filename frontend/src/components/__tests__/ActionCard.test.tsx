@@ -144,4 +144,73 @@ describe("ActionCard", () => {
     // Overflow indicator: "+2"
     expect(screen.getByText(/\+2/)).toBeInTheDocument();
   });
+
+  it("card onMouseEnter sets border color and box shadow (lines 50-53)", () => {
+    const { container } = render(
+      <ActionCard action={makeAction()} onExecute={vi.fn()} />,
+    );
+    // The card is the outermost div with the group class
+    const card = container.firstElementChild as HTMLDivElement;
+    expect(card).toBeTruthy();
+
+    // Cover lines 50-53: onMouseEnter sets borderColor and boxShadow
+    // jsdom normalizes rgba() values with spaces, so use toHaveStyle for robust comparison
+    fireEvent.mouseEnter(card);
+    expect(card).toHaveStyle({ borderColor: "rgba(96,165,250,0.3)" });
+    expect(card.style.boxShadow).toBe("0 0 24px rgba(96,165,250,0.08)");
+  });
+
+  it("card onMouseLeave resets border color and box shadow (lines 55-58)", () => {
+    const { container } = render(
+      <ActionCard action={makeAction()} onExecute={vi.fn()} />,
+    );
+    const card = container.firstElementChild as HTMLDivElement;
+
+    // First hover, then leave
+    fireEvent.mouseEnter(card);
+    // Cover lines 55-58: onMouseLeave resets styles
+    fireEvent.mouseLeave(card);
+    expect(card).toHaveStyle({ borderColor: "rgba(96,165,250,0.12)" });
+    expect(card.style.boxShadow).toBe("none");
+  });
+
+  it("execute button onMouseEnter sets box shadow (lines 139-140)", () => {
+    const { container } = render(
+      <ActionCard action={makeAction()} onExecute={vi.fn()} />,
+    );
+    const executeBtn = screen.getByRole("button", { name: /execute/i });
+
+    // Cover lines 138-141: onMouseEnter sets boxShadow on button
+    fireEvent.mouseEnter(executeBtn);
+    expect(executeBtn.style.boxShadow).toBe(
+      "0 0 24px rgba(96,165,250,0.35), 0 0 48px rgba(52,211,153,0.2)",
+    );
+  });
+
+  it("execute button onMouseLeave resets box shadow (lines 142-145)", () => {
+    const { container } = render(
+      <ActionCard action={makeAction()} onExecute={vi.fn()} />,
+    );
+    const executeBtn = screen.getByRole("button", { name: /execute/i });
+
+    // Hover first, then leave
+    fireEvent.mouseEnter(executeBtn);
+    // Cover lines 142-145: onMouseLeave resets boxShadow on button
+    fireEvent.mouseLeave(executeBtn);
+    expect(executeBtn.style.boxShadow).toBe("0 0 0px rgba(96,165,250,0)");
+  });
+
+  it("statusColor falls back to default color for unknown status (covers line 29: ?? '#94a3b8')", () => {
+    const { container } = render(
+      <ActionCard
+        action={makeAction({ status: "unknown-status" })}
+        onExecute={vi.fn()}
+      />,
+    );
+    // The dot should use the fallback color #94a3b8
+    const dot = screen.getByTitle("unknown-status");
+    expect(dot).toBeInTheDocument();
+    // #94a3b8 in RGB is rgb(148, 163, 184)
+    expect(dot.style.backgroundColor).toBe("rgb(148, 163, 184)");
+  });
 });

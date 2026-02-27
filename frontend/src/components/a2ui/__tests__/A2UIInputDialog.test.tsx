@@ -56,6 +56,21 @@ describe("A2UIInputDialog", () => {
     expect(input).toBeInTheDocument();
   });
 
+  it("date input onChange updates value and can be submitted", () => {
+    const onRespond = vi.fn();
+    const { container } = render(
+      <A2UIInputDialog
+        request={makeRequest({ input_type: "date" })}
+        onRespond={onRespond}
+      />,
+    );
+    const input = container.querySelector('input[type="date"]') as HTMLInputElement;
+    // Cover line 141: onChange={(e) => setValue(e.target.value)}
+    fireEvent.change(input, { target: { value: "2026-01-15" } });
+    fireEvent.click(screen.getByText("Submit"));
+    expect(onRespond).toHaveBeenCalledWith("req-1", "2026-01-15");
+  });
+
   it("renders select input type with options", () => {
     render(
       <A2UIInputDialog
@@ -81,6 +96,62 @@ describe("A2UIInputDialog", () => {
     );
     const input = container.querySelector('input[type="file"]');
     expect(input).toBeInTheDocument();
+  });
+
+  it("file input onChange triggers setValue with selected file (lines 169-170)", () => {
+    const { container } = render(
+      <A2UIInputDialog
+        request={makeRequest({ input_type: "file" })}
+        onRespond={vi.fn()}
+      />,
+    );
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    // Simulate a file selection — cover line 170: const file = e.target.files?.[0] ?? null
+    const fakeFile = new File(["content"], "test-upload.txt", { type: "text/plain" });
+    Object.defineProperty(fileInput, "files", {
+      value: [fakeFile],
+      configurable: true,
+    });
+    fireEvent.change(fileInput);
+
+    // After selecting a file, the "Selected:" text should appear (lines 176-180)
+    expect(screen.getByText(/Selected:/)).toBeInTheDocument();
+    expect(screen.getByText(/test-upload\.txt/)).toBeInTheDocument();
+  });
+
+  it("file input onChange when no file selected sets null (files?.[0] ?? null)", () => {
+    const { container } = render(
+      <A2UIInputDialog
+        request={makeRequest({ input_type: "file" })}
+        onRespond={vi.fn()}
+      />,
+    );
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    // Simulate change with empty files list — covers the ?? null branch
+    Object.defineProperty(fileInput, "files", {
+      value: [],
+      configurable: true,
+    });
+    fireEvent.change(fileInput);
+
+    // No "Selected:" text should appear when no file is chosen
+    expect(screen.queryByText(/Selected:/)).not.toBeInTheDocument();
+  });
+
+  it("file input with accept validation attribute", () => {
+    const { container } = render(
+      <A2UIInputDialog
+        request={makeRequest({
+          input_type: "file",
+          validation: { accept: ".pdf,.docx" },
+        })}
+        onRespond={vi.fn()}
+      />,
+    );
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(fileInput).toHaveAttribute("accept", ".pdf,.docx");
   });
 
   it("validates required input before submit", () => {
@@ -237,5 +308,139 @@ describe("A2UIInputDialog", () => {
     fireEvent.change(select, { target: { value: "Banana" } });
     fireEvent.click(screen.getByText("Submit"));
     expect(onRespond).toHaveBeenCalledWith("req-1", "Banana");
+  });
+
+  it("number input with both min and max validation attributes", () => {
+    const { container } = render(
+      <A2UIInputDialog
+        request={makeRequest({
+          input_type: "number",
+          validation: { min: 5, max: 50, step: 0.5 },
+        })}
+        onRespond={vi.fn()}
+      />,
+    );
+    const input = container.querySelector('input[type="number"]') as HTMLInputElement;
+    expect(input).toHaveAttribute("min", "5");
+    expect(input).toHaveAttribute("max", "50");
+    expect(input).toHaveAttribute("step", "0.5");
+  });
+
+  it("text input with maxLength validation attribute", () => {
+    const { container } = render(
+      <A2UIInputDialog
+        request={makeRequest({
+          input_type: "text",
+          validation: { max_length: 100 },
+        })}
+        onRespond={vi.fn()}
+      />,
+    );
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input).toHaveAttribute("maxLength", "100");
+  });
+
+  it("renders default text input for unknown input_type (default switch branch lines 185-189)", () => {
+    // The `default` case renders a text input with placeholder "Enter value..."
+    // Cast to bypass TypeScript to pass an unknown input_type.
+    const onRespond = vi.fn();
+    render(
+      <A2UIInputDialog
+        request={makeRequest({ input_type: "unknown" as any })}
+        onRespond={onRespond}
+      />,
+    );
+    const input = screen.getByPlaceholderText("Enter value...");
+    expect(input).toBeInTheDocument();
+    expect(input).toHaveAttribute("type", "text");
+
+    // onChange updates the value
+    fireEvent.change(input, { target: { value: "test-val" } });
+
+    // Submit calls onRespond with the typed value
+    fireEvent.click(screen.getByText("Submit"));
+    expect(onRespond).toHaveBeenCalledWith("req-1", "test-val");
+  });
+
+  it("default input type empty submit shows required error (branch covers lines 28-31)", () => {
+    render(
+      <A2UIInputDialog
+        request={makeRequest({ input_type: "unknown" as any })}
+        onRespond={vi.fn()}
+      />,
+    );
+    // Submit without entering a value — input_type is not "file", value is ""
+    fireEvent.click(screen.getByText("Submit"));
+    expect(screen.getByText("This field is required.")).toBeInTheDocument();
+  });
+
+  it("text input renders correctly with initial empty value (covers line 112: String(value ?? '') with value='')", () => {
+    // The text input initial value is "" which renders as String("" ?? "") = "".
+    // This exercises the value attribute on the text input (line 112).
+    const { container } = render(
+      <A2UIInputDialog
+        request={makeRequest({ input_type: "text" })}
+        onRespond={vi.fn()}
+      />,
+    );
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).toBe("");
+  });
+
+  it("date input renders with initial value and onChange correctly (covers lines 140-156)", () => {
+    // Covers the date case rendering (lines 140-156 in renderInputField).
+    // The initial value is "" (from useState("")).
+    // String("" ?? "") = "" covers the value attribute.
+    // The onChange handler at line 141 updates value.
+    const onRespond = vi.fn();
+    const { container } = render(
+      <A2UIInputDialog
+        request={makeRequest({ input_type: "date" })}
+        onRespond={onRespond}
+      />,
+    );
+    const dateInput = container.querySelector('input[type="date"]') as HTMLInputElement;
+    expect(dateInput).toBeInTheDocument();
+    // Initial value is "" — this exercises String("" ?? "") = ""
+    expect(dateInput.value).toBe("");
+
+    // onChange: setValue(e.target.value) — line 141
+    fireEvent.change(dateInput, { target: { value: "2026-03-15" } });
+    expect(dateInput.value).toBe("2026-03-15");
+
+    // Submit with the date value
+    fireEvent.click(screen.getByText("Submit"));
+    expect(onRespond).toHaveBeenCalledWith("req-1", "2026-03-15");
+  });
+
+  it("default case input renders with initial empty value (covers line 188: String(value ?? '') with empty value)", () => {
+    // The default switch case at line 185 renders a text input.
+    // Initial value is "" — String("" ?? "") = "" exercises the value attribute (line 188).
+    const { container } = render(
+      <A2UIInputDialog
+        request={makeRequest({ input_type: "unknown" as any })}
+        onRespond={vi.fn()}
+      />,
+    );
+    const input = container.querySelector('input[placeholder="Enter value..."]') as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    // The value attribute (line 188) renders with empty string
+    expect(input.value).toBe("");
+  });
+
+  it("select input onChange covers ?? '' for empty initial value (covers select branch lines 149-162)", () => {
+    // Select case: initial value is "" so String("" ?? "") = "".
+    // This exercises the value attribute on the select (line 150: String(value ?? "")).
+    const { container } = render(
+      <A2UIInputDialog
+        request={makeRequest({ input_type: "select", options: ["X", "Y"] })}
+        onRespond={vi.fn()}
+      />,
+    );
+    const select = container.querySelector("select") as HTMLSelectElement;
+    expect(select).toBeInTheDocument();
+    // Initial value is "" which renders the "Select an option..." default
+    expect(select.value).toBe("");
   });
 });

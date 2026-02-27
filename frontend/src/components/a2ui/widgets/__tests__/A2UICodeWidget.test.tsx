@@ -135,4 +135,66 @@ describe("A2UICodeWidget", () => {
     // Three traffic light dots
     expect(dots.length).toBeGreaterThanOrEqual(3);
   });
+
+  it("renders empty lines as newline characters (covers line || '\\n' branch)", () => {
+    // Code with an empty line in the middle
+    const codeWithEmptyLine = "line one\n\nline three";
+    const { container } = render(<A2UICodeWidget code={codeWithEmptyLine} />);
+
+    // Should render 3 lines (line one, empty line, line three)
+    expect(screen.getByText("3 lines")).toBeInTheDocument();
+
+    // The empty line (index 1) should render a newline character
+    const lineRows = container.querySelectorAll("code > div");
+    expect(lineRows.length).toBe(3);
+
+    // Line 1 and line 3 have text content
+    expect(screen.getByText("line one")).toBeInTheDocument();
+    expect(screen.getByText("line three")).toBeInTheDocument();
+  });
+
+  it("adjusts gutter width for large line counts (gutterWidth calculation)", () => {
+    // 100 lines → String(100).length = 3 digits → gutterWidth = max(3*0.6+0.8, 2.2) = max(2.6, 2.2) = 2.6rem
+    const manyLines = Array.from({ length: 100 }, (_, i) => `line ${i + 1}`).join("\n");
+    render(<A2UICodeWidget code={manyLines} showLineNumbers={true} />);
+    expect(screen.getByText("100 lines")).toBeInTheDocument();
+  });
+
+  it("renders correct paddingLeft when showLineNumbers is false (covers else branch)", () => {
+    const { container } = render(
+      <A2UICodeWidget code="const x = 1;" showLineNumbers={false} />
+    );
+    // When showLineNumbers=false, the code span has paddingLeft: "1.5rem"
+    const codeSpans = container.querySelectorAll("code > div > span:last-child");
+    if (codeSpans.length > 0) {
+      const spanEl = codeSpans[0] as HTMLElement;
+      expect(spanEl.style.paddingLeft).toBe("1.5rem");
+    }
+  });
+
+  it("fallback copy reverts Copied! text after 2 seconds (covers catch setTimeout)", async () => {
+    // Make clipboard.writeText reject so the catch branch runs
+    clipboardWriteText.mockRejectedValueOnce(new Error("Permission denied"));
+    document.execCommand = vi.fn().mockReturnValue(true);
+
+    render(<A2UICodeWidget code="catch-timeout" />);
+    const copyButton = screen.getByTitle("Copy to clipboard");
+
+    await act(async () => {
+      fireEvent.click(copyButton);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Should show Copied! after fallback
+    expect(screen.getByText("Copied!")).toBeInTheDocument();
+
+    // Advance 2 seconds to trigger the fallback setTimeout
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    // Should revert back to Copy
+    expect(screen.getByText("Copy")).toBeInTheDocument();
+  });
 });

@@ -338,4 +338,125 @@ describe("DataTable", () => {
     expect(screen.getByText("Mouse")).toBeInTheDocument();
     expect(screen.getByText("$29.99")).toBeInTheDocument();
   });
+
+  test("applies containerClassName to the outer wrapper div", () => {
+    const { container } = render(
+      <DataTable
+        columns={userColumns}
+        data={testUsers}
+        isLoading={false}
+        keyFn={userKeyFn}
+        containerClassName="my-custom-table"
+      />
+    );
+
+    // The outer wrapper div should contain the custom class
+    const wrapper = container.querySelector(".my-custom-table");
+    expect(wrapper).toBeInTheDocument();
+    expect(wrapper?.className).toContain("bg-[#141928]");
+  });
+
+  test("calls onRowClick with row data when a row is clicked", () => {
+    const onRowClick = vi.fn();
+
+    render(
+      <DataTable
+        columns={userColumns}
+        data={testUsers}
+        isLoading={false}
+        keyFn={userKeyFn}
+        onRowClick={onRowClick}
+      />
+    );
+
+    // Click the first row (Alice)
+    const rows = document.querySelectorAll("tbody tr");
+    rows[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+    expect(onRowClick).toHaveBeenCalledWith(testUsers[0]);
+  });
+
+  test("adds cursor-pointer class to rows when onRowClick is provided", () => {
+    const { container } = render(
+      <DataTable
+        columns={userColumns}
+        data={testUsers}
+        isLoading={false}
+        keyFn={userKeyFn}
+        onRowClick={vi.fn()}
+      />
+    );
+
+    const rows = container.querySelectorAll("tbody tr");
+    rows.forEach((row) => {
+      expect(row.className).toContain("cursor-pointer");
+    });
+  });
+
+  test("renders alternating row background for odd-indexed rows", () => {
+    const { container } = render(
+      <DataTable
+        columns={userColumns}
+        data={testUsers}
+        isLoading={false}
+        keyFn={userKeyFn}
+      />
+    );
+
+    const rows = container.querySelectorAll("tbody tr");
+    // Row at index 1 (Bob) should have the alternating background
+    expect(rows[1].className).toContain("bg-[rgba(255,255,255,0.01)]");
+    // Row at index 0 (Alice) should not have it
+    expect(rows[0].className).not.toContain("bg-[rgba(255,255,255,0.01)]");
+  });
+
+  test("uses center alignment for center-aligned columns", () => {
+    const centeredColumns: Column<TestUser>[] = [
+      {
+        key: "name",
+        header: "Name",
+        render: (user) => user.name,
+        align: "center",
+      },
+    ];
+
+    const { container } = render(
+      <DataTable
+        columns={centeredColumns}
+        data={[testUsers[0]]}
+        isLoading={false}
+        keyFn={userKeyFn}
+      />
+    );
+
+    const headerCell = container.querySelector("thead th");
+    expect(headerCell?.className).toContain("text-center");
+
+    const dataCell = container.querySelector("tbody td");
+    expect(dataCell?.className).toContain("text-center");
+  });
+
+  test("uses right alignment for right-aligned columns", () => {
+    const rightColumns: Column<TestUser>[] = [
+      {
+        key: "age",
+        header: "Age",
+        render: (user) => user.age.toString(),
+        align: "right",
+      },
+    ];
+
+    const { container } = render(
+      <DataTable
+        columns={rightColumns}
+        data={[testUsers[0]]}
+        isLoading={false}
+        keyFn={userKeyFn}
+      />
+    );
+
+    const headerCell = container.querySelector("thead th");
+    expect(headerCell?.className).toContain("text-right");
+  });
 });

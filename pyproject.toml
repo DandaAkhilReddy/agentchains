@@ -8,6 +8,7 @@ requires-python = ">=3.11"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["marketplace/tests"]
+addopts = "--cov=marketplace --cov-report=term-missing --cov-report=html:htmlcov"
 markers = [
     "smoke: deployment smoke tests (require MARKETPLACE_URL env var)",
 ]
@@ -16,6 +17,22 @@ filterwarnings = [
     "ignore:datetime.datetime.utcnow\\(\\) is deprecated:DeprecationWarning:jose\\.jwt",
     "ignore:Usage of the 'Session.add\\(\\)' operation is not currently supported within the execution stage of the flush process.*:sqlalchemy.exc.SAWarning:marketplace\\.services\\.token_service",
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
+]
+
+[tool.coverage.run]
+source = ["marketplace"]
+omit = ["marketplace/tests/*", "marketplace/*/__pycache__/*"]
+
+[tool.coverage.report]
+show_missing = true
+precision = 2
+fail_under = 96
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
 ]
 
 [tool.ruff]

@@ -304,4 +304,284 @@ describe("AuditViewer", () => {
     // URL.createObjectURL should have been called
     expect(global.URL.createObjectURL).toHaveBeenCalled();
   });
+
+  it("dateFrom filter hides entries before the given date (lines 280-283)", () => {
+    render(<AuditViewer />);
+
+    // Set dateFrom to 2026-02-22 — a date after all entries, so nothing should show
+    const dateFromInputs = document.querySelectorAll('input[type="date"]');
+    const fromInput = dateFromInputs[0] as HTMLInputElement;
+    fireEvent.change(fromInput, { target: { value: "2026-02-22" } });
+
+    // All 10 entries have timestamps on/before 2026-02-21 so they should all be filtered
+    expect(screen.queryByText("agent.deactivated")).not.toBeInTheDocument();
+    expect(screen.queryByText("plugin.installed")).not.toBeInTheDocument();
+
+    // Entry count shows 0
+    expect(screen.getByText("No audit entries found")).toBeInTheDocument();
+  });
+
+  it("dateTo filter hides entries after the given date (lines 284-288)", () => {
+    render(<AuditViewer />);
+
+    // Set dateTo to 2026-02-19 — before all entries, so nothing should show
+    const dateFromInputs = document.querySelectorAll('input[type="date"]');
+    const toInput = dateFromInputs[1] as HTMLInputElement;
+    fireEvent.change(toInput, { target: { value: "2026-02-19" } });
+
+    // All entries are after 2026-02-19 so they should all be filtered out
+    expect(screen.queryByText("agent.deactivated")).not.toBeInTheDocument();
+    expect(screen.queryByText("plugin.installed")).not.toBeInTheDocument();
+
+    // Empty state should appear
+    expect(screen.getByText("No audit entries found")).toBeInTheDocument();
+  });
+
+  it("dateFrom and dateTo together activate both date filter branches", () => {
+    render(<AuditViewer />);
+
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    const fromInput = dateInputs[0] as HTMLInputElement;
+    const toInput = dateInputs[1] as HTMLInputElement;
+
+    // Set both from and to dates to cover both filter code paths
+    // Use dates that produce an empty result for deterministic assertions
+    fireEvent.change(fromInput, { target: { value: "2026-02-22" } });
+    fireEvent.change(toInput, { target: { value: "2026-02-23" } });
+
+    // All entries are before fromDate so nothing should show
+    expect(screen.getByText("No audit entries found")).toBeInTheDocument();
+
+    // Both inputs should reflect the entered values
+    expect(fromInput.value).toBe("2026-02-22");
+    expect(toInput.value).toBe("2026-02-23");
+  });
+
+  it("renders actor type badges for all four actor types (lines 455-471)", () => {
+    const { container } = render(<AuditViewer />);
+
+    // ACTOR_COLORS has entries for: admin (purple), system (blue), agent (green), user (yellow).
+    // The static data has all four actorTypes. Each actor cell renders:
+    //   - a colored circle div with an icon
+    //   - a <p> showing the actor name
+    //   - a <span> showing actorType with an inline color style
+    //
+    // admin: actorType="admin" appears in evt-001, evt-004, evt-007, evt-009
+    const adminBadges = screen.getAllByText("admin");
+    expect(adminBadges.length).toBeGreaterThanOrEqual(1);
+
+    // system: actorType="system" appears in evt-002, evt-005, evt-008
+    const systemBadges = screen.getAllByText("system");
+    expect(systemBadges.length).toBeGreaterThanOrEqual(1);
+
+    // agent: actorType="agent" appears in evt-003, evt-006
+    const agentBadges = screen.getAllByText("agent");
+    expect(agentBadges.length).toBeGreaterThanOrEqual(1);
+
+    // user: actorType="user" appears in evt-010
+    const userBadges = screen.getAllByText("user");
+    expect(userBadges.length).toBeGreaterThanOrEqual(1);
+
+    // The actor icon circles are .rounded-full divs inside td cells.
+    // The actor column is the 3rd <td> (after expand-toggle and timestamp).
+    // Each data row has exactly one circle per actor column (not severity).
+    // Severity badges are <span> not <div>, so query for div.rounded-full in td.
+    const actorCircleDivs = container.querySelectorAll("td div.rounded-full");
+    // 10 entries = 10 actor icon circles
+    expect(actorCircleDivs.length).toBe(10);
+
+    // The first entry (agent.deactivated, actorType="admin") should have admin background
+    const firstCircle = actorCircleDivs[0] as HTMLElement;
+    expect(firstCircle).toHaveStyle({ backgroundColor: "rgba(167,139,250,0.15)" });
+  });
+
+  it("actor type badge spans use inline color from ACTOR_COLORS (lines 622-627)", () => {
+    const { container } = render(<AuditViewer />);
+
+    // The actorType badge spans have class "text-[9px] font-semibold uppercase" and inline color.
+    // Severity badge spans have additional classes like "inline-flex", "rounded-full", "px-2".
+    // We can distinguish the two by querying specifically for spans that are NOT inline-flex.
+    // The actorType spans are inside a <div> with class "flex items-center gap-2" in the actor <td>.
+    // They are children of <div> elements in the actor column.
+    const actorCells = container.querySelectorAll("tbody td:nth-child(3)");
+    expect(actorCells.length).toBe(10);
+
+    // Collect all actorType spans from the actor column cells
+    const actorTypeBadgeSpans = Array.from(actorCells).map(
+      (cell) => cell.querySelector("span.font-semibold.uppercase") as HTMLElement
+    ).filter(Boolean);
+    expect(actorTypeBadgeSpans.length).toBe(10);
+
+    // First entry (evt-001, actorType "admin") — color #a78bfa
+    const firstBadge = actorTypeBadgeSpans[0];
+    expect(firstBadge.textContent).toBe("admin");
+    expect(firstBadge).toHaveStyle({ color: "#a78bfa" });
+
+    // Find "user" span (evt-010)
+    const userSpan = actorTypeBadgeSpans.find((el) => el.textContent === "user");
+    expect(userSpan).toBeTruthy();
+    expect(userSpan!).toHaveStyle({ color: "#fbbf24" });
+
+    // Find an "agent" span (evt-003 or evt-006)
+    const agentSpan = actorTypeBadgeSpans.find((el) => el.textContent === "agent");
+    expect(agentSpan).toBeTruthy();
+    expect(agentSpan!).toHaveStyle({ color: "#34d399" });
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* Severity filter pill: "All" active branch (lines 502-510)           */
+  /* Covers: sev === "All" ? "rgba(96,165,250,0.15)" : SEVERITY_STYLES[sev]?.bg ?? fallback */
+  /* ------------------------------------------------------------------ */
+
+  it("severity 'All' pill active state uses blue background (line 503 true branch)", () => {
+    const { container } = render(<AuditViewer />);
+
+    // "All" is the default severityFilter so it starts active.
+    // Its backgroundColor should be rgba(96,165,250,0.15) (the sev==="All" branch, line 503).
+    const severityPills = container.querySelectorAll<HTMLElement>(
+      "button.rounded-lg.uppercase"
+    );
+
+    // Find the "All" pill among the severity filter buttons
+    const allPill = Array.from(severityPills).find(
+      (btn) => btn.textContent?.trim() === "All"
+    ) as HTMLElement;
+    expect(allPill).toBeTruthy();
+    // JSDOM may normalize rgba spaces: "rgba(96,165,250,0.15)" or "rgba(96, 165, 250, 0.15)"
+    expect(allPill.style.backgroundColor).toMatch(/rgba\(96,\s*165,\s*250,\s*0\.15\)/);
+    // color is "#60a5fa" (the sev==="All" branch, line 509) — JSDOM may convert to rgb
+    expect(allPill.style.color).toBeTruthy();
+  });
+
+  it("severity 'warning' pill active state uses SEVERITY_STYLES bg (line 504 false branch)", () => {
+    render(<AuditViewer />);
+
+    // Click the "warning" severity pill to make it active
+    const warningBtn = screen.getAllByRole("button", { name: /^warning$/i })[0];
+    fireEvent.click(warningBtn);
+
+    // Now the warning pill is active: sev !== "All" so SEVERITY_STYLES["warning"]?.bg is used
+    // SEVERITY_STYLES.warning.bg = "rgba(251,191,36,0.1)" — JSDOM may normalize spaces
+    expect(warningBtn.style.backgroundColor).toMatch(/rgba\(251,\s*191,\s*36,\s*0\.1\)/);
+    // color = SEVERITY_STYLES["warning"]?.color = "#fbbf24" — JSDOM may convert to rgb
+    expect(warningBtn.style.color).toBeTruthy();
+  });
+
+  it("severity 'info' pill active state uses SEVERITY_STYLES color (lines 510 false branch)", () => {
+    render(<AuditViewer />);
+
+    const infoBtn = screen.getAllByRole("button", { name: /^info$/i })[0];
+    fireEvent.click(infoBtn);
+
+    // SEVERITY_STYLES.info.bg = "rgba(96,165,250,0.1)" — JSDOM may normalize spaces
+    expect(infoBtn.style.backgroundColor).toMatch(/rgba\(96,\s*165,\s*250,\s*0\.1\)/);
+    // Verify it's the non-"All" branch by checking the bg differs from the All branch value
+    expect(infoBtn.style.backgroundColor).not.toBe("");
+  });
+
+  it("severity 'critical' pill active state uses SEVERITY_STYLES (lines 504, 510)", () => {
+    render(<AuditViewer />);
+
+    const criticalBtn = screen.getAllByRole("button", { name: /^critical$/i })[0];
+    fireEvent.click(criticalBtn);
+
+    // SEVERITY_STYLES.critical.bg = "rgba(248,113,113,0.1)" — JSDOM normalizes spaces
+    expect(criticalBtn.style.backgroundColor).toMatch(/rgba\(248,\s*113,\s*113,\s*0\.1\)/);
+    // The bg should be set (non-empty), confirming the SEVERITY_STYLES branch was taken
+    expect(criticalBtn.style.backgroundColor).not.toBe("");
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* actorConfig fallback ?? ACTOR_COLORS.user (line 574)                */
+  /* The static data has all 4 known actorTypes so the fallback is never  */
+  /* reached in the normal render. We test it via the ?? path being safe. */
+  /* ------------------------------------------------------------------ */
+
+  it("ACTOR_COLORS fallback: system and agent entries render correctly without fallback (line 574)", () => {
+    const { container } = render(<AuditViewer />);
+
+    // "system" type uses ACTOR_COLORS.system — verify it's rendered correctly
+    const actorCells = container.querySelectorAll("tbody td:nth-child(3)");
+    const actorTypeBadgeSpans = Array.from(actorCells).map(
+      (cell) => cell.querySelector("span.font-semibold.uppercase") as HTMLElement
+    ).filter(Boolean);
+
+    const systemSpan = actorTypeBadgeSpans.find((el) => el.textContent === "system");
+    expect(systemSpan).toBeTruthy();
+    // ACTOR_COLORS.system.text = "#60a5fa"
+    expect(systemSpan!).toHaveStyle({ color: "#60a5fa" });
+
+    // Also verify that when "user" type is displayed (evt-010), the ACTOR_COLORS.user
+    // is used (not the fallback since "user" is a known key)
+    const userSpan = actorTypeBadgeSpans.find((el) => el.textContent === "user");
+    expect(userSpan).toBeTruthy();
+    // ACTOR_COLORS.user.text = "#fbbf24"
+    expect(userSpan!).toHaveStyle({ color: "#fbbf24" });
+  });
+
+  it("critical severity AlertTriangle icon is rendered in table rows (line 667)", () => {
+    const { container } = render(<AuditViewer />);
+
+    // Filter to critical severity entries only to verify the AlertTriangle icon renders
+    const criticalBtn = screen.getAllByRole("button", { name: /^critical$/i })[0];
+    fireEvent.click(criticalBtn);
+
+    // 2 critical entries: auth.failed and service.degraded
+    expect(screen.getByText("auth.failed")).toBeInTheDocument();
+    expect(screen.getByText("service.degraded")).toBeInTheDocument();
+
+    // AlertTriangle icon is rendered inside critical severity badges (line 667-668)
+    // The icon appears inside the <span> with class "inline-flex"
+    const tbody = container.querySelector("tbody")!;
+    const criticalBadges = within(tbody).getAllByText("critical");
+    expect(criticalBadges).toHaveLength(2);
+
+    // Each critical badge should have an AlertTriangle sibling (rendered via Lucide)
+    // We verify by checking the severity spans have children (the icon + text)
+    for (const badge of criticalBadges) {
+      // The badge <span> contains the icon SVG + the text "critical"
+      expect(badge.childNodes.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("severity pill style when active and sev is 'info': bg and color from SEVERITY_STYLES (lines 504, 510 false branch)", () => {
+    // Click 'info' pill so severityFilter === 'info' and sev === 'info'.
+    // SEVERITY_STYLES['info'] is defined so ?.bg returns "rgba(96,165,250,0.1)"
+    // and the ?? fallback is NOT taken (it's dead code when sev is a known key).
+    // This test confirms the live code path for a known key is exercised.
+    render(<AuditViewer />);
+    const infoBtn = screen.getAllByRole("button", { name: /^info$/i })[0];
+    fireEvent.click(infoBtn);
+
+    // bg should be from SEVERITY_STYLES.info.bg, not the ?? fallback
+    expect(infoBtn.style.backgroundColor).toMatch(/rgba\(96,\s*165,\s*250,\s*0\.1\)/);
+    expect(infoBtn.style.color).toBeTruthy();
+
+    // Info entries should be visible: listing.created, config.updated, etc.
+    expect(screen.getByText("listing.created")).toBeInTheDocument();
+  });
+
+  it("all four actorTypes render correctly proving ?? fallback is not needed (line 574 defensive code)", () => {
+    // ACTOR_COLORS has keys: admin, system, agent, user.
+    // All static entries use these keys, so the ?? fallback is never reached.
+    // This test documents that all known actorTypes render correctly.
+    const { container } = render(<AuditViewer />);
+
+    // Verify all 4 actorType badge spans are rendered with correct colors
+    const actorCells = container.querySelectorAll("tbody td:nth-child(3)");
+    const actorTypeBadgeSpans = Array.from(actorCells).map(
+      (cell) => cell.querySelector("span.font-semibold.uppercase") as HTMLElement,
+    ).filter(Boolean);
+
+    // Each of the 4 known actorTypes should be present
+    const types = actorTypeBadgeSpans.map((el) => el.textContent);
+    expect(types).toContain("admin");
+    expect(types).toContain("system");
+    expect(types).toContain("agent");
+    expect(types).toContain("user");
+
+    // Confirm all 10 actor circles are rendered (one per entry)
+    const actorCircles = container.querySelectorAll("td div.rounded-full");
+    expect(actorCircles.length).toBe(10);
+  });
 });

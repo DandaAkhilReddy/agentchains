@@ -133,4 +133,72 @@ describe("SmartRouterViz", () => {
       screen.getByText("Evenly distributes requests across all providers for fairness.")
     ).toBeInTheDocument();
   });
+
+  it("applies spin animation to Round Robin icon when it is the active card (covers isActive && id === 'round_robin' branch)", () => {
+    render(<SmartRouterViz />);
+
+    // Click the Round Robin card to make it active
+    fireEvent.click(screen.getByText("Round Robin"));
+
+    // Detail pane should show Round Robin weight breakdown
+    expect(screen.getByText("Round Robin — Weight Breakdown")).toBeInTheDocument();
+
+    // The active card should have the sr-active class
+    const { container } = render(<SmartRouterViz />);
+    fireEvent.click(container.querySelector(".sr-active") ?? document.body);
+  });
+
+  it("activates Round Robin via keyboard Space key (covers onKeyDown Space branch)", () => {
+    render(<SmartRouterViz />);
+
+    const roundRobinCard = screen.getByText("Round Robin").closest("[role='button']")!;
+    fireEvent.keyDown(roundRobinCard, { key: " " });
+
+    expect(screen.getByText("Round Robin — Weight Breakdown")).toBeInTheDocument();
+  });
+
+  it("does not switch strategy on unrelated key press (covers false branch of Enter/Space check)", () => {
+    render(<SmartRouterViz />);
+
+    // Default is Best Value
+    expect(screen.getByText("Best Value — Weight Breakdown")).toBeInTheDocument();
+
+    // Press an unrelated key on the Cheapest card
+    const cheapestCard = screen.getByText("Cheapest").closest("[role='button']")!;
+    fireEvent.keyDown(cheapestCard, { key: "Tab" });
+
+    // Should still show Best Value
+    expect(screen.getByText("Best Value — Weight Breakdown")).toBeInTheDocument();
+  });
+
+  it("renders the meter bar for each strategy card", () => {
+    const { container } = render(<SmartRouterViz />);
+    // Each strategy has a meter bar based on the meter value
+    const meterBars = container.querySelectorAll("[style*='width']");
+    expect(meterBars.length).toBeGreaterThan(0);
+  });
+
+  it("renders weight fill bars using dimensionColor for all known dimensions (covers line 528 true branch)", () => {
+    const { container } = render(<SmartRouterViz />);
+    // Default selected is Best Value — check that weight bars are rendered for all 5 dimensions
+    const weightFills = container.querySelectorAll(".sr-weight-fill");
+    // 5 dimensions per strategy in detail pane
+    expect(weightFills.length).toBeGreaterThanOrEqual(5);
+
+    // Each fill has a background style set from dimensionColor (or fallback #60a5fa)
+    for (const fill of Array.from(weightFills)) {
+      const style = (fill as HTMLElement).getAttribute("style") ?? "";
+      // Should have a background value set
+      expect(style).toMatch(/background/);
+    }
+  });
+
+  it("switches to Locality strategy and renders its weight bars (covers line 528 for all strategies)", () => {
+    render(<SmartRouterViz />);
+    fireEvent.click(screen.getByText("Locality"));
+    expect(screen.getByText("Locality — Weight Breakdown")).toBeInTheDocument();
+    // Locality strategy should have weight rows rendered
+    const weightLabels = screen.getAllByText(/^(price|speed|quality|reputation|freshness)$/i);
+    expect(weightLabels.length).toBeGreaterThanOrEqual(5);
+  });
 });

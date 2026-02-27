@@ -21,7 +21,7 @@ Unlike the quick pre-commit `code-reviewer`, you perform deep analysis:
 
 ## Process
 
-1. Run `git diff --staged` or `git diff main...HEAD` to see all changes
+1. Run `git diff --staged` or `git diff master...HEAD` to see all changes
 2. Read each changed file in full (not just the diff) for context
 3. Cross-reference with related files (models, schemas, tests)
 4. Produce a structured review

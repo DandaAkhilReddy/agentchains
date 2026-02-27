@@ -520,3 +520,116 @@ describe("useExecutions", () => {
     expect(secondUrl).toContain("page=2");
   });
 });
+
+// ─────────────────────────────────────────
+// getV3 helper — branch coverage (line 62)
+// ─────────────────────────────────────────
+
+describe("getV3 helper — branch coverage", () => {
+  test("omits empty-string q param from URL (covers if (params) true + filter branch)", async () => {
+    // q="" is falsy → passes as undefined → getV3 skips it from URL
+    mockFetchSuccess(actionsResponse);
+
+    renderHook(() => useActions("", undefined, undefined, 1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(global.fetch as ReturnType<typeof vi.fn>).toHaveBeenCalled(),
+    );
+
+    const url = (global.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as string;
+    // empty string q is coerced to undefined via `q || undefined` in the hook
+    expect(url).not.toContain("q=");
+    expect(url).toContain("page=1");
+  });
+
+  test("getV3 is called with params object when page_size is always included (covers if (params) true branch)", async () => {
+    // Even with all filters undefined, params object is still passed.
+    // This ensures the `if (params)` branch (line 62) is entered.
+    mockFetchSuccess(actionsResponse);
+
+    renderHook(() => useActions(undefined, undefined, undefined, 1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(global.fetch as ReturnType<typeof vi.fn>).toHaveBeenCalled(),
+    );
+
+    const url = (global.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as string;
+    // page and page_size should be in the URL (non-undefined values)
+    expect(url).toContain("page_size=12");
+  });
+
+  test("omits null param from URL — covers v !== null false branch at line 64", async () => {
+    // The getV3 helper guards: v !== undefined && v !== null && v !== ""
+    // Passing null as maxPrice exercises the v !== null check (null is skipped).
+    // TypeScript types maxPrice as number|undefined, but at runtime null can arrive.
+    mockFetchSuccess(actionsResponse);
+
+    renderHook(() => useActions(undefined, undefined, null as unknown as number, 1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(global.fetch as ReturnType<typeof vi.fn>).toHaveBeenCalled(),
+    );
+
+    const url = (global.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as string;
+    // null maxPrice should NOT appear in the URL (v !== null branch filters it out)
+    expect(url).not.toContain("max_price=");
+    expect(url).toContain("page=1");
+    expect(url).toContain("page_size=12");
+  });
+
+  test("getV3 if(params) false branch is dead code — all call sites always pass params (line 62 documentation)", async () => {
+    // getV3 accepts params as optional, but every call site in this file passes
+    // a params object (including page/page_size). The `if (params)` false branch
+    // is structurally unreachable through the exported hooks.
+    // We verify that useActions always includes page_size in the URL (params is truthy).
+    mockFetchSuccess(actionsResponse);
+
+    renderHook(() => useActions(undefined, undefined, undefined, 1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(global.fetch as ReturnType<typeof vi.fn>).toHaveBeenCalled(),
+    );
+
+    const url = (global.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as string;
+    // Params object was passed (page_size appears) — confirms if(params) true branch
+    expect(url).toContain("page_size=12");
+  });
+
+  test("postV3 error path covered via useExecuteAction throwing (covers if (!res.ok) in postV3)", async () => {
+    // This covers the error branch inside postV3 (line ~82 of useActions.ts)
+    mockFetchError(422, "Unprocessable Entity");
+
+    const { result } = renderHook(() => useExecuteAction(), {
+      wrapper: createWrapper(),
+    });
+
+    const onError = vi.fn();
+
+    await act(async () => {
+      result.current.mutate(
+        {
+          actionId: "bad-action",
+          payload: { parameters: {}, consent: true },
+        },
+        { onError },
+      );
+    });
+
+    await waitFor(() => expect(onError).toHaveBeenCalled());
+
+    const err = onError.mock.calls[0][0] as Error;
+    expect(err.message).toBe("API 422: Unprocessable Entity");
+  });
+});

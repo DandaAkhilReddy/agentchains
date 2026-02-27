@@ -549,7 +549,7 @@ class TestGRPCServer:
         context = MagicMock()
         result = await svc.HealthCheck(request, context)
         assert result["status"] == "ok"
-        assert "uptime_seconds" in result
+        assert "version" in result
 
 
 # ============================================================================

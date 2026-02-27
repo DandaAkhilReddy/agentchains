@@ -147,4 +147,38 @@ describe("AnimatedCounter", () => {
     expect(span?.className).toContain("font-mono");
     expect(span?.className).toContain("text-[#e2e8f0]");
   });
+
+  it("cleanup runs without cancelling rAF when delta=0 (covers line 43: if (frameRef.current) false branch)", () => {
+    // When value=0 (initial) and value doesn't change, delta=0 so the effect
+    // returns early before calling requestAnimationFrame. frameRef.current stays 0.
+    // On unmount the cleanup runs with frameRef.current=0 (falsy), so
+    // cancelAnimationFrame is NOT called — this covers the false branch.
+    const { unmount } = render(<AnimatedCounter value={0} />);
+
+    // No rAF should have been requested (delta=0)
+    expect(window.requestAnimationFrame).not.toHaveBeenCalled();
+
+    // Unmount triggers the cleanup — frameRef.current is 0, so no cancel
+    expect(() => unmount()).not.toThrow();
+    expect(window.cancelAnimationFrame).not.toHaveBeenCalled();
+  });
+
+  it("cleanup cancels rAF when animation is in progress (covers line 43: if (frameRef.current) TRUE branch)", () => {
+    // When value is non-zero, delta !== 0 so requestAnimationFrame IS called.
+    // frameRef.current holds the rAF id (non-zero / truthy).
+    // If the component unmounts before the animation completes,
+    // the cleanup function runs with frameRef.current truthy →
+    // cancelAnimationFrame IS called — this covers the TRUE branch at line 43.
+    const { unmount } = render(<AnimatedCounter value={100} />);
+
+    // rAF should have been queued (delta = 100 - 0 = 100 ≠ 0)
+    expect(window.requestAnimationFrame).toHaveBeenCalledTimes(1);
+
+    // Unmount BEFORE flushing animation — frameRef.current is the rAF id (truthy)
+    unmount();
+
+    // cancelAnimationFrame should have been called with the rAF id
+    expect(window.cancelAnimationFrame).toHaveBeenCalledTimes(1);
+    expect(window.cancelAnimationFrame).toHaveBeenCalledWith(1);
+  });
 });

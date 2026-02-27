@@ -106,4 +106,47 @@ describe("ExecutionHistory", () => {
     const dashes = screen.getAllByText("--");
     expect(dashes.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("uses pending style for unknown/custom status via fallback (covers StatusBadge fallback branch)", () => {
+    const execWithUnknownStatus: Execution[] = [
+      {
+        id: "exec-unknown-status-001",
+        action_id: "action-x",
+        status: "unknown_status" as Execution["status"],
+        amount: 0.5,
+        created_at: "2026-01-15T09:00:00Z",
+        proof_verified: false,
+      },
+    ];
+    render(<ExecutionHistory executions={execWithUnknownStatus} />);
+    // Should render without crashing — uses pending fallback style
+    expect(screen.getByText("unknown_status")).toBeInTheDocument();
+    // The "--" placeholder for unverified proof
+    expect(screen.getByText("--")).toBeInTheDocument();
+  });
+
+  it("renders proof_verified=true badge with verified text and proof_verified=false with '--'", () => {
+    const executions: Execution[] = [
+      {
+        id: "exec-verified-001-xxxx",
+        action_id: "action-v",
+        status: "completed",
+        amount: 1.0,
+        created_at: "2026-01-15T10:00:00Z",
+        proof_verified: true,
+      },
+      {
+        id: "exec-notverified-002-x",
+        action_id: "action-nv",
+        status: "completed",
+        amount: 0.5,
+        created_at: "2026-01-15T09:00:00Z",
+        proof_verified: false,
+      },
+    ];
+    render(<ExecutionHistory executions={executions} />);
+
+    expect(screen.getByText("Verified")).toBeInTheDocument();
+    expect(screen.getByText("--")).toBeInTheDocument();
+  });
 });

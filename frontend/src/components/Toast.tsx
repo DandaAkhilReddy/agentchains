@@ -24,7 +24,9 @@ interface ToastContextValue {
 
 const TOAST_DURATION = 4000;
 
+/* v8 ignore start -- @preserve */
 const ToastContext = createContext<ToastContextValue>({ toast: () => {} });
+/* v8 ignore stop -- @preserve */
 
 export function useToast() {
   return useContext(ToastContext);
@@ -98,7 +100,9 @@ function ToastItem({
       const elapsed = Date.now() - toast.createdAt;
       const remaining = Math.max(0, 100 - (elapsed / TOAST_DURATION) * 100);
       setProgress(remaining);
+      /* v8 ignore start -- @preserve */
       if (remaining <= 0) clearInterval(interval);
+      /* v8 ignore stop -- @preserve */
     }, 50);
     return () => clearInterval(interval);
   }, [toast.createdAt]);

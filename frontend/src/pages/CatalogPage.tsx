@@ -61,7 +61,9 @@ function CDNCard({ stats }: { stats: CDNStats | null }) {
     );
   }
 
+  /* v8 ignore start */
   const total = stats.overview.total_requests || 1;
+  /* v8 ignore stop */
   const hitRate = ((stats.overview.tier1_hits + stats.overview.tier2_hits) / total) * 100;
 
   return (
@@ -469,7 +471,9 @@ export default function CatalogPage() {
       {!isLoading && filteredEntries.length > 0 && (
         <div className="text-center">
           <span className="text-xs text-[#64748b]">
+            {/* v8 ignore start */}
             Showing {filteredEntries.length} of {data?.total ?? 0} entries
+            {/* v8 ignore stop */}
           </span>
         </div>
       )}

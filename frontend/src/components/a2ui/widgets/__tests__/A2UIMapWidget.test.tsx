@@ -117,4 +117,122 @@ describe("A2UIMapWidget", () => {
     // 9 horizontal + 15 vertical + 2 crosshair = 26
     expect(lines.length).toBeGreaterThanOrEqual(24);
   });
+
+  it("hovering a marker list item sets hoveredMarker (lines 265-266)", () => {
+    const markers: MapMarker[] = [
+      { id: "hover-test", latitude: 40.7128, longitude: -74.006, label: "HoverCity" },
+    ];
+    const { container } = render(
+      <A2UIMapWidget {...defaultProps} markers={markers} />
+    );
+
+    // The marker list items have onMouseEnter/onMouseLeave handlers.
+    // Find the list item container div (it has a specific class pattern).
+    const listItem = container.querySelector(
+      ".flex.items-center.gap-3.rounded-lg"
+    ) as HTMLElement;
+    expect(listItem).toBeInTheDocument();
+
+    // Fire mouseEnter to cover line 265: onMouseEnter={() => setHoveredMarker(m.id)}
+    fireEvent.mouseEnter(listItem);
+
+    // Fire mouseLeave to cover line 266: onMouseLeave={() => setHoveredMarker(null)}
+    fireEvent.mouseLeave(listItem);
+
+    // Component should still render without error
+    expect(screen.getByText("HoverCity")).toBeInTheDocument();
+  });
+
+  it("hovering SVG marker group sets hoveredMarker (lines 180-181)", () => {
+    const markers: MapMarker[] = [
+      { id: "svg-hover-test", latitude: 40.7128, longitude: -74.006, label: "SVG City", color: "#00ff00" },
+    ];
+    const { container } = render(
+      <A2UIMapWidget {...defaultProps} markers={markers} />
+    );
+
+    // SVG marker groups are <g> elements inside the SVG map area
+    const svg = container.querySelector('svg[viewBox="0 0 100 60"]') as SVGElement;
+    expect(svg).toBeInTheDocument();
+
+    // Find the <g> elements that have the style cursor:pointer (marker groups)
+    const markerGroups = svg.querySelectorAll("g[style]");
+    expect(markerGroups.length).toBeGreaterThan(0);
+
+    const firstMarkerGroup = markerGroups[0] as SVGGElement;
+
+    // Fire mouseEnter to cover line 180: onMouseEnter={() => setHoveredMarker(m.id)}
+    fireEvent.mouseEnter(firstMarkerGroup);
+
+    // Fire mouseLeave to cover line 181: onMouseLeave={() => setHoveredMarker(null)}
+    fireEvent.mouseLeave(firstMarkerGroup);
+
+    // Should still display correctly
+    expect(screen.getByText("Markers (1)")).toBeInTheDocument();
+  });
+
+  it("hovering SVG marker shows tooltip label when marker has a label", () => {
+    const markers: MapMarker[] = [
+      { id: "labeled-marker", latitude: 40.7128, longitude: -74.006, label: "Labeled Pin" },
+    ];
+    const { container } = render(
+      <A2UIMapWidget {...defaultProps} markers={markers} />
+    );
+
+    const svg = container.querySelector('svg[viewBox="0 0 100 60"]') as SVGElement;
+    const markerGroups = svg.querySelectorAll("g[style]");
+    const firstMarkerGroup = markerGroups[0] as SVGGElement;
+
+    // Hover the marker — should trigger hoveredMarker state, which renders the label tooltip
+    fireEvent.mouseEnter(firstMarkerGroup);
+
+    // After hover, the label tooltip <text> should appear in the SVG
+    const svgTexts = svg.querySelectorAll("text");
+    expect(svgTexts.length).toBeGreaterThan(0);
+
+    fireEvent.mouseLeave(firstMarkerGroup);
+  });
+
+  it("renders marker with default color when color is not specified", () => {
+    const markers: MapMarker[] = [
+      { id: "no-color-marker", latitude: 35.0, longitude: 139.0 },
+    ];
+    const { container } = render(
+      <A2UIMapWidget {...defaultProps} markers={markers} />
+    );
+
+    // Default color (#f87171) should be applied to the marker dot in the list
+    const markerDot = container.querySelector(
+      ".h-2\\.5.w-2\\.5.flex-shrink-0.rounded-full"
+    ) as HTMLElement;
+    expect(markerDot).toBeInTheDocument();
+    expect(markerDot.style.backgroundColor).toBe("rgb(248, 113, 113)");
+  });
+
+  it("hovering multiple markers in the list updates state correctly", () => {
+    const markers: MapMarker[] = [
+      { id: "m1", latitude: 40.0, longitude: -73.0, label: "Alpha" },
+      { id: "m2", latitude: 51.0, longitude: -0.1, label: "Beta" },
+    ];
+    const { container } = render(
+      <A2UIMapWidget {...defaultProps} markers={markers} />
+    );
+
+    const listItems = container.querySelectorAll(
+      ".flex.items-center.gap-3.rounded-lg"
+    );
+    expect(listItems.length).toBe(2);
+
+    // Hover first item — both markers are always in the DOM (list), so getAllByText
+    fireEvent.mouseEnter(listItems[0]);
+    expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1);
+
+    // Hover second item
+    fireEvent.mouseEnter(listItems[1]);
+    expect(screen.getAllByText("Beta").length).toBeGreaterThanOrEqual(1);
+
+    // Leave second item
+    fireEvent.mouseLeave(listItems[1]);
+    expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1);
+  });
 });

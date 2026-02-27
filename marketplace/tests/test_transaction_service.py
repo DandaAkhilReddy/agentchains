@@ -1,4 +1,4 @@
-"""Unit tests for the transaction service — purchase flow engine.
+"""Unit tests for the transaction service â€” purchase flow engine.
 
 Tests use in-memory SQLite via conftest fixtures.
 broadcast_event is imported lazily inside try/except blocks so no mocking needed.
@@ -187,7 +187,7 @@ async def test_deliver_content_seller_only(
 async def test_deliver_content_non_seller_403(
     db: AsyncSession, make_agent, make_listing, seed_platform
 ):
-    """Non-seller cannot deliver content — raises 403."""
+    """Non-seller cannot deliver content â€” raises 403."""
     seller, _ = await make_agent("seller", "seller")
     buyer, _ = await make_agent("buyer", "buyer")
     other, _ = await make_agent("other", "seller")
@@ -233,7 +233,7 @@ async def test_verify_delivery_hash_match_completed(
     seller, _ = await make_agent("seller", "seller")
     buyer, _ = await make_agent("buyer", "buyer")
 
-    # Create listing with known content — hash is auto-computed by fixture
+    # Create listing with known content â€” hash is auto-computed by fixture
     content = "Test content"
     listing = await make_listing(seller.id, price_usdc=1.0, content=content)
     result = await transaction_service.initiate_transaction(db, listing.id, buyer.id)
@@ -286,7 +286,7 @@ async def test_verify_delivery_increments_access_count(
     seller, _ = await make_agent("seller", "seller")
     buyer, _ = await make_agent("buyer", "buyer")
 
-    # Create listing with matching content — hash is auto-computed by fixture
+    # Create listing with matching content â€” hash is auto-computed by fixture
     content = "Valid content"
     listing = await make_listing(seller.id, price_usdc=1.0, content=content)
     initial_count = listing.access_count
@@ -306,7 +306,7 @@ async def test_verify_delivery_increments_access_count(
 async def test_verify_delivery_buyer_only(
     db: AsyncSession, make_agent, make_listing, seed_platform
 ):
-    """Only the buyer can verify delivery — raises 403."""
+    """Only the buyer can verify delivery â€” raises 403."""
     seller, _ = await make_agent("seller", "seller")
     buyer, _ = await make_agent("buyer", "buyer")
     other, _ = await make_agent("other", "buyer")
@@ -474,7 +474,7 @@ async def test_transaction_flow_end_to_end(
     seller, _ = await make_agent("seller", "seller")
     buyer, _ = await make_agent("buyer", "buyer")
 
-    # Create listing with known content — hash is auto-computed by fixture
+    # Create listing with known content â€” hash is auto-computed by fixture
     content = "End to end test content"
     listing = await make_listing(seller.id, price_usdc=5.0, content=content)
 
@@ -506,3 +506,117 @@ async def test_transaction_flow_end_to_end(
     final_tx = await transaction_service.get_transaction(db, tx_id)
     assert final_tx.status == "completed"
     assert final_tx.verification_status == "verified"
+
+
+# ---------------------------------------------------------------------------
+# Additional tests for uncovered lines
+# ---------------------------------------------------------------------------
+
+
+async def test_confirm_payment_buyer_id_mismatch(
+    db: AsyncSession, make_agent, make_listing, seed_platform
+):
+    """confirm_payment raises AuthorizationError when buyer_id does not match (line 80)."""
+    seller, _ = await make_agent("seller", "seller")
+    buyer, _ = await make_agent("buyer", "buyer")
+    other, _ = await make_agent("other", "buyer")
+    listing = await make_listing(seller.id, price_usdc=1.0)
+    result = await transaction_service.initiate_transaction(db, listing.id, buyer.id)
+    tx_id = result["transaction_id"]
+
+    with pytest.raises(AuthorizationError, match="Not the buyer"):
+        await transaction_service.confirm_payment(db, tx_id, buyer_id=other.id)
+
+
+async def test_confirm_payment_verification_failure(
+    db: AsyncSession, make_agent, make_listing, seed_platform
+):
+    """confirm_payment with failing payment verification sets status=failed (lines 94-98)."""
+    from unittest.mock import patch
+    seller, _ = await make_agent("seller", "seller")
+    buyer, _ = await make_agent("buyer", "buyer")
+    listing = await make_listing(seller.id, price_usdc=1.0)
+    result = await transaction_service.initiate_transaction(db, listing.id, buyer.id)
+    tx_id = result["transaction_id"]
+
+    mock_result = {"verified": False, "error": "Invalid signature"}
+    with patch("marketplace.services.transaction_service.payment_service") as mock_ps:
+        mock_ps.build_payment_requirements.return_value = {
+            "pay_to_address": "0x0", "network": "base-sepolia",
+            "asset": "USDC", "amount_usdc": 1.0, "simulated": False,
+        }
+        mock_ps.verify_payment.return_value = mock_result
+        tx = await transaction_service.confirm_payment(db, tx_id, payment_signature="bad_sig")
+
+    assert tx.status == "failed"
+    assert tx.error_message == "Invalid signature"
+
+
+async def test_verify_delivery_null_hashes(
+    db: AsyncSession, make_agent, make_listing, seed_platform
+):
+    """verify_delivery when both hashes are None -> matches=False -> disputed (line 162)."""
+    seller, _ = await make_agent("seller", "seller")
+    buyer, _ = await make_agent("buyer", "buyer")
+    listing = await make_listing(seller.id, price_usdc=1.0)
+    result = await transaction_service.initiate_transaction(db, listing.id, buyer.id)
+    tx_id = result["transaction_id"]
+    await transaction_service.confirm_payment(db, tx_id)
+
+    # Manually deliver and clear hashes to trigger line 162
+    tx = await transaction_service.get_transaction(db, tx_id)
+    tx.status = "delivered"
+    tx.delivered_hash = ""
+    tx.content_hash = ""
+    tx.delivered_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(tx)
+
+    tx = await transaction_service.verify_delivery(db, tx_id, buyer.id)
+    assert tx.status == "disputed"
+    assert tx.verification_status == "failed"
+
+
+async def test_get_transaction_for_agent_unauthorized(
+    db: AsyncSession, make_agent, make_listing, seed_platform
+):
+    """get_transaction_for_agent raises when agent is not buyer/seller (lines 204-207)."""
+    seller, _ = await make_agent("seller", "seller")
+    buyer, _ = await make_agent("buyer", "buyer")
+    outsider, _ = await make_agent("outsider", "buyer")
+    listing = await make_listing(seller.id, price_usdc=1.0)
+    result = await transaction_service.initiate_transaction(db, listing.id, buyer.id)
+    tx_id = result["transaction_id"]
+
+    with pytest.raises(AuthorizationError, match="Not a party"):
+        await transaction_service.get_transaction_for_agent(db, tx_id, outsider.id)
+
+
+async def test_get_transaction_for_agent_as_buyer(
+    db: AsyncSession, make_agent, make_listing, seed_platform
+):
+    """get_transaction_for_agent succeeds for buyer (lines 204-207)."""
+    seller, _ = await make_agent("seller", "seller")
+    buyer, _ = await make_agent("buyer", "buyer")
+    listing = await make_listing(seller.id, price_usdc=1.0)
+    result = await transaction_service.initiate_transaction(db, listing.id, buyer.id)
+    tx_id = result["transaction_id"]
+
+    tx = await transaction_service.get_transaction_for_agent(db, tx_id, buyer.id)
+    assert tx.id == tx_id
+    assert tx.buyer_id == buyer.id
+
+
+async def test_get_transaction_for_agent_as_seller(
+    db: AsyncSession, make_agent, make_listing, seed_platform
+):
+    """get_transaction_for_agent succeeds for seller (lines 204-207)."""
+    seller, _ = await make_agent("seller", "seller")
+    buyer, _ = await make_agent("buyer", "buyer")
+    listing = await make_listing(seller.id, price_usdc=1.0)
+    result = await transaction_service.initiate_transaction(db, listing.id, buyer.id)
+    tx_id = result["transaction_id"]
+
+    tx = await transaction_service.get_transaction_for_agent(db, tx_id, seller.id)
+    assert tx.id == tx_id
+    assert tx.seller_id == seller.id

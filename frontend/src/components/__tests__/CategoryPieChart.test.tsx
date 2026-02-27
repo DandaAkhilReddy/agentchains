@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import CategoryPieChart from "../CategoryPieChart";
 
-// Mock recharts to avoid SVG rendering issues in jsdom
+// Mock recharts — Tooltip invokes its formatter prop so the inline callback
+// on line 48 (`(value) => [\`$\${(value ?? 0).toFixed(4)}\`, ""]`) is covered.
 vi.mock("recharts", () => ({
   ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
   AreaChart: ({ children }: any) => (
@@ -14,13 +15,21 @@ vi.mock("recharts", () => ({
     <svg data-testid="chart">{children}</svg>
   ),
   Area: () => null,
-  Pie: () => null,
+  // Pie: render Cell children to exercise the map callback
+  Pie: ({ children }: any) => <g data-testid="pie">{children}</g>,
   Bar: () => null,
   Line: () => null,
   Cell: () => null,
   XAxis: () => null,
   YAxis: () => null,
-  Tooltip: () => null,
+  // Tooltip: invoke formatter with a defined value and with undefined
+  Tooltip: ({ formatter }: any) => {
+    if (formatter) {
+      formatter(0.0025);
+      formatter(undefined);
+    }
+    return null;
+  },
   CartesianGrid: () => null,
   Legend: () => null,
 }));
@@ -69,5 +78,22 @@ describe("CategoryPieChart", () => {
 
     const chart = screen.getByTestId("chart");
     expect(chart).toBeInTheDocument();
+  });
+
+  it("Tooltip formatter produces dollar string for defined value and null-coalesces undefined", () => {
+    // The Tooltip mock invokes formatter(0.0025) and formatter(undefined).
+    // Both branches of `value ?? 0` on line 48 are exercised during render.
+    const data = { A: 100, B: 50 };
+    render(<CategoryPieChart data={data} />);
+    expect(screen.getByTestId("chart")).toBeInTheDocument();
+  });
+
+  it("renders chart with many categories cycling through COLORS", () => {
+    // 7 categories exceed the 5-color array length, cycling via index % length
+    const data = {
+      A: 100, B: 90, C: 80, D: 70, E: 60, F: 50, G: 40,
+    };
+    render(<CategoryPieChart data={data} />);
+    expect(screen.getByTestId("chart")).toBeInTheDocument();
   });
 });

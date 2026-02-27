@@ -523,3 +523,114 @@ class TestCancelExecution:
             result = await cancel_execution(db, "nonexistent-id", buyer.id)
 
             assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Additional tests for uncovered lines
+# ---------------------------------------------------------------------------
+
+from unittest.mock import patch, MagicMock
+from marketplace.services.action_executor import _validate_domain_lock, _validate_tool_lock
+
+
+class TestValidateDomainLockEmpty:
+    """domain_lock=[] allows all domains (line 61 return)."""
+
+    @pytest.mark.asyncio
+    async def test_empty_domain_lock_returns_none(self):
+        listing = MagicMock()
+        listing.domain_lock = json.dumps([])
+        tool = MagicMock()
+        tool.domain = "anything.com"
+        # Should not raise
+        _validate_domain_lock(listing, tool)
+
+
+class TestValidateToolLockTampered:
+    """Tool schema hash mismatch raises ValueError (line 64)."""
+
+    @pytest.mark.asyncio
+    async def test_schema_hash_mismatch_raises(self):
+        tool = MagicMock()
+        tool.schema_hash = "original_hash_123"
+        with pytest.raises(ValueError, match="Tool Lock violation"):
+            _validate_tool_lock(tool, {"type": "object", "properties": {"different": {}}})
+
+
+class TestExecuteActionInactiveListing:
+    """Inactive listing raises ValueError (line 83)."""
+
+    @pytest.mark.asyncio
+    async def test_inactive_listing_raises(self):
+        async with TestSession() as db:
+            creator = await _create_creator(db)
+            seller = await _create_agent(db)
+            buyer = await _create_agent(db)
+            tool, listing = await _setup_tool_and_listing(db, creator, seller)
+            # Deactivate the listing
+            from marketplace.services import webmcp_service
+            listing_orm = await webmcp_service.get_action_listing_orm(db, listing["id"])
+            listing_orm.status = "inactive"
+            await db.commit()
+            with pytest.raises(ValueError, match="not active"):
+                await execute_action(db, listing["id"], buyer.id, {}, consent=True)
+
+
+class TestExecuteActionToolNotFound:
+    """Missing tool raises ValueError (line 87)."""
+
+    @pytest.mark.asyncio
+    async def test_missing_tool_raises(self):
+        async with TestSession() as db:
+            creator = await _create_creator(db)
+            seller = await _create_agent(db)
+            buyer = await _create_agent(db)
+            tool, listing = await _setup_tool_and_listing(db, creator, seller)
+            # Delete the tool record
+            listing_orm = await webmcp_service.get_action_listing_orm(db, listing["id"])
+            listing_orm.tool_id = "nonexistent-tool-id"
+            await db.commit()
+            with pytest.raises(ValueError, match="not found"):
+                await execute_action(db, listing["id"], buyer.id, {}, consent=True)
+
+
+class TestExecuteActionFailurePath:
+    """Test execution failure path (lines 165-181)."""
+
+    @pytest.mark.asyncio
+    async def test_execution_failure_releases_payment(self):
+        async with TestSession() as db:
+            creator = await _create_creator(db)
+            seller = await _create_agent(db)
+            buyer = await _create_agent(db)
+            tool, listing = await _setup_tool_and_listing(db, creator, seller)
+            # Patch _simulate_tool_execution to raise an exception
+            with patch("marketplace.services.action_executor._simulate_tool_execution") as mock_sim:
+                mock_sim.side_effect = RuntimeError("Simulated tool crash")
+                result = await execute_action(
+                    db, listing["id"], buyer.id, {"q": "test"}, consent=True,
+                )
+            assert result["status"] == "failed"
+            assert result["error_message"] == "Simulated tool crash"
+            assert result["payment_status"] == "released"
+            assert result["completed_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_execution_failure_updates_tool_success_rate(self):
+        async with TestSession() as db:
+            creator = await _create_creator(db)
+            seller = await _create_agent(db)
+            buyer = await _create_agent(db)
+            tool, listing = await _setup_tool_and_listing(db, creator, seller)
+            # First do a successful execution to set execution_count > 0
+            await execute_action(db, listing["id"], buyer.id, {"q": "ok"}, consent=True)
+            # Now do a failing execution
+            with patch("marketplace.services.action_executor._simulate_tool_execution") as mock_sim:
+                mock_sim.side_effect = RuntimeError("Crash")
+                result = await execute_action(
+                    db, listing["id"], buyer.id, {"q": "fail"}, consent=True,
+                )
+            assert result["status"] == "failed"
+            # Tool execution_count should be 2 (1 success + 1 failure)
+            updated_tool = await webmcp_service.get_tool(db, tool["id"])
+            assert updated_tool["execution_count"] == 2

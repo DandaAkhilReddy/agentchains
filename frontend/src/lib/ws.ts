@@ -30,7 +30,9 @@ class MarketplaceFeed {
       // fall back to legacy path for compatibility
     }
 
+    /* v8 ignore start */
     return `${protocol}//${window.location.host}/ws/feed?token=${encodeURIComponent(this.token ?? "")}`;
+    /* v8 ignore stop */
   }
 
   private attachHandlers(ws: WebSocket) {

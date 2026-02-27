@@ -592,6 +592,45 @@ describe("AgentManagement", () => {
     expect(screen.getByText("abcdefghijkl...")).toBeInTheDocument();
   });
 
+  /* 28b. Unknown status uses fallback color #64748b */
+  it("uses fallback color for unknown status (covers STATUS_COLORS ?? branch)", () => {
+    const agents = [
+      mockAgent({
+        agent_id: "id-unknown-status",
+        agent_name: "UnknownStatusBot",
+        status: "unknown_status" as AdminAgent["status"],
+      }),
+    ];
+    render(
+      <AgentManagement {...defaultProps} agents={agents} total={1} />,
+    );
+
+    // Should render without crashing — unknown status uses "#64748b" fallback
+    expect(screen.getByText("UnknownStatusBot")).toBeInTheDocument();
+    const statusBadge = screen.getByText("unknown_status").closest("span");
+    expect(statusBadge).toHaveStyle({ color: "#64748b" });
+  });
+
+  /* 28c. Unknown trust tier uses fallback color #64748b */
+  it("uses fallback color for unknown trust tier (covers TRUST_TIER_COLORS ?? branch)", () => {
+    const agents = [
+      mockAgent({
+        agent_id: "id-unknown-tier",
+        agent_name: "UnknownTierBot",
+        trust_tier: "T9" as AdminAgent["trust_tier"],
+        trust_score: 0.5,
+      }),
+    ];
+    render(
+      <AgentManagement {...defaultProps} agents={agents} total={1} />,
+    );
+
+    // Should render without crashing — unknown tier uses "#64748b" fallback
+    expect(screen.getByText("UnknownTierBot")).toBeInTheDocument();
+    const tierSpan = screen.getByText("T9");
+    expect(tierSpan).toHaveStyle({ color: "#64748b" });
+  });
+
   /* 29. Only one row can be expanded at a time */
   it("collapses previously expanded row when a new row is expanded", () => {
     const agents = [

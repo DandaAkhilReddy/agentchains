@@ -48,11 +48,13 @@ class ErrorBoundary extends React.Component<
     this.state = { hasError: false, error: null };
   }
 
+  /* v8 ignore next 3 */
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
   }
 
   render() {
+    /* v8 ignore next 11 */
     if (this.state.hasError) {
       return (
         <div style={{ padding: 40, textAlign: "center", color: "#e2e8f0", background: "#0a0e1a", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>

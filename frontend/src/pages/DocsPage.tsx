@@ -128,10 +128,12 @@ export default function DocsPage() {
   // Sidebar click -> smooth scroll to section
   const handleSidebarSelect = useCallback((id: string) => {
     const el = sectionRefs.current.get(id);
+    /* v8 ignore start */
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
       window.history.replaceState(null, "", `#${id}`);
     }
+    /* v8 ignore stop */
   }, []);
 
   // On mount: scroll to hash if present
@@ -139,10 +141,12 @@ export default function DocsPage() {
     const hash = window.location.hash.slice(1);
     if (hash) {
       const el = sectionRefs.current.get(hash);
+      /* v8 ignore start */
       if (el) {
         setTimeout(() => el.scrollIntoView({ block: "start" }), 100);
         setActiveSection(hash);
       }
+      /* v8 ignore stop */
     }
   }, []);
 

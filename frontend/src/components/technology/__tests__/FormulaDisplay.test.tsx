@@ -115,4 +115,44 @@ describe("FormulaDisplay", () => {
     expect(pill.style.backgroundColor).toBe("rgba(239, 68, 68, 0.1)");
     expect(pill.style.color).toBe("rgb(239, 68, 68)");
   });
+
+  it("ComputedRow returns null when bonus term has no value (covers line 53 return null branch)", () => {
+    // When hasValues=true (main term has a value) but bonus term has no value,
+    // ComputedRow for the bonus term returns null
+    const terms: FormulaTerm[] = [
+      { weight: 0.5, label: "Quality", value: 0.8, color: "#3b82f6" },
+    ];
+    const bonusWithoutValue: FormulaTerm[] = [
+      { weight: 0.1, label: "Bonus", color: "#d97706" },
+      // No value on this bonus term → ComputedRow returns null for it
+    ];
+    const { container } = render(
+      <FormulaDisplay terms={terms} bonusTerms={bonusWithoutValue} />,
+    );
+
+    // The computed row section IS rendered (because Quality has a value)
+    const computedRow = container.querySelector(".pl-\\[3\\.25rem\\]");
+    expect(computedRow).not.toBeNull();
+
+    // Bonus term computed value should NOT appear (it's null/undefined)
+    // Quality computed: 0.5 * 0.8 = 0.4
+    expect(screen.getByText("= 0.4")).toBeInTheDocument();
+
+    // No computed value for Bonus (no value provided)
+    // But the "+" prefix in TermItem still shows for bonus in the formula row
+    expect(screen.getByText(/Bonus/)).toBeInTheDocument();
+  });
+
+  it("renders multiple terms with separating plus signs between them", () => {
+    const terms: FormulaTerm[] = [
+      { weight: 0.3, label: "A", color: "#3b82f6" },
+      { weight: 0.3, label: "B", color: "#22c55e" },
+      { weight: 0.4, label: "C", color: "#f59e0b" },
+    ];
+    render(<FormulaDisplay terms={terms} />);
+
+    // Two "+" signs appear between 3 terms (i > 0 branch)
+    const plusSigns = screen.getAllByText("+");
+    expect(plusSigns.length).toBeGreaterThanOrEqual(2);
+  });
 });

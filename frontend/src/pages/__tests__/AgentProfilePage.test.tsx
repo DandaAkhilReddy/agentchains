@@ -304,4 +304,193 @@ describe("AgentProfilePage", () => {
     expect(screen.getByText("$0.4567")).toBeInTheDocument();
     expect(screen.getByText("$0.7778")).toBeInTheDocument();
   });
+
+  it("shows 'Agent Profile' fallback subtitle when primary_specialization is absent (line 56)", () => {
+    // Tests the `primary_specialization || "Agent Profile"` fallback
+    const profileWithNoSpec: AgentProfile = {
+      ...mockProfile,
+      primary_specialization: undefined as any,
+    };
+
+    vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
+      token: "test-jwt",
+      login: vi.fn(),
+      logout: vi.fn(),
+      isAuthenticated: true,
+    });
+    vi.spyOn(useAnalyticsModule, "useAgentProfile").mockReturnValue({
+      data: profileWithNoSpec,
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.spyOn(useAnalyticsModule, "useMyEarnings").mockReturnValue({
+      data: mockEarnings,
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderWithProviders(
+      <AgentProfilePage agentId="agent-001" onBack={mockOnBack} />,
+    );
+
+    // The "Agent Profile" fallback subtitle should be rendered
+    expect(screen.getByText("Agent Profile")).toBeInTheDocument();
+  });
+
+  it("shows text-danger class when net revenue is negative (line 142 false branch)", () => {
+    // Tests `profile.total_earned_usdc - profile.total_spent_usdc >= 0 ? "text-success" : "text-danger"`
+    // Negative revenue: earned < spent
+    const profileNegativeNet: AgentProfile = {
+      ...mockProfile,
+      total_earned_usdc: 0.1,
+      total_spent_usdc: 1.5,
+    };
+
+    vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
+      token: "test-jwt",
+      login: vi.fn(),
+      logout: vi.fn(),
+      isAuthenticated: true,
+    });
+    vi.spyOn(useAnalyticsModule, "useAgentProfile").mockReturnValue({
+      data: profileNegativeNet,
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.spyOn(useAnalyticsModule, "useMyEarnings").mockReturnValue({
+      data: mockEarnings,
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderWithProviders(
+      <AgentProfilePage agentId="agent-001" onBack={mockOnBack} />,
+    );
+
+    // Net revenue = 0.1 - 1.5 = -1.4 → negative → "text-danger" class
+    expect(screen.getByText("$-1.4000")).toBeInTheDocument();
+    // The paragraph with the negative value should have text-danger class
+    const netRevEl = screen.getByText("$-1.4000");
+    expect(netRevEl.className).toContain("text-danger");
+  });
+
+  it("renders earnings chart with empty data when earnings is undefined (lines 153, 157)", () => {
+    // Tests: earnings?.earnings_timeline ?? [] → []
+    // and earnings?.earnings_by_category ?? {} → {}
+    vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
+      token: "test-jwt",
+      login: vi.fn(),
+      logout: vi.fn(),
+      isAuthenticated: true,
+    });
+    vi.spyOn(useAnalyticsModule, "useAgentProfile").mockReturnValue({
+      data: mockProfile,
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.spyOn(useAnalyticsModule, "useMyEarnings").mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderWithProviders(
+      <AgentProfilePage agentId="agent-001" onBack={mockOnBack} />,
+    );
+
+    // EarningsChart is mocked and receives empty array (0 points)
+    expect(screen.getByText("EarningsChart (0 points)")).toBeInTheDocument();
+    // CategoryPieChart is mocked and renders regardless
+    expect(screen.getByTestId("category-pie-chart")).toBeInTheDocument();
+  });
+
+  it("renders helpfulness rank and earnings rank when present", () => {
+    vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
+      token: "test-jwt",
+      login: vi.fn(),
+      logout: vi.fn(),
+      isAuthenticated: true,
+    });
+    vi.spyOn(useAnalyticsModule, "useAgentProfile").mockReturnValue({
+      data: mockProfile,
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.spyOn(useAnalyticsModule, "useMyEarnings").mockReturnValue({
+      data: mockEarnings,
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderWithProviders(
+      <AgentProfilePage agentId="agent-001" onBack={mockOnBack} />,
+    );
+
+    // Profile has helpfulness_rank: 3 and earnings_rank: 5
+    expect(screen.getByText("#3 helpfulness")).toBeInTheDocument();
+    expect(screen.getByText("#5 earnings")).toBeInTheDocument();
+  });
+
+  it("does not render rank spans when ranks are null", () => {
+    const profileNoRanks: AgentProfile = {
+      ...mockProfile,
+      helpfulness_rank: null as any,
+      earnings_rank: null as any,
+    };
+
+    vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
+      token: "test-jwt",
+      login: vi.fn(),
+      logout: vi.fn(),
+      isAuthenticated: true,
+    });
+    vi.spyOn(useAnalyticsModule, "useAgentProfile").mockReturnValue({
+      data: profileNoRanks,
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.spyOn(useAnalyticsModule, "useMyEarnings").mockReturnValue({
+      data: mockEarnings,
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderWithProviders(
+      <AgentProfilePage agentId="agent-001" onBack={mockOnBack} />,
+    );
+
+    expect(screen.queryByText(/#\d+ helpfulness/)).toBeNull();
+    expect(screen.queryByText(/#\d+ earnings/)).toBeNull();
+  });
+
+  it("does not render categories section when categories is empty", () => {
+    const profileNoCategories: AgentProfile = {
+      ...mockProfile,
+      categories: [],
+    };
+
+    vi.spyOn(useAuthModule, "useAuth").mockReturnValue({
+      token: "test-jwt",
+      login: vi.fn(),
+      logout: vi.fn(),
+      isAuthenticated: true,
+    });
+    vi.spyOn(useAnalyticsModule, "useAgentProfile").mockReturnValue({
+      data: profileNoCategories,
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.spyOn(useAnalyticsModule, "useMyEarnings").mockReturnValue({
+      data: mockEarnings,
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderWithProviders(
+      <AgentProfilePage agentId="agent-001" onBack={mockOnBack} />,
+    );
+
+    // No categories section when empty
+    expect(screen.queryByText("Categories")).toBeNull();
+  });
 });

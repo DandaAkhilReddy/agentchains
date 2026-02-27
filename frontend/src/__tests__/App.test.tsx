@@ -9,8 +9,40 @@ vi.mock("../pages/CatalogPage", () => ({ default: () => <div>CatalogPage</div> }
 vi.mock("../pages/WalletPage", () => ({ default: () => <div>WalletPage</div> }));
 vi.mock("../pages/IntegrationsPage", () => ({ default: () => <div>IntegrationsPage</div> }));
 vi.mock("../pages/OnboardingWizardPage", () => ({ default: () => <div>OnboardingWizardPage</div> }));
-vi.mock("../pages/CreatorLoginPage", () => ({ default: () => <div>CreatorLoginPage</div> }));
-vi.mock("../pages/CreatorDashboardPage", () => ({ default: () => <div>CreatorDashboardPage</div> }));
+vi.mock("../pages/CreatorLoginPage", () => ({
+  default: ({
+    onLogin,
+    onRegister,
+  }: {
+    onLogin: (email: string, password: string) => Promise<void>;
+    onRegister: (data: Record<string, unknown>) => Promise<void>;
+    loading: boolean;
+    error: string | null;
+  }) => (
+    <div>
+      CreatorLoginPage
+      <button onClick={() => onLogin("test@test.com", "pw")}>DoLogin</button>
+      <button onClick={() => onRegister({ email: "test@test.com" })}>DoRegister</button>
+    </div>
+  ),
+}));
+vi.mock("../pages/CreatorDashboardPage", () => ({
+  default: ({
+    onNavigate,
+    onLogout,
+  }: {
+    token: string;
+    creatorName: string;
+    onNavigate: (t: string) => void;
+    onLogout: () => void;
+  }) => (
+    <div>
+      CreatorDashboardPage
+      <button onClick={() => onNavigate("wallet")}>GoWallet</button>
+      <button onClick={onLogout}>DoLogout</button>
+    </div>
+  ),
+}));
 vi.mock("../pages/RedemptionPage", () => ({ default: () => <div>RedemptionPage</div> }));
 vi.mock("../pages/PipelinePage", () => ({ default: () => <div>PipelinePage</div> }));
 vi.mock("../pages/DocsPage", () => ({ default: () => <div>DocsPage</div> }));
@@ -55,7 +87,7 @@ vi.mock("../components/Shell", () => ({
 }));
 
 vi.mock("../components/Sidebar", () => ({
-  default: ({ activeTab, onTabChange }: { activeTab: string; onTabChange: (t: string) => void; mobileOpen: boolean; onMobileClose: () => void }) => (
+  default: ({ activeTab, onTabChange, onMobileClose }: { activeTab: string; onTabChange: (t: string) => void; mobileOpen: boolean; onMobileClose: () => void }) => (
     <nav data-testid="sidebar" data-active={activeTab}>
       <button onClick={() => onTabChange("dashboard")}>Dashboard</button>
       <button onClick={() => onTabChange("agents")}>Agents</button>
@@ -78,6 +110,7 @@ vi.mock("../components/Sidebar", () => ({
       <button onClick={() => onTabChange("agentDashboard")}>AgentDashboard</button>
       <button onClick={() => onTabChange("adminDashboard")}>AdminDashboard</button>
       <button onClick={() => onTabChange("actions")}>Actions</button>
+      <button data-testid="mobile-close" onClick={onMobileClose}>CloseMobile</button>
     </nav>
   ),
 }));
@@ -88,8 +121,8 @@ vi.mock("../components/Toast", () => ({
   ),
 }));
 
-vi.mock("../hooks/useCreatorAuth", () => ({
-  useCreatorAuth: () => ({
+const mockUseCreatorAuth = vi.hoisted(() =>
+  vi.fn().mockReturnValue({
     token: null,
     creator: null,
     isAuthenticated: false,
@@ -99,10 +132,29 @@ vi.mock("../hooks/useCreatorAuth", () => ({
     register: vi.fn(),
     logout: vi.fn(),
   }),
+);
+
+vi.mock("../hooks/useCreatorAuth", () => ({
+  useCreatorAuth: mockUseCreatorAuth,
 }));
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 function renderApp() {
+  return render(<App />);
+}
+
+function renderAppAuthenticated(overrides: Record<string, unknown> = {}) {
+  mockUseCreatorAuth.mockReturnValue({
+    token: "jwt-test-token",
+    creator: { display_name: "Test Admin" },
+    isAuthenticated: true,
+    loading: false,
+    error: null,
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+    ...overrides,
+  });
   return render(<App />);
 }
 
@@ -338,5 +390,316 @@ describe("App ErrorBoundary", () => {
     renderApp();
     expect(screen.getByTestId("sidebar")).toBeInTheDocument();
     expect(screen.getByTestId("shell")).toBeInTheDocument();
+  });
+});
+
+// ── Authenticated state tests ────────────────────────────────────────────────
+describe("App — authenticated creator", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset to default unauthenticated state before each test
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+  });
+
+  it("shows AdminDashboardPage for adminDashboard tab when authenticated", async () => {
+    renderAppAuthenticated();
+    fireEvent.click(screen.getByText("AdminDashboard"));
+    await waitFor(() => {
+      expect(screen.getByText("AdminDashboardPage")).toBeInTheDocument();
+    });
+  });
+
+  it("shows OnboardingWizardPage for onboarding tab when authenticated", async () => {
+    renderAppAuthenticated();
+    fireEvent.click(screen.getByText("Onboarding"));
+    await waitFor(() => {
+      expect(screen.getByText("OnboardingWizardPage")).toBeInTheDocument();
+    });
+  });
+
+  it("shows CreatorDashboardPage for creator tab when authenticated", async () => {
+    renderAppAuthenticated();
+    fireEvent.click(screen.getByText("Creator"));
+    await waitFor(() => {
+      expect(screen.getByText("CreatorDashboardPage")).toBeInTheDocument();
+    });
+  });
+
+  it("shows RedemptionPage for redeem tab when authenticated", async () => {
+    renderAppAuthenticated();
+    fireEvent.click(screen.getByText("Redeem"));
+    await waitFor(() => {
+      expect(screen.getByText("RedemptionPage")).toBeInTheDocument();
+    });
+  });
+
+  it("uses creator display_name in AdminDashboardPage when authenticated", async () => {
+    // AdminDashboardPage is mocked so we just verify it renders (not the prop value)
+    renderAppAuthenticated({ creator: { display_name: "MyAdmin" } });
+    fireEvent.click(screen.getByText("AdminDashboard"));
+    await waitFor(() => {
+      expect(screen.getByText("AdminDashboardPage")).toBeInTheDocument();
+    });
+  });
+
+  it("falls back to 'Admin' display_name when creator has no display_name", async () => {
+    renderAppAuthenticated({ creator: null });
+    fireEvent.click(screen.getByText("AdminDashboard"));
+    await waitFor(() => {
+      expect(screen.getByText("AdminDashboardPage")).toBeInTheDocument();
+    });
+  });
+
+  it("falls back to 'Creator' display_name when creator has no display_name on creator tab", async () => {
+    renderAppAuthenticated({ creator: null });
+    fireEvent.click(screen.getByText("Creator"));
+    await waitFor(() => {
+      expect(screen.getByText("CreatorDashboardPage")).toBeInTheDocument();
+    });
+  });
+
+  it("mobile menu toggle changes mobileMenuOpen state", () => {
+    renderAppAuthenticated();
+    const menuBtn = screen.getByTestId("menu-toggle");
+    fireEvent.click(menuBtn);
+    expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+    // close
+    fireEvent.click(menuBtn);
+    expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+  });
+
+  it("navigates to dashboard via RoleLandingPage onNavigate callback when authenticated", async () => {
+    renderAppAuthenticated();
+    await waitFor(() => screen.getByText("Go Dashboard"));
+    fireEvent.click(screen.getByText("Go Dashboard"));
+    await waitFor(() => {
+      expect(screen.getByText("DashboardPage")).toBeInTheDocument();
+    });
+  });
+
+  it("onMobileClose callback sets mobileMenuOpen to false (line 91)", () => {
+    renderAppAuthenticated();
+    const menuBtn = screen.getByTestId("menu-toggle");
+    // Open mobile menu
+    fireEvent.click(menuBtn);
+    // Close via onMobileClose (exposed as CloseMobile button in Sidebar mock)
+    fireEvent.click(screen.getByTestId("mobile-close"));
+    expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+  });
+
+  it("DashboardPage onNavigate callback changes active tab (line 101)", async () => {
+    renderAppAuthenticated();
+    fireEvent.click(screen.getByText("Dashboard"));
+    await waitFor(() => screen.getByText("DashboardPage"));
+    fireEvent.click(screen.getByText("Go Agents"));
+    await waitFor(() => {
+      expect(screen.getByText("AgentsPage")).toBeInTheDocument();
+    });
+  });
+
+  it("calls creatorAuth.login via CreatorLoginPage on onboarding tab when unauthenticated (line 147)", async () => {
+    const loginFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: loginFn,
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("Onboarding"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoLogin"));
+    await waitFor(() => {
+      expect(loginFn).toHaveBeenCalledWith("test@test.com", "pw");
+    });
+  });
+
+  it("calls creatorAuth.login when CreatorLoginPage DoLogin is clicked (unauthenticated creator tab)", async () => {
+    const loginFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: loginFn,
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("Creator"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoLogin"));
+    await waitFor(() => {
+      expect(loginFn).toHaveBeenCalledWith("test@test.com", "pw");
+    });
+  });
+
+  it("calls creatorAuth.register when CreatorLoginPage DoRegister is clicked (unauthenticated onboarding tab)", async () => {
+    const registerFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: vi.fn(),
+      register: registerFn,
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("Onboarding"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoRegister"));
+    await waitFor(() => {
+      expect(registerFn).toHaveBeenCalledWith({ email: "test@test.com" });
+    });
+  });
+
+  it("calls creatorAuth.register via CreatorLoginPage on creator tab when unauthenticated", async () => {
+    const registerFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: vi.fn(),
+      register: registerFn,
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("Creator"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoRegister"));
+    await waitFor(() => {
+      expect(registerFn).toHaveBeenCalledWith({ email: "test@test.com" });
+    });
+  });
+
+  it("calls creatorAuth.register via CreatorLoginPage on redeem tab when unauthenticated", async () => {
+    const registerFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: vi.fn(),
+      register: registerFn,
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("Redeem"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoRegister"));
+    await waitFor(() => {
+      expect(registerFn).toHaveBeenCalledWith({ email: "test@test.com" });
+    });
+  });
+
+  it("calls creatorAuth.register via CreatorLoginPage on adminDashboard tab when unauthenticated", async () => {
+    const registerFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: vi.fn(),
+      register: registerFn,
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("AdminDashboard"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoRegister"));
+    await waitFor(() => {
+      expect(registerFn).toHaveBeenCalledWith({ email: "test@test.com" });
+    });
+  });
+
+  it("calls creatorAuth.login via CreatorLoginPage on redeem tab when unauthenticated", async () => {
+    const loginFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: loginFn,
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("Redeem"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoLogin"));
+    await waitFor(() => {
+      expect(loginFn).toHaveBeenCalledWith("test@test.com", "pw");
+    });
+  });
+
+  it("calls creatorAuth.login via CreatorLoginPage on adminDashboard tab when unauthenticated", async () => {
+    const loginFn = vi.fn().mockResolvedValue(undefined);
+    mockUseCreatorAuth.mockReturnValue({
+      token: null,
+      creator: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      login: loginFn,
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("AdminDashboard"));
+    await waitFor(() => screen.getByText("CreatorLoginPage"));
+    fireEvent.click(screen.getByText("DoLogin"));
+    await waitFor(() => {
+      expect(loginFn).toHaveBeenCalledWith("test@test.com", "pw");
+    });
+  });
+
+  it("CreatorDashboardPage onNavigate prop changes active tab when authenticated", async () => {
+    renderAppAuthenticated();
+    fireEvent.click(screen.getByText("Creator"));
+    await waitFor(() => screen.getByText("CreatorDashboardPage"));
+    fireEvent.click(screen.getByText("GoWallet"));
+    await waitFor(() => {
+      expect(screen.getByText("WalletPage")).toBeInTheDocument();
+    });
+  });
+
+  it("CreatorDashboardPage onLogout prop calls creatorAuth.logout when authenticated", async () => {
+    const logoutFn = vi.fn();
+    mockUseCreatorAuth.mockReturnValue({
+      token: "jwt-test-token",
+      creator: { display_name: "Test Creator" },
+      isAuthenticated: true,
+      loading: false,
+      error: null,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: logoutFn,
+    });
+    render(<App />);
+    fireEvent.click(screen.getByText("Creator"));
+    await waitFor(() => screen.getByText("CreatorDashboardPage"));
+    fireEvent.click(screen.getByText("DoLogout"));
+    expect(logoutFn).toHaveBeenCalledTimes(1);
   });
 });

@@ -193,10 +193,10 @@ class TestSettingsAuthAndInfra:
 
     @pytest.mark.asyncio
     async def test_settings_jwt_defaults(self):
-        """JWT should default to HS256 algorithm with 168-hour (7-day) expiry."""
+        """JWT should default to HS256 algorithm with 1-hour expiry."""
         s = Settings()
         assert s.jwt_algorithm == "HS256"
-        assert s.jwt_expire_hours == 168
+        assert s.jwt_expire_hours == 1
         assert s.jwt_secret_key == "dev-secret-change-in-production"
 
     @pytest.mark.asyncio

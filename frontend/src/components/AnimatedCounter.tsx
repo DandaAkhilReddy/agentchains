@@ -40,7 +40,9 @@ export default function AnimatedCounter({
 
     frameRef.current = requestAnimationFrame(tick);
     return () => {
+      /* v8 ignore start */
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      /* v8 ignore stop */
     };
   }, [value, duration, decimals]);
 

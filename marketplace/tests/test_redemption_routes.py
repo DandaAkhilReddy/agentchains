@@ -15,6 +15,7 @@ from marketplace.core.creator_auth import create_creator_token, hash_password
 from marketplace.models.creator import Creator
 from marketplace.models.redemption import ApiCreditBalance, RedemptionRequest
 from marketplace.models.token_account import TokenAccount
+from marketplace.config import settings
 from marketplace.tests.conftest import TestSession, _new_id
 
 
@@ -489,15 +490,19 @@ async def test_admin_approve_gift_card(client):
     assert create_resp.status_code == 201
     redemption_id = create_resp.json()["id"]
 
-    # Admin approve
-    approve_resp = await client.post(
-        f"{BASE}/admin/{redemption_id}/approve",
-        headers={"Authorization": f"Bearer {jwt}"},
-        json={"admin_notes": "Approved by admin"},
-    )
-    assert approve_resp.status_code == 200
-    data = approve_resp.json()
-    assert data["status"] == "processing"
+    original = settings.admin_creator_ids
+    try:
+        object.__setattr__(settings, "admin_creator_ids", creator_id)
+        approve_resp = await client.post(
+            f"{BASE}/admin/{redemption_id}/approve",
+            headers={"Authorization": f"Bearer {jwt}"},
+            json={"admin_notes": "Approved by admin"},
+        )
+        assert approve_resp.status_code == 200
+        data = approve_resp.json()
+        assert data["status"] == "processing"
+    finally:
+        object.__setattr__(settings, "admin_creator_ids", original)
 
 
 # ---------------------------------------------------------------------------
@@ -521,20 +526,22 @@ async def test_admin_reject_with_refund(client):
     balance_after = await _get_balance(creator_id)
     assert balance_after == pytest.approx(19.0, abs=0.01)
 
-    # Admin reject
-    reject_resp = await client.post(
-        f"{BASE}/admin/{redemption_id}/reject",
-        headers={"Authorization": f"Bearer {jwt}"},
-        json={"reason": "Suspicious activity"},
-    )
-    assert reject_resp.status_code == 200
-    data = reject_resp.json()
-    assert data["status"] == "rejected"
-    assert data["rejection_reason"] == "Suspicious activity"
-
-    # Balance should be restored
-    balance_restored = await _get_balance(creator_id)
-    assert balance_restored == pytest.approx(20.0, abs=0.01)
+    original = settings.admin_creator_ids
+    try:
+        object.__setattr__(settings, "admin_creator_ids", creator_id)
+        reject_resp = await client.post(
+            f"{BASE}/admin/{redemption_id}/reject",
+            headers={"Authorization": f"Bearer {jwt}"},
+            json={"reason": "Suspicious activity"},
+        )
+        assert reject_resp.status_code == 200
+        data = reject_resp.json()
+        assert data["status"] == "rejected"
+        assert data["rejection_reason"] == "Suspicious activity"
+        balance_restored = await _get_balance(creator_id)
+        assert balance_restored == pytest.approx(20.0, abs=0.01)
+    finally:
+        object.__setattr__(settings, "admin_creator_ids", original)
 
 
 # ---------------------------------------------------------------------------
@@ -634,3 +641,120 @@ async def test_api_credits_adds_credits(client):
         )
         credit_bal = result.scalar_one()
         assert int(credit_bal.credits_remaining) > first_credits
+
+
+async def test_admin_approve_no_admin_configured(client):
+    creator_id, jwt = await _seed_creator(balance=20.0)
+    create_resp = await client.post(BASE, json={"redemption_type": "gift_card", "amount_usd": 1.0}, headers=_auth(jwt))
+    assert create_resp.status_code == 201
+    rid = create_resp.json()["id"]
+    original = settings.admin_creator_ids
+    try:
+        object.__setattr__(settings, "admin_creator_ids", "")
+        resp = await client.post(f"{BASE}/admin/{rid}/approve", headers=_auth(jwt), json={"admin_notes": ""})
+        assert resp.status_code == 403
+        assert "No admin accounts configured" in resp.json()["detail"]
+    finally:
+        object.__setattr__(settings, "admin_creator_ids", original)
+
+
+async def test_admin_approve_non_admin_rejected(client):
+    creator_id, jwt = await _seed_creator(balance=20.0)
+    create_resp = await client.post(BASE, json={"redemption_type": "gift_card", "amount_usd": 1.0}, headers=_auth(jwt))
+    rid = create_resp.json()["id"]
+    original = settings.admin_creator_ids
+    try:
+        object.__setattr__(settings, "admin_creator_ids", "other-admin-id")
+        resp = await client.post(f"{BASE}/admin/{rid}/approve", headers=_auth(jwt), json={"admin_notes": ""})
+        assert resp.status_code == 403
+        assert "Admin access required" in resp.json()["detail"]
+    finally:
+        object.__setattr__(settings, "admin_creator_ids", original)
+
+
+async def test_admin_reject_no_admin_configured(client):
+    creator_id, jwt = await _seed_creator(balance=20.0)
+    create_resp = await client.post(BASE, json={"redemption_type": "gift_card", "amount_usd": 1.0}, headers=_auth(jwt))
+    rid = create_resp.json()["id"]
+    original = settings.admin_creator_ids
+    try:
+        object.__setattr__(settings, "admin_creator_ids", "")
+        resp = await client.post(f"{BASE}/admin/{rid}/reject", headers=_auth(jwt), json={"reason": "bad"})
+        assert resp.status_code == 403
+        assert "No admin accounts configured" in resp.json()["detail"]
+    finally:
+        object.__setattr__(settings, "admin_creator_ids", original)
+
+
+async def test_admin_reject_non_admin_rejected(client):
+    creator_id, jwt = await _seed_creator(balance=20.0)
+    create_resp = await client.post(BASE, json={"redemption_type": "gift_card", "amount_usd": 1.0}, headers=_auth(jwt))
+    rid = create_resp.json()["id"]
+    original = settings.admin_creator_ids
+    try:
+        object.__setattr__(settings, "admin_creator_ids", "other-admin-id")
+        resp = await client.post(f"{BASE}/admin/{rid}/reject", headers=_auth(jwt), json={"reason": "nope"})
+        assert resp.status_code == 403
+        assert "Admin access required" in resp.json()["detail"]
+    finally:
+        object.__setattr__(settings, "admin_creator_ids", original)
+
+
+async def test_admin_approve_nonexistent(client):
+    creator_id, jwt = await _seed_creator(balance=20.0)
+    original = settings.admin_creator_ids
+    try:
+        object.__setattr__(settings, "admin_creator_ids", creator_id)
+        resp = await client.post(f"{BASE}/admin/nonexistent/approve", headers=_auth(jwt), json={"admin_notes": ""})
+        assert resp.status_code == 400
+    finally:
+        object.__setattr__(settings, "admin_creator_ids", original)
+
+
+async def test_admin_reject_nonexistent(client):
+    creator_id, jwt = await _seed_creator(balance=20.0)
+    original = settings.admin_creator_ids
+    try:
+        object.__setattr__(settings, "admin_creator_ids", creator_id)
+        resp = await client.post(f"{BASE}/admin/nonexistent/reject", headers=_auth(jwt), json={"reason": "x"})
+        assert resp.status_code == 400
+    finally:
+        object.__setattr__(settings, "admin_creator_ids", original)
+
+
+async def test_get_single_redemption_direct(db):
+    """Call get_redemption directly to cover lines 87-93."""
+    from marketplace.api.redemptions import get_redemption
+    from fastapi import Response, HTTPException
+    import pytest as pt
+    creator_id, jwt = await _seed_creator(balance=10.0)
+
+    # Create a redemption first
+    from marketplace.services import redemption_service
+    from marketplace.tests.conftest import TestSession
+    async with TestSession() as s:
+        result = await redemption_service.create_redemption(s, creator_id, "api_credits", 0.10, "USD")
+        rid = result["id"]
+
+    resp = Response()
+    auth = f"Bearer {jwt}"
+    r = await get_redemption(resp, rid, db, auth)
+    assert r["id"] == rid
+
+    # Nonexistent ID raises 404
+    with pt.raises(HTTPException) as exc_info:
+        await get_redemption(resp, "nonexistent", db, auth)
+    assert exc_info.value.status_code == 404
+
+
+async def test_cancel_redemption_error_direct(db):
+    """Call cancel_redemption directly with bad ID to cover lines 104-109."""
+    from marketplace.api.redemptions import cancel_redemption
+    from fastapi import Response, HTTPException
+    import pytest as pt
+    creator_id, jwt = await _seed_creator(balance=10.0)
+    resp = Response()
+    auth = f"Bearer {jwt}"
+    with pt.raises(HTTPException) as exc_info:
+        await cancel_redemption(resp, "nonexistent", db, auth)
+    assert exc_info.value.status_code == 400

@@ -511,4 +511,39 @@ describe("AgentsPage", () => {
 
     expect(screen.getByText("3 agents")).toBeInTheDocument();
   });
+
+  it("uses AVATAR_GRADIENTS.seller fallback when agent_type is unknown (covers line 30: ?? branch)", () => {
+    // An agent with agent_type not in AVATAR_GRADIENTS triggers the ?? fallback
+    const unknownTypeAgent: Agent = {
+      id: "agent-999",
+      name: "Mystery Agent",
+      description: "Has unknown type",
+      agent_type: "orchestrator" as any, // not in AVATAR_GRADIENTS dictionary
+      wallet_address: "0xdeadbeef",
+      capabilities: ["routing"],
+      a2a_endpoint: "https://api.example.com/agent999",
+      status: "active",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      last_seen_at: null,
+    };
+
+    vi.spyOn(useAgentsHook, "useAgents").mockReturnValue({
+      data: {
+        total: 1,
+        page: 1,
+        page_size: 20,
+        agents: [unknownTypeAgent],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    // Should render without crashing; the ?? fallback provides "seller" gradient
+    renderWithProviders(<AgentsPage />);
+
+    expect(screen.getByText("Mystery Agent")).toBeInTheDocument();
+    expect(screen.getByText("orchestrator")).toBeInTheDocument();
+  });
 });

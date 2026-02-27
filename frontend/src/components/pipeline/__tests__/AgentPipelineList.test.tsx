@@ -161,4 +161,43 @@ describe("AgentPipelineList", () => {
     // Idle agent dot should be gray
     expect(dots[2].className).toContain("bg-[#64748b]");
   });
+
+  it("displays relative time as minutes ago (line 83: diff < 3600000)", () => {
+    // 5 minutes ago
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    render(
+      <AgentPipelineList
+        executions={[makeExecution({ agentId: "a1", lastActivityAt: fiveMinutesAgo })]}
+        selectedId={null}
+        onSelect={vi.fn()}
+      />
+    );
+    expect(screen.getByText("5m ago")).toBeInTheDocument();
+  });
+
+  it("displays relative time as hours ago (line 84: diff < 86400000)", () => {
+    // 3 hours ago
+    const threeHoursAgo = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+    render(
+      <AgentPipelineList
+        executions={[makeExecution({ agentId: "a1", lastActivityAt: threeHoursAgo })]}
+        selectedId={null}
+        onSelect={vi.fn()}
+      />
+    );
+    expect(screen.getByText("3h ago")).toBeInTheDocument();
+  });
+
+  it("displays relative time as days ago (line 85: >= 86400000)", () => {
+    // 2 days ago
+    const twoDaysAgo = new Date(Date.now() - 2 * 86400 * 1000).toISOString();
+    render(
+      <AgentPipelineList
+        executions={[makeExecution({ agentId: "a1", lastActivityAt: twoDaysAgo })]}
+        selectedId={null}
+        onSelect={vi.fn()}
+      />
+    );
+    expect(screen.getByText("2d ago")).toBeInTheDocument();
+  });
 });

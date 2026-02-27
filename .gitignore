@@ -68,3 +68,9 @@ CLAUDE.local.md
 # Keys (never commit private keys)
 *.pem
 !*.pem.example
+
+# Claude Code local settings (may contain credential-bearing allow rules)
+.claude/settings.local.json
+
+# Test artifacts
+invoices/

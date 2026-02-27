@@ -10,7 +10,7 @@ Claude Code configuration for the AgentChains project.
   settings.local.json   # Personal permissions (gitignored)
   hooks.json            # Pre-commit and session hooks
   agents/               # Agent definitions
-    code-reviewer.md    # Quick pre-commit review (/agents/code-reviewer)
+    code-reviewer.md    # Quick pre-commit review (/review-code)
     planner.md          # Feature planning (/agents/planner)
     implementer.md      # Code implementation (/agents/implementer)
     reviewer.md         # Deep PR-style review (/agents/reviewer)
@@ -23,12 +23,10 @@ Claude Code configuration for the AgentChains project.
     write-tests.md      # /write-tests
     verify-build.md     # /verify-build
   rules/                # Context-triggered rules (activate by file glob)
-    python-style.md     # Python code conventions
-    commit-conventions.md  # Git commit format
-    error-handling.md   # Error handling patterns
-    api-design.md       # REST API conventions
-    agent-patterns.md   # AI agent patterns
-    testing.md          # Test conventions
+    api-design.md       # REST API conventions (project-specific)
+    agent-patterns.md   # AI agent patterns (project-specific)
+    # Python style, commit conventions, error handling, and testing
+    # rules are defined globally in ~/.claude/rules/
   hooks/                # Hook scripts
     validate-python.sh  # Ruff lint check on staged Python files
 ```
@@ -42,7 +40,7 @@ Claude Code configuration for the AgentChains project.
 | `/review-code` | Comprehensive code review |
 | `/write-tests` | Generate tests for a module |
 | `/verify-build` | Run full lint + test + build pipeline |
-| `/agents/code-reviewer` | Quick pre-commit review |
+| `/review-code` | Quick pre-commit review |
 
 ## How Rules Work
 

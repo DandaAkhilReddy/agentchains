@@ -244,4 +244,28 @@ describe("CreatorLoginPage", () => {
       });
     });
   });
+
+  it("register passes country as undefined when country select is empty (covers line 24: country || undefined)", async () => {
+    mockOnRegister.mockResolvedValue(undefined);
+    render(<CreatorLoginPage {...defaultProps} />);
+
+    fireEvent.click(screen.getByText("Don't have an account? Sign up"));
+
+    fireEvent.change(screen.getByPlaceholderText("Your Name"), { target: { value: "Alice" } });
+    fireEvent.change(screen.getByPlaceholderText("you@example.com"), { target: { value: "alice@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("Min. 8 characters"), { target: { value: "password123" } });
+    // Clear the country select to empty string to trigger the `country || undefined` false branch
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+    await waitFor(() => {
+      expect(mockOnRegister).toHaveBeenCalledWith({
+        email: "alice@example.com",
+        password: "password123",
+        display_name: "Alice",
+        phone: undefined,
+        country: undefined,
+      });
+    });
+  });
 });

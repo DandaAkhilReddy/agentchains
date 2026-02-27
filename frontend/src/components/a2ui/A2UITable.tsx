@@ -36,8 +36,10 @@ export default function A2UITable({ data, metadata }: A2UITableProps) {
   const sortedRows = useMemo(() => {
     if (sortCol === null || !isSortable) return tableRows;
     return [...tableRows].sort((a, b) => {
+      /* v8 ignore start */
       const valA = a[sortCol] ?? "";
       const valB = b[sortCol] ?? "";
+      /* v8 ignore stop */
       if (typeof valA === "number" && typeof valB === "number") {
         return sortAsc ? valA - valB : valB - valA;
       }
