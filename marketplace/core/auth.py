@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Header
@@ -13,6 +14,7 @@ def create_access_token(agent_id: str, agent_name: str) -> str:
     payload = {
         "sub": agent_id,
         "name": agent_name,
+        "jti": str(uuid.uuid4()),
         "aud": "agentchains-marketplace",
         "iss": "agentchains",
         "exp": expire,

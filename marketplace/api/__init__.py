@@ -50,6 +50,10 @@ from . import (
     wallet,
     webhooks,
     zkp,
+    v2_api_keys,
+    v2_auth,
+    v2_auth_events,
+    v2_roles,
 )
 from .integrations import openclaw as openclaw_integration
 
@@ -97,6 +101,10 @@ API_V2_ROUTERS: tuple[APIRouter, ...] = (
     v2_sellers.router,
     v2_users.router,
     v2_verification.router,
+    v2_roles.router,
+    v2_api_keys.router,
+    v2_auth.router,
+    v2_auth_events.router,
 )
 
 API_V3_PREFIX = "/api/v3"

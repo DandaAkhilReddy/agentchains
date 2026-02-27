@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
+from marketplace.core.auth_context import AuthContext
+from marketplace.core.trust_gate import require_trust_tier
 from marketplace.database import get_db
 from marketplace.schemas.listing import (
     ListingCreateRequest,
@@ -20,6 +22,7 @@ async def create_listing(
     req: ListingCreateRequest,
     db: AsyncSession = Depends(get_db),
     current_agent: str = Depends(get_current_agent_id),
+    _trust: AuthContext = Depends(require_trust_tier("T1")),
 ):
     listing = await listing_service.create_listing(db, current_agent, req)
     return _listing_to_response(listing)
