@@ -55,6 +55,7 @@ from marketplace.models.chain_provenance import ChainProvenanceEntry
 from marketplace.models.chain_policy import ChainPolicy
 from marketplace.models.webhook_v2 import DeadLetterEntry, DeliveryAttempt
 from marketplace.models.billing import BillingPlan, Subscription, UsageMeter, Invoice
+from marketplace.models.judge import JudgeEvaluation, JudgePipelineRun
 
 __all__ = [
     "RegisteredAgent",
@@ -116,4 +117,6 @@ __all__ = [
     "ChainExecution",
     "ChainProvenanceEntry",
     "ChainPolicy",
+    "JudgeEvaluation",
+    "JudgePipelineRun",
 ]
