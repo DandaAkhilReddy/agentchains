@@ -8,6 +8,20 @@ auth error flows. Every test targets a single negative code path.
 import uuid
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from marketplace.models.agent_trust import AgentTrustProfile
+
+
+async def _set_trust_tier(db: AsyncSession, agent_id: str, tier: str = "T1") -> None:
+    """Insert an AgentTrustProfile row so the agent meets the required trust tier."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -50,13 +64,14 @@ def _valid_agent_payload(**overrides) -> dict:
 # ===========================================================================
 
 @pytest.mark.asyncio
-async def test_listing_invalid_category_422(client, make_agent, auth_header):
+async def test_listing_invalid_category_422(client, make_agent, auth_header, db):
     """POST /listings with category='invalid_type' must return 422.
 
     Schema: category is constrained by pattern
     ^(web_search|code_analysis|document_summary|api_response|computation)$
     """
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     payload = _valid_listing_payload(category="invalid_type")
 
     resp = await client.post(
@@ -69,12 +84,13 @@ async def test_listing_invalid_category_422(client, make_agent, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_listing_negative_price_422(client, make_agent, auth_header):
+async def test_listing_negative_price_422(client, make_agent, auth_header, db):
     """POST /listings with price_usdc=-1.0 must return 422.
 
     Schema: price_usdc = Field(..., gt=0, le=1000) — strictly greater than 0.
     """
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     payload = _valid_listing_payload(price_usdc=-1.0)
 
     resp = await client.post(
@@ -88,12 +104,13 @@ async def test_listing_negative_price_422(client, make_agent, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_listing_empty_title_422(client, make_agent, auth_header):
+async def test_listing_empty_title_422(client, make_agent, auth_header, db):
     """POST /listings with title='' must return 422.
 
     Schema: title = Field(..., min_length=1, max_length=255)
     """
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     payload = _valid_listing_payload(title="")
 
     resp = await client.post(
@@ -104,12 +121,13 @@ async def test_listing_empty_title_422(client, make_agent, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_listing_empty_content_422(client, make_agent, auth_header):
+async def test_listing_empty_content_422(client, make_agent, auth_header, db):
     """POST /listings with content='' must return 422.
 
     Schema: content = Field(..., min_length=1)
     """
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     payload = _valid_listing_payload(content="")
 
     resp = await client.post(
@@ -120,12 +138,13 @@ async def test_listing_empty_content_422(client, make_agent, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_listing_quality_above_one_422(client, make_agent, auth_header):
+async def test_listing_quality_above_one_422(client, make_agent, auth_header, db):
     """POST /listings with quality_score=1.5 must return 422.
 
     Schema: quality_score = Field(default=0.5, ge=0, le=1)
     """
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     payload = _valid_listing_payload(quality_score=1.5)
 
     resp = await client.post(
@@ -136,12 +155,13 @@ async def test_listing_quality_above_one_422(client, make_agent, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_listing_quality_below_zero_422(client, make_agent, auth_header):
+async def test_listing_quality_below_zero_422(client, make_agent, auth_header, db):
     """POST /listings with quality_score=-0.1 must return 422.
 
     Schema: quality_score = Field(default=0.5, ge=0, le=1)
     """
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     payload = _valid_listing_payload(quality_score=-0.1)
 
     resp = await client.post(
@@ -152,12 +172,13 @@ async def test_listing_quality_below_zero_422(client, make_agent, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_listing_missing_required_fields_422(client, make_agent, auth_header):
+async def test_listing_missing_required_fields_422(client, make_agent, auth_header, db):
     """POST /listings with empty JSON body must return 422.
 
     Schema requires: title, category, content, price_usdc (all Field(...)).
     """
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
 
     resp = await client.post(
         "/api/v1/listings", headers=auth_header(token), json={},
@@ -173,13 +194,14 @@ async def test_listing_missing_required_fields_422(client, make_agent, auth_head
 
 
 @pytest.mark.asyncio
-async def test_listing_extra_unknown_field_ignored(client, make_agent, auth_header):
+async def test_listing_extra_unknown_field_ignored(client, make_agent, auth_header, db):
     """POST /listings with an unknown extra field should NOT return 422.
 
     Pydantic BaseModel by default ignores extra fields (no forbid config).
     The request should succeed (201) with the extra field silently dropped.
     """
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     payload = _valid_listing_payload(totally_unknown_field="should_be_ignored")
 
     resp = await client.post(
@@ -383,7 +405,7 @@ async def test_creator_duplicate_email_409(client, make_creator):
         "/api/v1/creators/register",
         json={
             "email": "duplicate@test.com",
-            "password": "securepass123",
+            "password": "SecurePass1!",
             "display_name": "Duplicate Creator",
         },
     )

@@ -10,17 +10,32 @@ These tests exercise the full system stack with multiple services working togeth
 """
 
 import json
+import uuid
 import pytest
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from marketplace.core.exceptions import InsufficientBalanceError, ValidationError
+from marketplace.models.agent_trust import AgentTrustProfile
 from marketplace.services import listing_service, transaction_service, token_service
 from marketplace.services import express_service, demand_service, deposit_service
 from marketplace.services import registry_service, creator_service
 
 # Valid categories for listings
 VALID_CATEGORIES = ["web_search", "code_analysis", "document_summary", "api_response", "computation"]
+
+
+async def _set_trust_tier(db: AsyncSession, agent_id: str, tier: str = "T1") -> None:
+    """Insert an AgentTrustProfile row so the agent meets the required trust tier."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 # ==============================================================================
@@ -626,7 +641,7 @@ async def test_e2e_express_buy_inactive_listing_blocked(db, make_agent, make_tok
 # ==============================================================================
 
 @pytest.mark.asyncio
-async def test_e2e_http_register_and_create_listing(client, auth_header):
+async def test_e2e_http_register_and_create_listing(client, auth_header, db):
     """HTTP: Register agent → get JWT → create listing."""
     # Register agent
     register_resp = await client.post("/api/v1/agents/register", json={
@@ -640,6 +655,7 @@ async def test_e2e_http_register_and_create_listing(client, auth_header):
     data = register_resp.json()
     agent_id = data["id"]
     token = data.get("jwt_token") or data.get("token")
+    await _set_trust_tier(db, agent_id)
 
     # Create listing
     listing_resp = await client.post(
@@ -661,7 +677,7 @@ async def test_e2e_http_register_and_create_listing(client, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_e2e_http_discover_and_express_buy(client, auth_header, seed_platform):
+async def test_e2e_http_discover_and_express_buy(client, auth_header, seed_platform, db):
     """HTTP: Discover listings → express buy flow."""
     # Setup: create seller with listing
     seller_resp = await client.post("/api/v1/agents/register", json={
@@ -671,6 +687,8 @@ async def test_e2e_http_discover_and_express_buy(client, auth_header, seed_platf
     })
     seller_data = seller_resp.json()
     seller_token = seller_data.get("jwt_token") or seller_data.get("token")
+    seller_id = seller_data["id"]
+    await _set_trust_tier(db, seller_id)
 
     listing_resp = await client.post(
         "/api/v1/listings",
@@ -739,7 +757,7 @@ async def test_e2e_http_creator_workflow(client):
     email = f"creator-{datetime.now().timestamp()}@test.com"
     register_resp = await client.post("/api/v1/creators/register", json={
         "email": email,
-        "password": "testpass123",
+        "password": "SecurePass1!",
         "display_name": "HTTP Creator",
     })
     assert register_resp.status_code in [200, 201]
@@ -749,7 +767,7 @@ async def test_e2e_http_creator_workflow(client):
     # Login
     login_resp = await client.post("/api/v1/creators/login", json={
         "email": email,
-        "password": "testpass123",
+        "password": "SecurePass1!",
     })
     assert login_resp.status_code == 200
 
