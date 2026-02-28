@@ -192,7 +192,8 @@ class TestToolOperations:
         _, sid, _ = await _init_via_auth()
 
         resp = await handle_message(
-            _rpc("tools/list", {"_session_id": sid}, msg_id=2),
+            _rpc("tools/list", {}, msg_id=2),
+            session_id=sid,
         )
 
         assert "result" in resp
@@ -211,7 +212,8 @@ class TestToolOperations:
         _, sid, _ = await _init_via_auth()
 
         resp = await handle_message(
-            _rpc("tools/list", {"_session_id": sid}, msg_id=3),
+            _rpc("tools/list", {}, msg_id=3),
+            session_id=sid,
         )
 
         returned_names = {t["name"] for t in resp["result"]["tools"]}
@@ -225,10 +227,10 @@ class TestToolOperations:
 
         resp = await handle_message(
             _rpc("tools/call", {
-                "_session_id": sid,
                 "name": "nonexistent_tool_42",
                 "arguments": {},
             }, msg_id=4),
+            session_id=sid,
         )
 
         # execute_tool returns {"error": "Unknown tool: ..."} which gets JSON-serialized
@@ -246,10 +248,10 @@ class TestToolOperations:
 
         resp = await handle_message(
             _rpc("tools/call", {
-                "_session_id": sid,
                 "name": "marketplace_discover",
                 "arguments": {"q": "test", "page": 1, "page_size": 5},
             }, msg_id=5),
+            session_id=sid,
         )
 
         # In test env, tool calls that access DB may fail due to event loop mismatch;
@@ -275,10 +277,10 @@ class TestToolOperations:
 
         resp = await handle_message(
             _rpc("tools/call", {
-                "_session_id": sid,
                 "name": "marketplace_reputation",
                 "arguments": {"agent_id": str(uuid.uuid4())},
             }, msg_id=6),
+            session_id=sid,
         )
 
         assert "jsonrpc" in resp
@@ -311,7 +313,8 @@ class TestResourceOperations:
         _, sid, _ = await _init_via_auth()
 
         resp = await handle_message(
-            _rpc("resources/list", {"_session_id": sid}, msg_id=10),
+            _rpc("resources/list", {}, msg_id=10),
+            session_id=sid,
         )
 
         assert "result" in resp
@@ -330,9 +333,9 @@ class TestResourceOperations:
 
         resp = await handle_message(
             _rpc("resources/read", {
-                "_session_id": sid,
                 "uri": "marketplace://nonexistent_resource_xyz",
             }, msg_id=11),
+            session_id=sid,
         )
 
         assert "result" in resp
@@ -351,9 +354,9 @@ class TestResourceOperations:
 
         resp = await handle_message(
             _rpc("resources/read", {
-                "_session_id": sid,
                 "uri": "marketplace://catalog",
             }, msg_id=12),
+            session_id=sid,
         )
 
         assert "jsonrpc" in resp
@@ -380,9 +383,9 @@ class TestResourceOperations:
 
         resp = await handle_message(
             _rpc("resources/read", {
-                "_session_id": sid,
                 "uri": f"marketplace://agent/{fake_id}",
             }, msg_id=13),
+            session_id=sid,
         )
 
         assert "jsonrpc" in resp
@@ -415,7 +418,8 @@ class TestRateLimiting:
         # Make several calls that should all succeed
         for i in range(5):
             resp = await handle_message(
-                _rpc("ping", {"_session_id": sid}, msg_id=20 + i),
+                _rpc("ping", {}, msg_id=20 + i),
+                session_id=sid,
             )
             assert "result" in resp, f"Request {i} should succeed within rate limit"
             assert resp["result"] == {}
@@ -431,7 +435,8 @@ class TestRateLimiting:
         session.request_count = 60  # Default limit is 60/minute
 
         resp = await handle_message(
-            _rpc("ping", {"_session_id": sid}, msg_id=30),
+            _rpc("ping", {}, msg_id=30),
+            session_id=sid,
         )
 
         assert "error" in resp
@@ -471,7 +476,8 @@ class TestProtocolHandling:
         _, sid, _ = await _init_via_auth()
 
         resp = await handle_message(
-            _rpc("ping", {"_session_id": sid}, msg_id=40),
+            _rpc("ping", {}, msg_id=40),
+            session_id=sid,
         )
 
         assert resp["jsonrpc"] == "2.0"
@@ -485,7 +491,8 @@ class TestProtocolHandling:
         _, sid, _ = await _init_via_auth()
 
         resp = await handle_message(
-            _rpc("notifications/initialized", {"_session_id": sid}, msg_id=41),
+            _rpc("notifications/initialized", {}, msg_id=41),
+            session_id=sid,
         )
 
         assert resp["jsonrpc"] == "2.0"
@@ -499,7 +506,8 @@ class TestProtocolHandling:
         _, sid, _ = await _init_via_auth()
 
         resp = await handle_message(
-            _rpc("completions/create", {"_session_id": sid}, msg_id=42),
+            _rpc("completions/create", {}, msg_id=42),
+            session_id=sid,
         )
 
         assert resp["jsonrpc"] == "2.0"

@@ -112,7 +112,7 @@ class TestMalformedRequests:
         """A request with no 'method' key falls through to the -32601 branch."""
         _, sid, _ = await _init_session()
 
-        body = {"jsonrpc": "2.0", "id": 1, "params": {"_session_id": sid}}
+        body = {"jsonrpc": "2.0", "id": 1, "params": {}}
         # method defaults to "" which is not matched by any handler
         resp = await handle_message(body, session_id=sid)
 
@@ -126,7 +126,7 @@ class TestMalformedRequests:
         _, sid, _ = await _init_session()
 
         resp = await handle_message(
-            _rpc("", {"_session_id": sid}, msg_id=2),
+            _rpc("", {}, msg_id=2),
             session_id=sid,
         )
 
@@ -138,7 +138,7 @@ class TestMalformedRequests:
         """A request with id=None (null) returns the null id in the response."""
         _, sid, _ = await _init_session()
 
-        body = {"jsonrpc": "2.0", "id": None, "method": "ping", "params": {"_session_id": sid}}
+        body = {"jsonrpc": "2.0", "id": None, "method": "ping", "params": {}}
         resp = await handle_message(body, session_id=sid)
 
         assert resp["id"] is None
@@ -167,7 +167,7 @@ class TestMalformedRequests:
             "jsonrpc": "2.0",
             "id": 4,
             "method": "ping",
-            "params": {"_session_id": sid},
+            "params": {},
             "extra_field": "should be ignored",
             "another_unknown": 42,
         }
@@ -267,7 +267,8 @@ class TestSessionManagement:
         real_session.last_activity = time.monotonic() - (session_manager._timeout + 10)
 
         resp = await handle_message(
-            _rpc("ping", {"_session_id": real_sid}, msg_id=10),
+            _rpc("ping", {}, msg_id=10),
+            session_id=real_sid,
         )
 
         assert "error" in resp
@@ -301,14 +302,14 @@ class TestSessionManagement:
         _, sid, _ = await _init_session()
 
         # Verify it works before close
-        resp = await handle_message(_rpc("ping", {"_session_id": sid}, msg_id=20))
+        resp = await handle_message(_rpc("ping", {}, msg_id=20), session_id=sid)
         assert "result" in resp
 
         # Close the session
         session_manager.close_session(sid)
 
         # Now it should fail
-        resp = await handle_message(_rpc("ping", {"_session_id": sid}, msg_id=21))
+        resp = await handle_message(_rpc("ping", {}, msg_id=21), session_id=sid)
         assert "error" in resp
         assert resp["error"]["code"] == -32000
 
@@ -372,9 +373,9 @@ class TestResourceLimits:
 
         resp = await handle_message(
             _rpc("resources/read", {
-                "_session_id": sid,
                 "uri": "https://evil.com/data",
             }, msg_id=30),
+            session_id=sid,
         )
 
         # The read_resource function has an async_session call, so it may succeed
@@ -395,9 +396,9 @@ class TestResourceLimits:
 
         resp = await handle_message(
             _rpc("resources/read", {
-                "_session_id": sid,
                 "uri": "",
             }, msg_id=31),
+            session_id=sid,
         )
 
         assert "jsonrpc" in resp
@@ -415,9 +416,9 @@ class TestResourceLimits:
 
         resp = await handle_message(
             _rpc("resources/read", {
-                "_session_id": sid,
                 "uri": "marketplace://../../etc/passwd",
             }, msg_id=32),
+            session_id=sid,
         )
 
         assert "jsonrpc" in resp
@@ -437,7 +438,8 @@ class TestResourceLimits:
         _, sid, _ = await _init_session()
 
         resp = await handle_message(
-            _rpc("resources/list", {"_session_id": sid}, msg_id=33),
+            _rpc("resources/list", {}, msg_id=33),
+            session_id=sid,
         )
 
         assert "result" in resp
@@ -454,9 +456,9 @@ class TestResourceLimits:
 
         resp = await handle_message(
             _rpc("resources/read", {
-                "_session_id": sid,
                 "uri": "marketplace://agent/fake-id-with-slashes/and/more",
             }, msg_id=34),
+            session_id=sid,
         )
 
         assert "jsonrpc" in resp
@@ -484,10 +486,10 @@ class TestToolExecutionEdgeCases:
 
         resp = await handle_message(
             _rpc("tools/call", {
-                "_session_id": sid,
                 "name": "this_tool_definitely_does_not_exist",
                 "arguments": {},
             }, msg_id=40),
+            session_id=sid,
         )
 
         assert "result" in resp
@@ -504,10 +506,10 @@ class TestToolExecutionEdgeCases:
 
         resp = await handle_message(
             _rpc("tools/call", {
-                "_session_id": sid,
                 "name": "",
                 "arguments": {},
             }, msg_id=41),
+            session_id=sid,
         )
 
         assert "result" in resp
@@ -529,10 +531,10 @@ class TestToolExecutionEdgeCases:
 
             resp = await handle_message(
                 _rpc("tools/call", {
-                    "_session_id": sid,
                     "name": "marketplace_discover",
                     "arguments": {"q": "test"},
                 }, msg_id=42),
+                session_id=sid,
             )
 
         assert "error" in resp
@@ -547,10 +549,10 @@ class TestToolExecutionEdgeCases:
         # marketplace_discover expects min_quality as number, pass a string
         resp = await handle_message(
             _rpc("tools/call", {
-                "_session_id": sid,
                 "name": "marketplace_discover",
                 "arguments": {"min_quality": "not_a_number", "max_price": "also_not"},
             }, msg_id=43),
+            session_id=sid,
         )
 
         # Should get either a result (if the service handles it gracefully) or an error
@@ -573,10 +575,10 @@ class TestToolExecutionEdgeCases:
 
             resp = await handle_message(
                 _rpc("tools/call", {
-                    "_session_id": sid,
                     "name": "marketplace_express_buy",
                     "arguments": {},  # Missing required 'listing_id'
                 }, msg_id=44),
+                session_id=sid,
             )
 
         assert "error" in resp

@@ -38,7 +38,7 @@ def _auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _register_via_api(client, *, email=None, password="testpass123",
+async def _register_via_api(client, *, email=None, password="SecurePass1!",
                             display_name="Deep Creator", country=None):
     payload = {"email": email or _unique_email(), "password": password,
                "display_name": display_name}

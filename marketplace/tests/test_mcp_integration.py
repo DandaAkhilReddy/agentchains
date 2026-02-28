@@ -110,8 +110,8 @@ async def test_mcp_tools_list(client):
     """POST /mcp/message with 'tools/list' returns tool definitions."""
     _, session_id = await _initialize(client)
 
-    body = _jsonrpc_request("tools/list", {"_session_id": session_id}, msg_id=2)
-    resp = await client.post("/mcp/message", json=body)
+    body = _jsonrpc_request("tools/list", {}, msg_id=2)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -135,8 +135,8 @@ async def test_mcp_tools_list_has_11_tools(client):
     """tools/list returns exactly 11 tool definitions."""
     _, session_id = await _initialize(client)
 
-    body = _jsonrpc_request("tools/list", {"_session_id": session_id}, msg_id=2)
-    resp = await client.post("/mcp/message", json=body)
+    body = _jsonrpc_request("tools/list", {}, msg_id=2)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     data = resp.json()
     tools = data["result"]["tools"]
@@ -152,8 +152,8 @@ async def test_mcp_resources_list(client):
     """POST /mcp/message with 'resources/list' returns resource definitions."""
     _, session_id = await _initialize(client)
 
-    body = _jsonrpc_request("resources/list", {"_session_id": session_id}, msg_id=3)
-    resp = await client.post("/mcp/message", json=body)
+    body = _jsonrpc_request("resources/list", {}, msg_id=3)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -177,8 +177,8 @@ async def test_mcp_resources_list_has_5_resources(client):
     """resources/list returns exactly 5 resource definitions."""
     _, session_id = await _initialize(client)
 
-    body = _jsonrpc_request("resources/list", {"_session_id": session_id}, msg_id=3)
-    resp = await client.post("/mcp/message", json=body)
+    body = _jsonrpc_request("resources/list", {}, msg_id=3)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     data = resp.json()
     resources = data["result"]["resources"]
@@ -194,8 +194,8 @@ async def test_mcp_ping(client):
     """POST /mcp/message with 'ping' returns empty result (pong)."""
     _, session_id = await _initialize(client)
 
-    body = _jsonrpc_request("ping", {"_session_id": session_id}, msg_id=4)
-    resp = await client.post("/mcp/message", json=body)
+    body = _jsonrpc_request("ping", {}, msg_id=4)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -214,10 +214,10 @@ async def test_mcp_invalid_method(client):
 
     body = _jsonrpc_request(
         "totally_bogus/method",
-        {"_session_id": session_id},
+        {},
         msg_id=5,
     )
-    resp = await client.post("/mcp/message", json=body)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -277,13 +277,12 @@ async def test_mcp_tool_call_search(client):
     body = _jsonrpc_request(
         "tools/call",
         {
-            "_session_id": session_id,
             "name": "marketplace_discover",
             "arguments": {"q": "test data", "page": 1, "page_size": 5},
         },
         msg_id=10,
     )
-    resp = await client.post("/mcp/message", json=body)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -311,13 +310,12 @@ async def test_mcp_tool_call_agent_info(client):
     body = _jsonrpc_request(
         "tools/call",
         {
-            "_session_id": session_id,
             "name": "marketplace_reputation",
             "arguments": {"agent_id": fake_agent_id},
         },
         msg_id=11,
     )
-    resp = await client.post("/mcp/message", json=body)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -342,13 +340,12 @@ async def test_mcp_tool_call_unknown(client):
     body = _jsonrpc_request(
         "tools/call",
         {
-            "_session_id": session_id,
             "name": "nonexistent_tool_xyz",
             "arguments": {},
         },
         msg_id=12,
     )
-    resp = await client.post("/mcp/message", json=body)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -373,12 +370,11 @@ async def test_mcp_resource_read_stats(client):
     body = _jsonrpc_request(
         "resources/read",
         {
-            "_session_id": session_id,
             "uri": "marketplace://catalog",
         },
         msg_id=13,
     )
-    resp = await client.post("/mcp/message", json=body)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -406,12 +402,11 @@ async def test_mcp_resource_read_unknown(client):
     body = _jsonrpc_request(
         "resources/read",
         {
-            "_session_id": session_id,
             "uri": "marketplace://does_not_exist",
         },
         msg_id=14,
     )
-    resp = await client.post("/mcp/message", json=body)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -463,8 +458,8 @@ async def test_mcp_session_rate_limit(client):
     session.request_count = 60
 
     # Next request should be rate-limited
-    body = _jsonrpc_request("ping", {"_session_id": session_id}, msg_id=99)
-    resp = await client.post("/mcp/message", json=body)
+    body = _jsonrpc_request("ping", {}, msg_id=99)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -509,14 +504,14 @@ async def test_mcp_jsonrpc_version(client):
     session_id = data["result"]["_session_id"]
 
     # Success case: ping
-    body = _jsonrpc_request("ping", {"_session_id": session_id}, msg_id=2)
-    resp = await client.post("/mcp/message", json=body)
+    body = _jsonrpc_request("ping", {}, msg_id=2)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
     data = resp.json()
     assert data["jsonrpc"] == "2.0"
 
     # Error case: unknown method
-    body = _jsonrpc_request("no_such_method", {"_session_id": session_id}, msg_id=3)
-    resp = await client.post("/mcp/message", json=body)
+    body = _jsonrpc_request("no_such_method", {}, msg_id=3)
+    resp = await client.post("/mcp/message", json=body, headers={"X-MCP-Session-ID": session_id})
     data = resp.json()
     assert data["jsonrpc"] == "2.0"
 

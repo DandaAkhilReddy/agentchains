@@ -15,7 +15,7 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _register_user(client, email: str = "buyer@test.com", password: str = "testpass123"):
+async def _register_user(client, email: str = "buyer@test.com", password: str = "SecurePass1!"):
     return await client.post(
         "/api/v2/users/register",
         json={"email": email, "password": password},
@@ -37,7 +37,7 @@ async def test_v2_users_register_login_me_and_stream_token(client, db):
 
     login = await client.post(
         "/api/v2/users/login",
-        json={"email": "buyer-one@test.com", "password": "testpass123"},
+        json={"email": "buyer-one@test.com", "password": "SecurePass1!"},
     )
     assert login.status_code == 200
     login_token = login.json()["token"]

@@ -30,7 +30,7 @@ def _auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _register(client, *, email: str | None = None, password: str = "testpass123",
+async def _register(client, *, email: str | None = None, password: str = "SecurePass1!",
                     display_name: str = "Test Creator", country: str | None = None,
                     phone: str | None = None) -> dict:
     """Register a creator via the API and return the full JSON response."""
@@ -132,7 +132,7 @@ async def test_register_duplicate_email(client):
 
     resp = await client.post(f"{_CREATORS}/register", json={
         "email": email,
-        "password": "testpass123",
+        "password": "SecurePass1!",
         "display_name": "Duplicate",
     })
     assert resp.status_code == 409
@@ -159,7 +159,7 @@ async def test_register_short_password(client):
 async def test_register_missing_email(client):
     """Registration without an email field returns 422."""
     resp = await client.post(f"{_CREATORS}/register", json={
-        "password": "testpass123",
+        "password": "SecurePass1!",
         "display_name": "No Email",
     })
     assert resp.status_code == 422
@@ -173,7 +173,7 @@ async def test_register_missing_display_name(client):
     """Registration without a display_name field returns 422."""
     resp = await client.post(f"{_CREATORS}/register", json={
         "email": _unique_email(),
-        "password": "testpass123",
+        "password": "SecurePass1!",
     })
     assert resp.status_code == 422
 
@@ -199,11 +199,11 @@ async def test_register_with_country(client):
 async def test_login_success(client):
     """POST /creators/login with correct credentials returns a token."""
     email = _unique_email()
-    await _register(client, email=email, password="correct8chars")
+    await _register(client, email=email, password="CorrectPass1!")
 
     resp = await client.post(f"{_CREATORS}/login", json={
         "email": email,
-        "password": "correct8chars",
+        "password": "CorrectPass1!",
     })
     assert resp.status_code == 200
     body = resp.json()
