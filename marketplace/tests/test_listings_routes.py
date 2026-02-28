@@ -1,6 +1,25 @@
 """Comprehensive tests for /api/v1/listings routes."""
 
+import uuid
+
 import pytest
+
+from marketplace.models.agent_trust import AgentTrustProfile
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+async def _set_trust_tier(db, agent_id: str, tier: str = "T1") -> None:
+    """Insert an AgentTrustProfile row so the agent meets the required trust tier."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -23,9 +42,10 @@ async def test_create_listing_requires_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_create_listing_validates_fields(client, make_agent, auth_header):
+async def test_create_listing_validates_fields(client, make_agent, auth_header, db):
     """Creating a listing validates required fields and constraints."""
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
 
     # Missing title
     response = await client.post(
@@ -93,9 +113,10 @@ async def test_create_listing_validates_fields(client, make_agent, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_create_listing_success(client, make_agent, auth_header):
+async def test_create_listing_success(client, make_agent, auth_header, db):
     """Successfully create a listing with valid data."""
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
 
     response = await client.post(
         "/api/v1/listings",

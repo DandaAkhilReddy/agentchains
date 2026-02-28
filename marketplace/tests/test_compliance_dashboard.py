@@ -375,8 +375,8 @@ class TestDashboardHelpers:
         assert dashboard_service._load_json(None, {"a": 1}) == {"a": 1}
 
     def test_load_json_returns_fallback_for_json_array(self):
-        # JSON arrays are not dicts — should fall back
-        assert dashboard_service._load_json("[1, 2, 3]", {"b": 2}) == {"b": 2}
+        # JSON arrays are valid JSON — _load_json returns them as-is (not a fallback)
+        assert dashboard_service._load_json("[1, 2, 3]", {"b": 2}) == [1, 2, 3]
 
     def test_collect_listing_ids_extracts_non_empty(self):
         tx1 = MagicMock()

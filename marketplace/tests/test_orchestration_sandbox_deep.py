@@ -599,7 +599,7 @@ class TestSandboxExecutor:
         assert cfg.memory_limit_mb == 512
         assert cfg.cpu_limit == 0.5
         assert cfg.timeout_seconds == 120
-        assert cfg.network_enabled is True
+        assert cfg.network_enabled is False  # disabled by default for security
         assert cfg.allowed_domains == []
 
     def test_sandbox_config_custom(self):

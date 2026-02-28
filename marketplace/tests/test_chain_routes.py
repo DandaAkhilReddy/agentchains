@@ -1,6 +1,7 @@
 """API integration tests for the v5 chain endpoints."""
 
 import json
+import uuid
 
 import pytest
 
@@ -8,6 +9,18 @@ import pytest
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+async def _set_trust_tier(db, agent_id: str, tier: str = "T2") -> None:
+    """Seed a trust profile for an agent so trust-gated routes pass."""
+    from marketplace.models.agent_trust import AgentTrustProfile
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 def _make_graph_json(agent_ids: list[str]) -> str:
@@ -53,6 +66,7 @@ async def test_create_template_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     resp = await _create_template(client, token, agent.id)
     assert resp.status_code == 201
@@ -76,6 +90,7 @@ async def test_create_template_ssrf_rejected(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     graph = {
         "nodes": {
@@ -100,6 +115,7 @@ async def test_list_templates(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     await _create_template(client, token, agent.id, "Chain A")
     await _create_template(client, token, agent.id, "Chain B")
@@ -119,6 +135,7 @@ async def test_get_template(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -132,8 +149,9 @@ async def test_get_template(client, make_agent, db):
 
 
 @pytest.mark.asyncio
-async def test_get_template_not_found(client, make_agent):
-    _, token = await make_agent()
+async def test_get_template_not_found(client, make_agent, db):
+    agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     resp = await client.get(
         "/api/v5/chain-templates/nonexistent-id",
         headers={"Authorization": f"Bearer {token}"},
@@ -152,6 +170,8 @@ async def test_fork_template(client, make_agent, db):
     forker, forker_token = await make_agent()
     author.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, author.id)
+    await _set_trust_tier(db, forker.id)
 
     create_resp = await _create_template(client, author_token, author.id)
     template_id = create_resp.json()["id"]
@@ -177,6 +197,7 @@ async def test_execute_chain(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -197,6 +218,7 @@ async def test_execute_idempotency(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -223,6 +245,7 @@ async def test_get_execution(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -253,6 +276,7 @@ async def test_provenance_forbidden(client, make_agent, db):
     outsider, outsider_token = await make_agent()
     author.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, author.id)
 
     create_resp = await _create_template(client, author_token, author.id)
     template_id = create_resp.json()["id"]
@@ -276,6 +300,7 @@ async def test_provenance_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -307,6 +332,7 @@ async def test_list_template_executions(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -331,6 +357,7 @@ async def test_archive_template(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -349,6 +376,7 @@ async def test_archive_non_author(client, make_agent, db):
     other, other_token = await make_agent()
     author.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, author.id)
 
     create_resp = await _create_template(client, author_token, author.id)
     template_id = create_resp.json()["id"]

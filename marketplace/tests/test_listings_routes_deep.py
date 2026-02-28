@@ -12,11 +12,28 @@ Style: pytest-asyncio with httpx AsyncClient, uses conftest fixtures
 """
 
 import json
+import uuid
 from decimal import Decimal
 
 import pytest
 
+from marketplace.models.agent_trust import AgentTrustProfile
 from marketplace.models.listing import DataListing
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+async def _set_trust_tier(db, agent_id: str, tier: str = "T1") -> None:
+    """Insert an AgentTrustProfile row so the agent meets the required trust tier."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 # ===========================================================================
@@ -29,10 +46,11 @@ class TestCRUDEndpoints:
 
     @pytest.mark.asyncio
     async def test_create_listing_returns_201_with_all_fields(
-        self, client, make_agent, auth_header
+        self, client, make_agent, auth_header, db
     ):
         """POST /listings returns 201 and echoes every field back."""
         agent, token = await make_agent()
+        await _set_trust_tier(db, agent.id)
 
         payload = {
             "title": "Deep-Test Dataset",
@@ -243,9 +261,10 @@ class TestValidationErrors:
     """Verify that Pydantic schema constraints are enforced at the API level."""
 
     @pytest.mark.asyncio
-    async def test_missing_title_returns_422(self, client, make_agent, auth_header):
+    async def test_missing_title_returns_422(self, client, make_agent, auth_header, db):
         """Omitting the required 'title' field triggers 422."""
         agent, token = await make_agent()
+        await _set_trust_tier(db, agent.id)
         resp = await client.post(
             "/api/v1/listings",
             headers=auth_header(token),
@@ -254,9 +273,10 @@ class TestValidationErrors:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_missing_content_returns_422(self, client, make_agent, auth_header):
+    async def test_missing_content_returns_422(self, client, make_agent, auth_header, db):
         """Omitting the required 'content' field triggers 422."""
         agent, token = await make_agent()
+        await _set_trust_tier(db, agent.id)
         resp = await client.post(
             "/api/v1/listings",
             headers=auth_header(token),
@@ -265,9 +285,10 @@ class TestValidationErrors:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_empty_content_returns_422(self, client, make_agent, auth_header):
+    async def test_empty_content_returns_422(self, client, make_agent, auth_header, db):
         """An empty string for 'content' triggers 422 (min_length=1)."""
         agent, token = await make_agent()
+        await _set_trust_tier(db, agent.id)
         resp = await client.post(
             "/api/v1/listings",
             headers=auth_header(token),
@@ -281,9 +302,10 @@ class TestValidationErrors:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_zero_price_returns_422(self, client, make_agent, auth_header):
+    async def test_zero_price_returns_422(self, client, make_agent, auth_header, db):
         """price_usdc=0 violates gt=0 constraint."""
         agent, token = await make_agent()
+        await _set_trust_tier(db, agent.id)
         resp = await client.post(
             "/api/v1/listings",
             headers=auth_header(token),
@@ -297,9 +319,10 @@ class TestValidationErrors:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_negative_price_returns_422(self, client, make_agent, auth_header):
+    async def test_negative_price_returns_422(self, client, make_agent, auth_header, db):
         """Negative price is rejected."""
         agent, token = await make_agent()
+        await _set_trust_tier(db, agent.id)
         resp = await client.post(
             "/api/v1/listings",
             headers=auth_header(token),
@@ -313,9 +336,10 @@ class TestValidationErrors:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_price_above_max_returns_422(self, client, make_agent, auth_header):
+    async def test_price_above_max_returns_422(self, client, make_agent, auth_header, db):
         """price_usdc > 1000 violates le=1000 constraint."""
         agent, token = await make_agent()
+        await _set_trust_tier(db, agent.id)
         resp = await client.post(
             "/api/v1/listings",
             headers=auth_header(token),
@@ -329,9 +353,10 @@ class TestValidationErrors:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_invalid_category_returns_422(self, client, make_agent, auth_header):
+    async def test_invalid_category_returns_422(self, client, make_agent, auth_header, db):
         """A category not in the allowed pattern is rejected."""
         agent, token = await make_agent()
+        await _set_trust_tier(db, agent.id)
         resp = await client.post(
             "/api/v1/listings",
             headers=auth_header(token),
@@ -346,10 +371,11 @@ class TestValidationErrors:
 
     @pytest.mark.asyncio
     async def test_title_exceeding_255_chars_returns_422(
-        self, client, make_agent, auth_header
+        self, client, make_agent, auth_header, db
     ):
         """Title longer than 255 characters violates max_length=255."""
         agent, token = await make_agent()
+        await _set_trust_tier(db, agent.id)
         resp = await client.post(
             "/api/v1/listings",
             headers=auth_header(token),
@@ -364,10 +390,11 @@ class TestValidationErrors:
 
     @pytest.mark.asyncio
     async def test_quality_score_out_of_range_returns_422(
-        self, client, make_agent, auth_header
+        self, client, make_agent, auth_header, db
     ):
         """quality_score > 1.0 violates le=1 constraint."""
         agent, token = await make_agent()
+        await _set_trust_tier(db, agent.id)
         resp = await client.post(
             "/api/v1/listings",
             headers=auth_header(token),
@@ -392,10 +419,11 @@ class TestStatusTransitions:
 
     @pytest.mark.asyncio
     async def test_new_listing_defaults_to_active(
-        self, client, make_agent, auth_header
+        self, client, make_agent, auth_header, db
     ):
         """A freshly created listing has status='active'."""
         agent, token = await make_agent()
+        await _set_trust_tier(db, agent.id)
         resp = await client.post(
             "/api/v1/listings",
             headers=auth_header(token),
@@ -410,28 +438,28 @@ class TestStatusTransitions:
         assert resp.json()["status"] == "active"
 
     @pytest.mark.asyncio
-    async def test_owner_can_pause_active_listing(
+    async def test_owner_can_deactivate_active_listing(
         self, client, make_agent, make_listing, auth_header
     ):
-        """Owner can set status to 'paused' via PUT."""
+        """Owner can set status to 'inactive' via PUT."""
         agent, token = await make_agent()
         listing = await make_listing(agent.id, status="active")
 
         resp = await client.put(
             f"/api/v1/listings/{listing.id}",
             headers=auth_header(token),
-            json={"status": "paused"},
+            json={"status": "inactive"},
         )
         assert resp.status_code == 200
-        assert resp.json()["status"] == "paused"
+        assert resp.json()["status"] == "inactive"
 
     @pytest.mark.asyncio
-    async def test_owner_can_reactivate_paused_listing(
+    async def test_owner_can_reactivate_inactive_listing(
         self, client, make_agent, make_listing, auth_header
     ):
-        """Owner can set status back to 'active' from 'paused'."""
+        """Owner can set status back to 'active' from 'inactive'."""
         agent, token = await make_agent()
-        listing = await make_listing(agent.id, status="paused")
+        listing = await make_listing(agent.id, status="inactive")
 
         resp = await client.put(
             f"/api/v1/listings/{listing.id}",

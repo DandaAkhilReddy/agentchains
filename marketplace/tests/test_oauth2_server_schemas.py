@@ -24,6 +24,8 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.core.auth import create_access_token
+
 from marketplace.oauth2.models import (
     AuthorizationCode,
     OAuthAccessToken,
@@ -1353,6 +1355,12 @@ class TestTokenExchangeAlias:
 # ===========================================================================
 
 
+def _auth_headers() -> dict:
+    """Create a valid Bearer auth header for OAuth2 API requests."""
+    token = create_access_token(str(uuid.uuid4()), "test-oauth-agent")
+    return {"Authorization": f"Bearer {token}"}
+
+
 class TestOAuth2APIClientRegistration:
     """POST /oauth2/clients — HTTP-level tests."""
 
@@ -1365,6 +1373,7 @@ class TestOAuth2APIClientRegistration:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_auth_headers(),
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -1379,6 +1388,7 @@ class TestOAuth2APIClientRegistration:
                 "redirect_uris": ["https://app.com/cb"],
                 "owner_id": _new_id(),
             },
+            headers=_auth_headers(),
         )
         assert resp.status_code == 422
 
@@ -1391,6 +1401,7 @@ class TestOAuth2APIClientRegistration:
                 "scopes": "write",
                 "owner_id": _new_id(),
             },
+            headers=_auth_headers(),
         )
         assert resp.status_code == 200
         assert resp.json()["name"] == "EchoApp"
@@ -1401,7 +1412,9 @@ class TestOAuth2APIGetClient:
     """GET /oauth2/clients/{client_id} — HTTP-level tests."""
 
     async def test_get_existing_client(self, client):
-        # Register first
+        # Register first — use the same token for both register and get
+        # so the owner_id matches the authenticated user
+        headers = _auth_headers()
         reg_resp = await client.post(
             "/oauth2/clients",
             json={
@@ -1410,17 +1423,21 @@ class TestOAuth2APIGetClient:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=headers,
         )
         client_id = reg_resp.json()["client_id"]
 
-        resp = await client.get(f"/oauth2/clients/{client_id}")
+        resp = await client.get(f"/oauth2/clients/{client_id}", headers=headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["client_id"] == client_id
         assert data["name"] == "Lookup App"
 
     async def test_get_nonexistent_client_returns_404(self, client):
-        resp = await client.get("/oauth2/clients/no_such_client_xyz")
+        resp = await client.get(
+            "/oauth2/clients/no_such_client_xyz",
+            headers=_auth_headers(),
+        )
         assert resp.status_code == 404
 
 
@@ -1436,6 +1453,7 @@ class TestOAuth2APIAuthorize:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_auth_headers(),
         )
         return reg_resp.json()
 
@@ -1504,6 +1522,7 @@ class TestOAuth2APIToken:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_auth_headers(),
         )
         reg = reg_resp.json()
 
@@ -1546,6 +1565,7 @@ class TestOAuth2APIToken:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_auth_headers(),
         )
         reg = reg_resp.json()
 
@@ -1616,6 +1636,7 @@ class TestOAuth2APIRevoke:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_auth_headers(),
         )
         reg = reg_resp.json()
 
@@ -1669,6 +1690,7 @@ class TestOAuth2APIUserinfo:
                 "scopes": "read",
                 "owner_id": _new_id(),
             },
+            headers=_auth_headers(),
         )
         reg = reg_resp.json()
 
