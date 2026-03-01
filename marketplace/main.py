@@ -245,6 +245,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from marketplace.core.events import register_broadcaster
     register_broadcaster(broadcast_event)
 
+    # Seed system RBAC roles and auto-assign admin role to configured creator IDs
+    from marketplace.services.role_service import assign_role, seed_system_roles
+    async with async_session() as role_db:
+        await seed_system_roles(role_db)
+        if settings.admin_creator_ids:
+            for admin_id in settings.admin_creator_ids.split(","):
+                admin_id = admin_id.strip()
+                if admin_id:
+                    try:
+                        await assign_role(
+                            role_db,
+                            actor_id=admin_id,
+                            actor_type="creator",
+                            role_name="admin",
+                            granted_by="system",
+                        )
+                    except ValueError:
+                        pass  # Role already assigned or not found
+
     # Start background demand aggregation (initial delay avoids lock contention at startup)
     async def _demand_loop() -> None:
         await asyncio.sleep(30)  # Wait 30s before first run

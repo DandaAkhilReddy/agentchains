@@ -26,7 +26,7 @@ def _auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _register(client, *, email: str | None = None, password: str = "testpass123",
+async def _register(client, *, email: str | None = None, password: str = "SecurePass1!",
                     display_name: str = "Test Creator", country: str | None = None) -> dict:
     """Register a creator via the API and return the full JSON response."""
     payload = {
@@ -77,7 +77,7 @@ async def test_creator_register_duplicate(client):
     await _register(client, email=email)
     resp = await client.post(f"{_CREATORS}/register", json={
         "email": email,
-        "password": "testpass123",
+        "password": "SecurePass1!",
         "display_name": "Dup",
     })
     assert resp.status_code == 409
@@ -90,10 +90,10 @@ async def test_creator_register_duplicate(client):
 async def test_creator_login(client):
     """POST /api/v1/creators/login succeeds with correct credentials."""
     email = _unique_email()
-    await _register(client, email=email, password="secret8chars")
+    await _register(client, email=email, password="SecretPass1!")
     resp = await client.post(f"{_CREATORS}/login", json={
         "email": email,
-        "password": "secret8chars",
+        "password": "SecretPass1!",
     })
     assert resp.status_code == 200
     body = resp.json()
@@ -397,7 +397,7 @@ async def test_creator_full_lifecycle(client):
     # 2. Login with same credentials
     login_resp = await client.post(f"{_CREATORS}/login", json={
         "email": email,
-        "password": "testpass123",
+        "password": "SecurePass1!",
     })
     assert login_resp.status_code == 200
     login_token = login_resp.json()["token"]

@@ -79,7 +79,7 @@ async def _register_creator(client, **kwargs) -> dict:
     """Helper: register a creator via the API and return the JSON body."""
     payload = {
         "email": kwargs.get("email", _unique_email()),
-        "password": kwargs.get("password", "securepass1"),
+        "password": kwargs.get("password", "SecurePass1!"),
         "display_name": kwargs.get("display_name", "Test Creator"),
     }
     if "country" in kwargs:
@@ -87,6 +87,15 @@ async def _register_creator(client, **kwargs) -> dict:
     resp = await client.post(f"{_CREATORS}/register", json=payload)
     assert resp.status_code == 201, resp.text
     return resp.json()
+
+
+async def _set_trust_tier(db, agent_id: str, tier: str = "T2") -> None:
+    """Set the trust tier for an agent so trust-gated endpoints pass."""
+    from marketplace.models.agent_trust import AgentTrustProfile
+    import uuid as _uuid
+    profile = AgentTrustProfile(id=str(_uuid.uuid4()), agent_id=agent_id, trust_tier=tier)
+    db.add(profile)
+    await db.commit()
 
 
 # ===========================================================================
@@ -420,33 +429,33 @@ async def test_v3_get_execution_cost_not_found(client, make_agent):
 
 
 async def test_v3_pause_execution_not_found_or_conflict(client, make_agent):
-    """POST /api/v3/executions/{id}/pause for a non-running execution returns 409."""
+    """POST /api/v3/executions/{id}/pause for a nonexistent execution returns 404."""
     _, token = await make_agent()
     resp = await client.post(
         f"{_V3}/executions/ghost-exec/pause",
         headers=_auth(token),
     )
-    assert resp.status_code == 409
+    assert resp.status_code == 404
 
 
 async def test_v3_resume_execution_not_found_or_conflict(client, make_agent):
-    """POST /api/v3/executions/{id}/resume for a non-paused execution returns 409."""
+    """POST /api/v3/executions/{id}/resume for a nonexistent execution returns 404."""
     _, token = await make_agent()
     resp = await client.post(
         f"{_V3}/executions/ghost-exec/resume",
         headers=_auth(token),
     )
-    assert resp.status_code == 409
+    assert resp.status_code == 404
 
 
 async def test_v3_cancel_execution_not_found_or_conflict(client, make_agent):
-    """POST /api/v3/executions/{id}/cancel for an unknown execution returns 409."""
+    """POST /api/v3/executions/{id}/cancel for a nonexistent execution returns 404."""
     _, token = await make_agent()
     resp = await client.post(
         f"{_V3}/executions/ghost-exec/cancel",
         headers=_auth(token),
     )
-    assert resp.status_code == 409
+    assert resp.status_code == 404
 
 
 async def test_v3_cancel_execution_success(client, make_agent, db):
@@ -613,6 +622,7 @@ async def test_v5_create_chain_template_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     resp = await _create_chain_template(client, token, agent.id, "New Chain")
     assert resp.status_code == 201
@@ -636,6 +646,7 @@ async def test_v5_create_chain_template_ssrf_rejected(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     bad_graph = json.dumps({
         "nodes": {
@@ -660,6 +671,7 @@ async def test_v5_list_chain_templates(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     await _create_chain_template(client, token, agent.id, "Chain A")
     await _create_chain_template(client, token, agent.id, "Chain B")
@@ -677,6 +689,7 @@ async def test_v5_get_chain_template_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id, "Lookup Chain")
     template_id = create_resp.json()["id"]
@@ -705,6 +718,7 @@ async def test_v5_archive_chain_template_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id, "Archive Me")
     template_id = create_resp.json()["id"]
@@ -723,6 +737,7 @@ async def test_v5_archive_chain_template_not_author(client, make_agent, db):
     outsider, outsider_token = await make_agent()
     author.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, author.id)
 
     create_resp = await _create_chain_template(client, author_token, author.id)
     template_id = create_resp.json()["id"]
@@ -740,6 +755,7 @@ async def test_v5_fork_chain_template(client, make_agent, db):
     forker, forker_token = await make_agent()
     author.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, author.id)
 
     create_resp = await _create_chain_template(client, author_token, author.id, "Original")
     template_id = create_resp.json()["id"]
@@ -761,6 +777,7 @@ async def test_v5_execute_chain_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id, "Execute Me")
     template_id = create_resp.json()["id"]
@@ -782,6 +799,7 @@ async def test_v5_execute_chain_idempotency(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -807,6 +825,7 @@ async def test_v5_get_chain_execution_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -841,6 +860,7 @@ async def test_v5_list_chain_executions(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -882,6 +902,7 @@ async def test_v5_provenance_access_by_initiator(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -909,6 +930,7 @@ async def test_v5_provenance_forbidden_for_outsider(client, make_agent, db):
     outsider, outsider_token = await make_agent()
     author.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, author.id)
 
     create_resp = await _create_chain_template(client, author_token, author.id)
     template_id = create_resp.json()["id"]
@@ -933,6 +955,7 @@ async def test_v5_provenance_entries_access_control(client, make_agent, db):
     outsider, outsider_token = await make_agent()
     author.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, author.id)
 
     create_resp = await _create_chain_template(client, author_token, author.id)
     template_id = create_resp.json()["id"]
@@ -956,6 +979,7 @@ async def test_v5_provenance_entries_by_initiator(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id)
     template_id = create_resp.json()["id"]
@@ -985,6 +1009,7 @@ async def test_v5_get_chain_analytics(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id, "Analytics Chain")
     template_id = create_resp.json()["id"]
@@ -1079,6 +1104,7 @@ async def test_v5_validate_chain_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id, "Validate Me")
     template_id = create_resp.json()["id"]
@@ -1101,6 +1127,7 @@ async def test_v5_cost_estimate_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id, "Cost Chain")
     template_id = create_resp.json()["id"]
@@ -1137,6 +1164,7 @@ async def test_v5_settlement_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id, "Settle Chain")
     template_id = create_resp.json()["id"]
@@ -1231,6 +1259,7 @@ async def test_v5_evaluate_policies_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test-server:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id)
 
     create_resp = await _create_chain_template(client, token, agent.id, "Policy Chain")
     template_id = create_resp.json()["id"]
@@ -1275,7 +1304,7 @@ async def test_creators_register_duplicate_email(client):
 
     resp = await client.post(f"{_CREATORS}/register", json={
         "email": email,
-        "password": "securepass1",
+        "password": "SecurePass1!",
         "display_name": "Duplicate",
     })
     assert resp.status_code == 409
@@ -1295,7 +1324,7 @@ async def test_creators_register_missing_display_name(client):
     """Registration without display_name returns 422."""
     resp = await client.post(f"{_CREATORS}/register", json={
         "email": _unique_email(),
-        "password": "securepass1",
+        "password": "SecurePass1!",
     })
     assert resp.status_code == 422
 
@@ -1313,11 +1342,11 @@ async def test_creators_register_with_country(client):
 async def test_creators_login_success(client):
     """POST /api/v1/creators/login with correct credentials returns 200 and token."""
     email = _unique_email()
-    await _register_creator(client, email=email, password="correctPass8")
+    await _register_creator(client, email=email, password="CorrectPass8!")
 
     resp = await client.post(f"{_CREATORS}/login", json={
         "email": email,
-        "password": "correctPass8",
+        "password": "CorrectPass8!",
     })
     assert resp.status_code == 200
     body = resp.json()
@@ -1341,7 +1370,7 @@ async def test_creators_login_unknown_email(client):
     """POST /api/v1/creators/login with unknown email returns 401."""
     resp = await client.post(f"{_CREATORS}/login", json={
         "email": "nobody-at-all@test.com",
-        "password": "securepass1",
+        "password": "SecurePass1!",
     })
     assert resp.status_code == 401
 

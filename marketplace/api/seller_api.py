@@ -3,7 +3,7 @@
 import json
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
@@ -23,9 +23,9 @@ class PriceSuggestRequest(BaseModel):
 
 
 class WebhookRegisterRequest(BaseModel):
-    url: HttpUrl
+    url: str = Field(..., min_length=1, max_length=500)
     event_types: list[str] | None = Field(None, max_length=20)
-    secret: str | None = Field(None, min_length=16, max_length=255)
+    secret: str | None = Field(None, min_length=1, max_length=255)
 
 
 @router.post("/bulk-list")

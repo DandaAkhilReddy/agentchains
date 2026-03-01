@@ -30,7 +30,6 @@ import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -49,7 +48,6 @@ from marketplace.models.dual_layer import (
 )
 from marketplace.models.listing import DataListing
 from marketplace.services import dual_layer_service, event_subscription_service
-from marketplace.tests.conftest import _new_id
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -218,10 +216,10 @@ class TestEndUserRegistration:
 
     async def test_login_valid_credentials_returns_token(self, db: AsyncSession):
         """Login with correct credentials returns user payload and fresh token."""
-        await _register_user_mocked(db, email="login1@test.com", password="pass1234")
+        await _register_user_mocked(db, email="login1@test.com", password="Pass1234!")
 
         result = await dual_layer_service.login_end_user(
-            db, email="login1@test.com", password="pass1234"
+            db, email="login1@test.com", password="Pass1234!"
         )
 
         assert result["user"]["email"] == "login1@test.com"
@@ -229,7 +227,7 @@ class TestEndUserRegistration:
 
     async def test_login_wrong_password_raises(self, db: AsyncSession):
         """Incorrect password raises ValueError."""
-        await _register_user_mocked(db, email="wrongpw@test.com", password="correct")
+        await _register_user_mocked(db, email="wrongpw@test.com", password="Correct1!")
 
         with pytest.raises(ValueError, match="Invalid email or password"):
             await dual_layer_service.login_end_user(
@@ -245,7 +243,7 @@ class TestEndUserRegistration:
 
     async def test_login_inactive_user_raises(self, db: AsyncSession):
         """Login for an inactive user raises ValueError."""
-        result = await _register_user_mocked(db, email="inactive@test.com", password="pw1")
+        result = await _register_user_mocked(db, email="inactive@test.com", password="TestPw1!@#")
         user_id = result["user"]["id"]
 
         row = await db.execute(select(EndUser).where(EndUser.id == user_id))
@@ -255,15 +253,15 @@ class TestEndUserRegistration:
 
         with pytest.raises(ValueError, match="not active"):
             await dual_layer_service.login_end_user(
-                db, email="inactive@test.com", password="pw1"
+                db, email="inactive@test.com", password="TestPw1!@#"
             )
 
     async def test_login_updates_last_login_at(self, db: AsyncSession):
         """Successful login updates last_login_at timestamp."""
-        await _register_user_mocked(db, email="lastlogin@test.com", password="pw2")
+        await _register_user_mocked(db, email="lastlogin@test.com", password="TestPw2!@#")
 
-        result = await dual_layer_service.login_end_user(
-            db, email="lastlogin@test.com", password="pw2"
+        await dual_layer_service.login_end_user(
+            db, email="lastlogin@test.com", password="TestPw2!@#"
         )
 
         row = await db.execute(

@@ -7,14 +7,27 @@ pagination limits, HashFS content sizes, and string edge cases.
 
 import shutil
 import tempfile
+import uuid
 from decimal import Decimal, ROUND_HALF_UP
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
+from marketplace.models.agent_trust import AgentTrustProfile
 from marketplace.services import token_service
 from marketplace.storage.hashfs import HashFS
+
+
+async def _set_trust_tier(db, agent_id: str, tier: str = "T1") -> None:
+    """Insert an AgentTrustProfile row so the agent meets the required trust tier."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 # ===================================================================
@@ -101,9 +114,10 @@ async def test_large_balance_no_overflow(
 # ===================================================================
 
 @pytest.mark.asyncio
-async def test_listing_min_valid_price(client, make_agent, auth_header):
+async def test_listing_min_valid_price(client, make_agent, auth_header, db):
     """Create listing with the smallest valid price (just above 0)."""
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     response = await client.post(
         "/api/v1/listings",
         headers=auth_header(token),
@@ -119,9 +133,10 @@ async def test_listing_min_valid_price(client, make_agent, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_listing_max_valid_price(client, make_agent, auth_header):
+async def test_listing_max_valid_price(client, make_agent, auth_header, db):
     """Create listing at the maximum allowed price (le=1000)."""
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     response = await client.post(
         "/api/v1/listings",
         headers=auth_header(token),
@@ -137,9 +152,10 @@ async def test_listing_max_valid_price(client, make_agent, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_listing_title_max_length(client, make_agent, auth_header):
+async def test_listing_title_max_length(client, make_agent, auth_header, db):
     """Title at exactly max_length=255 succeeds."""
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     title_255 = "A" * 255  # exactly at the limit
 
     response = await client.post(
@@ -158,9 +174,10 @@ async def test_listing_title_max_length(client, make_agent, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_listing_quality_exactly_zero_valid(client, make_agent, auth_header):
+async def test_listing_quality_exactly_zero_valid(client, make_agent, auth_header, db):
     """quality_score=0.0 (ge=0) is a valid boundary value."""
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     response = await client.post(
         "/api/v1/listings",
         headers=auth_header(token),
@@ -178,9 +195,10 @@ async def test_listing_quality_exactly_zero_valid(client, make_agent, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_listing_quality_exactly_one_valid(client, make_agent, auth_header):
+async def test_listing_quality_exactly_one_valid(client, make_agent, auth_header, db):
     """quality_score=1.0 (le=1) is a valid boundary value."""
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     response = await client.post(
         "/api/v1/listings",
         headers=auth_header(token),
@@ -316,9 +334,10 @@ async def test_agent_name_with_spaces(client):
 
 
 @pytest.mark.asyncio
-async def test_listing_with_special_chars_in_tags(client, make_agent, auth_header):
+async def test_listing_with_special_chars_in_tags(client, make_agent, auth_header, db):
     """Tags with special characters like ['C++', 'node.js'] are preserved."""
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id)
     tags = ["C++", "node.js"]
 
     response = await client.post(

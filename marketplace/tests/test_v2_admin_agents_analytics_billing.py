@@ -14,9 +14,9 @@ from decimal import Decimal
 
 import pytest
 
-from marketplace.config import settings
 from marketplace.models.token_account import TokenAccount
 from marketplace.services import dashboard_service
+from marketplace.services.role_service import assign_role, seed_system_roles
 from marketplace.tests.conftest import TestSession, _new_id
 
 
@@ -98,9 +98,10 @@ async def _seed_agent_account(agent_id: str, balance: float = 50.0):
 class TestAdminOverview:
     """GET /api/v2/admin/overview"""
 
-    async def test_overview_accessible_to_admin_creator(self, client, make_creator, monkeypatch):
+    async def test_overview_accessible_to_admin_creator(self, client, make_creator, db):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/overview",
@@ -113,10 +114,11 @@ class TestAdminOverview:
         assert "trust_weighted_revenue_usd" in body
         assert "environment" in body
 
-    async def test_overview_rejects_non_admin_creator(self, client, make_creator, monkeypatch):
+    async def test_overview_rejects_non_admin_creator(self, client, make_creator, db):
         admin_creator, admin_token = await make_creator()
         _, non_admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/overview",
@@ -124,19 +126,21 @@ class TestAdminOverview:
         )
         assert resp.status_code == 403
 
-    async def test_overview_rejects_missing_auth(self, client, make_creator, monkeypatch):
+    async def test_overview_rejects_missing_auth(self, client, make_creator, db):
         admin_creator, _ = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get("/api/v2/admin/overview")
         assert resp.status_code in (401, 403)
 
-    async def test_overview_accepts_agent_token_when_admin_ids_empty(
-        self, client, make_creator, monkeypatch
+    async def test_overview_accepts_admin_role_creator(
+        self, client, make_creator, db
     ):
-        # When admin_creator_ids is empty, any creator passes the admin gate.
-        monkeypatch.setattr(settings, "admin_creator_ids", "")
-        _, creator_token = await make_creator()
+        # A creator with the admin role can access the admin overview.
+        creator, creator_token = await make_creator()
+        await seed_system_roles(db)
+        await assign_role(db, creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/overview",
@@ -148,9 +152,10 @@ class TestAdminOverview:
 class TestAdminFinance:
     """GET /api/v2/admin/finance"""
 
-    async def test_finance_returns_required_fields(self, client, make_creator, monkeypatch):
+    async def test_finance_returns_required_fields(self, client, make_creator, db):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/finance",
@@ -163,10 +168,11 @@ class TestAdminFinance:
         assert "payout_pending_usd" in body
         assert "top_sellers_by_revenue" in body
 
-    async def test_finance_blocked_for_non_admin(self, client, make_creator, monkeypatch):
+    async def test_finance_blocked_for_non_admin(self, client, make_creator, db):
         admin_creator, _ = await make_creator()
         _, other_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/finance",
@@ -178,9 +184,10 @@ class TestAdminFinance:
 class TestAdminUsage:
     """GET /api/v2/admin/usage"""
 
-    async def test_usage_returns_category_breakdown(self, client, make_creator, monkeypatch):
+    async def test_usage_returns_category_breakdown(self, client, make_creator, db):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/usage",
@@ -195,10 +202,11 @@ class TestAdminUsage:
         assert "category_breakdown" in body
         assert isinstance(body["category_breakdown"], list)
 
-    async def test_usage_blocked_for_non_admin(self, client, make_creator, monkeypatch):
+    async def test_usage_blocked_for_non_admin(self, client, make_creator, db):
         admin_creator, _ = await make_creator()
         _, other_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/usage",
@@ -211,10 +219,11 @@ class TestAdminAgents:
     """GET /api/v2/admin/agents"""
 
     async def test_agents_list_returns_paginated_structure(
-        self, client, make_creator, make_agent, monkeypatch
+        self, client, make_creator, make_agent, db
     ):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
         await make_agent(name="agent-list-1")
         await make_agent(name="agent-list-2")
 
@@ -230,9 +239,10 @@ class TestAdminAgents:
         assert "entries" in body
         assert isinstance(body["entries"], list)
 
-    async def test_agents_list_respects_page_size(self, client, make_creator, monkeypatch):
+    async def test_agents_list_respects_page_size(self, client, make_creator, db):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/agents?page=1&page_size=5",
@@ -243,9 +253,10 @@ class TestAdminAgents:
         assert body["page_size"] == 5
         assert len(body["entries"]) <= 5
 
-    async def test_agents_list_status_filter(self, client, make_creator, monkeypatch):
+    async def test_agents_list_status_filter(self, client, make_creator, db):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/agents?status=active",
@@ -256,10 +267,11 @@ class TestAdminAgents:
         for entry in body["entries"]:
             assert entry["status"] == "active"
 
-    async def test_agents_list_blocked_for_non_admin(self, client, make_creator, monkeypatch):
+    async def test_agents_list_blocked_for_non_admin(self, client, make_creator, db):
         admin_creator, _ = await make_creator()
         _, other_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/agents",
@@ -272,10 +284,11 @@ class TestAdminSecurityEvents:
     """GET /api/v2/admin/security/events"""
 
     async def test_security_events_returns_paginated_structure(
-        self, client, make_creator, monkeypatch
+        self, client, make_creator, db
     ):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/security/events",
@@ -288,10 +301,11 @@ class TestAdminSecurityEvents:
         assert isinstance(body["events"], list)
 
     async def test_security_events_default_page_size_50(
-        self, client, make_creator, monkeypatch
+        self, client, make_creator, db
     ):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/security/events",
@@ -300,9 +314,10 @@ class TestAdminSecurityEvents:
         assert resp.status_code == 200
         assert resp.json()["page_size"] == 50
 
-    async def test_security_events_severity_filter(self, client, make_creator, monkeypatch):
+    async def test_security_events_severity_filter(self, client, make_creator, db):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/security/events?severity=high&event_type=login_failure",
@@ -311,11 +326,12 @@ class TestAdminSecurityEvents:
         assert resp.status_code == 200
 
     async def test_security_events_blocked_for_non_admin(
-        self, client, make_creator, monkeypatch
+        self, client, make_creator, db
     ):
         admin_creator, _ = await make_creator()
         _, other_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/security/events",
@@ -327,9 +343,10 @@ class TestAdminSecurityEvents:
 class TestAdminPayouts:
     """GET /api/v2/admin/payouts/pending + POST approve/reject"""
 
-    async def test_pending_payouts_returns_list(self, client, make_creator, monkeypatch):
+    async def test_pending_payouts_returns_list(self, client, make_creator, db):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/payouts/pending",
@@ -342,9 +359,10 @@ class TestAdminPayouts:
         assert "requests" in body
         assert isinstance(body["requests"], list)
 
-    async def test_pending_payouts_limit_param(self, client, make_creator, monkeypatch):
+    async def test_pending_payouts_limit_param(self, client, make_creator, db):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/payouts/pending?limit=10",
@@ -354,11 +372,12 @@ class TestAdminPayouts:
         assert len(resp.json()) <= 10
 
     async def test_pending_payouts_blocked_for_non_admin(
-        self, client, make_creator, monkeypatch
+        self, client, make_creator, db
     ):
         admin_creator, _ = await make_creator()
         _, other_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/payouts/pending",
@@ -367,10 +386,11 @@ class TestAdminPayouts:
         assert resp.status_code == 403
 
     async def test_approve_payout_nonexistent_returns_400(
-        self, client, make_creator, monkeypatch
+        self, client, make_creator, db
     ):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         fake_id = _uid()
         resp = await client.post(
@@ -381,10 +401,11 @@ class TestAdminPayouts:
         assert resp.status_code == 400
 
     async def test_reject_payout_nonexistent_returns_400(
-        self, client, make_creator, monkeypatch
+        self, client, make_creator, db
     ):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         fake_id = _uid()
         resp = await client.post(
@@ -394,9 +415,10 @@ class TestAdminPayouts:
         )
         assert resp.status_code == 400
 
-    async def test_reject_payout_requires_reason(self, client, make_creator, monkeypatch):
+    async def test_reject_payout_requires_reason(self, client, make_creator, db):
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.post(
             f"/api/v2/admin/payouts/{_uid()}/reject",
@@ -410,12 +432,13 @@ class TestAdminStreamToken:
     """GET /api/v2/admin/events/stream-token"""
 
     async def test_stream_token_scoped_to_admin_topics(
-        self, client, make_creator, monkeypatch
+        self, client, make_creator, db
     ):
         from marketplace.core.auth import decode_stream_token
 
         admin_creator, admin_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/events/stream-token",
@@ -432,11 +455,12 @@ class TestAdminStreamToken:
         assert payload["type"] == "stream_admin"
 
     async def test_stream_token_blocked_for_non_admin(
-        self, client, make_creator, monkeypatch
+        self, client, make_creator, db
     ):
         admin_creator, _ = await make_creator()
         _, other_token = await make_creator()
-        monkeypatch.setattr(settings, "admin_creator_ids", admin_creator.id)
+        await seed_system_roles(db)
+        await assign_role(db, admin_creator.id, "creator", "admin", "system")
 
         resp = await client.get(
             "/api/v2/admin/events/stream-token",
@@ -689,8 +713,7 @@ class TestAgentTrust:
         resp = await client.get(f"/api/v2/agents/{_uid()}/trust")
         assert resp.status_code == 401
 
-    async def test_trust_forbidden_for_other_creator(self, client, monkeypatch):
-        monkeypatch.setattr(settings, "admin_creator_ids", "")
+    async def test_trust_forbidden_for_other_creator(self, client):
         creator_a = await _register_creator(client)
         creator_b = await _register_creator(client)
         onboarded = await _onboard_agent(client, creator_a["token"])

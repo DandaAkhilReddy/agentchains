@@ -263,7 +263,8 @@ class TestJSONRPCHandling:
         sid = init_resp["result"]["_session_id"]
 
         resp = await handle_message(
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {"_session_id": sid}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            session_id=sid,
         )
 
         assert "result" in resp
@@ -282,7 +283,8 @@ class TestJSONRPCHandling:
         sid = init_resp["result"]["_session_id"]
 
         resp = await handle_message(
-            {"jsonrpc": "2.0", "id": 3, "method": "resources/list", "params": {"_session_id": sid}},
+            {"jsonrpc": "2.0", "id": 3, "method": "resources/list", "params": {}},
+            session_id=sid,
         )
 
         assert "result" in resp
@@ -301,7 +303,8 @@ class TestJSONRPCHandling:
         sid = init_resp["result"]["_session_id"]
 
         resp = await handle_message(
-            {"jsonrpc": "2.0", "id": 4, "method": "ping", "params": {"_session_id": sid}},
+            {"jsonrpc": "2.0", "id": 4, "method": "ping", "params": {}},
+            session_id=sid,
         )
 
         assert resp["result"] == {}
@@ -318,7 +321,8 @@ class TestJSONRPCHandling:
 
         resp = await handle_message(
             {"jsonrpc": "2.0", "id": 5, "method": "notifications/initialized",
-             "params": {"_session_id": sid}},
+             "params": {}},
+            session_id=sid,
         )
 
         assert resp["result"]["acknowledged"] is True
@@ -335,7 +339,8 @@ class TestJSONRPCHandling:
 
         resp = await handle_message(
             {"jsonrpc": "2.0", "id": 6, "method": "bogus/method",
-             "params": {"_session_id": sid}},
+             "params": {}},
+            session_id=sid,
         )
 
         assert "error" in resp

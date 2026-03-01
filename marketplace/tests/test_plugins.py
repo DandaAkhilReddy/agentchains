@@ -339,14 +339,16 @@ class TestInitializePlugin:
             initialize_plugin(manifest)
 
     async def test_nonexistent_module_raises_import_error(self):
+        # entry_point must start with marketplace.plugins. to pass the security
+        # check; then ImportError is raised for the nonexistent module
         manifest = PluginManifest(
             name="bad",
             version="1.0",
             description="Bad",
             author="A",
-            entry_point="nonexistent.module.path:SomeClass",
+            entry_point="marketplace.plugins.nonexistent.module.path:SomeClass",
         )
-        with pytest.raises(ImportError):
+        with pytest.raises((ImportError, ModuleNotFoundError)):
             initialize_plugin(manifest)
 
     async def test_nonexistent_class_raises_attribute_error(self):

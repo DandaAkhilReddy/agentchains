@@ -883,13 +883,13 @@ async def test_users_register_duplicate_email(client):
 
     first = await client.post(
         "/api/v2/users/register",
-        json={"email": email, "password": "Pass123!"},
+        json={"email": email, "password": "Pass123!Valid"},
     )
     assert first.status_code == 201
 
     second = await client.post(
         "/api/v2/users/register",
-        json={"email": email, "password": "AnotherPass!"},
+        json={"email": email, "password": "AnotherPass1!"},
     )
     assert second.status_code == 409
 
@@ -983,7 +983,7 @@ async def test_users_stream_token_happy_path(client):
     email = f"stream-{_new_id()[:8]}@example.com"
     reg_resp = await client.post(
         "/api/v2/users/register",
-        json={"email": email, "password": "StreamPass!"},
+        json={"email": email, "password": "StreamPass1!"},
     )
     user_token = reg_resp.json()["token"]
 

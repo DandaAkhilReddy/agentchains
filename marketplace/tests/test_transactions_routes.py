@@ -9,7 +9,29 @@ Tests all endpoints in marketplace/api/transactions.py:
 - GET /api/v1/transactions (list with filters)
 """
 
+from __future__ import annotations
+
+import uuid
+
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from marketplace.models.agent_trust import AgentTrustProfile
+
+
+# ---------------------------------------------------------------------------
+# Trust tier helper
+# ---------------------------------------------------------------------------
+
+async def _set_trust_tier(db: AsyncSession, agent_id: str, tier: str = "T1") -> None:
+    """Insert an AgentTrustProfile row so the agent passes trust tier gates."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -17,10 +39,11 @@ import pytest
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_initiate_transaction_success(client, make_agent, make_listing, auth_header):
+async def test_initiate_transaction_success(client, make_agent, make_listing, auth_header, db):
     """Successfully initiate a transaction for a listing."""
     seller, seller_token = await make_agent(name="seller", agent_type="seller")
     buyer, buyer_token = await make_agent(name="buyer", agent_type="buyer")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id, price_usdc=5.0)
 
     resp = await client.post(
@@ -53,9 +76,10 @@ async def test_initiate_transaction_no_auth(client, make_agent, make_listing):
 
 
 @pytest.mark.asyncio
-async def test_initiate_transaction_listing_not_found(client, make_agent, auth_header):
+async def test_initiate_transaction_listing_not_found(client, make_agent, auth_header, db):
     """Return 404 when listing does not exist."""
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
 
     resp = await client.post(
         "/api/v1/transactions/initiate",
@@ -71,10 +95,11 @@ async def test_initiate_transaction_listing_not_found(client, make_agent, auth_h
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_confirm_payment_simulated(client, make_agent, make_listing, auth_header):
+async def test_confirm_payment_simulated(client, make_agent, make_listing, auth_header, db):
     """Confirm payment in simulated mode (no signature required)."""
     seller, _ = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id, price_usdc=3.0)
 
     # Initiate transaction
@@ -100,10 +125,11 @@ async def test_confirm_payment_simulated(client, make_agent, make_listing, auth_
 
 
 @pytest.mark.asyncio
-async def test_confirm_payment_with_tx_hash(client, make_agent, make_listing, auth_header):
+async def test_confirm_payment_with_tx_hash(client, make_agent, make_listing, auth_header, db):
     """Confirm payment with a transaction hash."""
     seller, _ = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id)
 
     init_resp = await client.post(
@@ -125,10 +151,11 @@ async def test_confirm_payment_with_tx_hash(client, make_agent, make_listing, au
 
 
 @pytest.mark.asyncio
-async def test_confirm_payment_invalid_state(client, make_agent, make_listing, auth_header):
+async def test_confirm_payment_invalid_state(client, make_agent, make_listing, auth_header, db):
     """Return 400 when trying to confirm payment on non-pending transaction."""
     seller, _ = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id)
 
     # Initiate and confirm once
@@ -155,10 +182,11 @@ async def test_confirm_payment_invalid_state(client, make_agent, make_listing, a
 
 
 @pytest.mark.asyncio
-async def test_confirm_payment_no_auth(client, make_agent, make_listing, auth_header):
+async def test_confirm_payment_no_auth(client, make_agent, make_listing, auth_header, db):
     """Reject payment confirmation without authentication."""
     seller, _ = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id)
 
     init_resp = await client.post(
@@ -180,10 +208,11 @@ async def test_confirm_payment_no_auth(client, make_agent, make_listing, auth_he
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_deliver_content_success(client, make_agent, make_listing, auth_header):
+async def test_deliver_content_success(client, make_agent, make_listing, auth_header, db):
     """Seller can deliver content after payment confirmation."""
     seller, seller_token = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id, price_usdc=2.0)
 
     # Initiate and confirm payment
@@ -213,11 +242,12 @@ async def test_deliver_content_success(client, make_agent, make_listing, auth_he
 
 
 @pytest.mark.asyncio
-async def test_deliver_content_not_seller(client, make_agent, make_listing, auth_header):
+async def test_deliver_content_not_seller(client, make_agent, make_listing, auth_header, db):
     """Only the seller can deliver content (403 for others)."""
     seller, _ = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
     intruder, intruder_token = await make_agent(name="intruder")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id)
 
     # Initiate and confirm
@@ -244,10 +274,11 @@ async def test_deliver_content_not_seller(client, make_agent, make_listing, auth
 
 
 @pytest.mark.asyncio
-async def test_deliver_content_invalid_state(client, make_agent, make_listing, auth_header):
+async def test_deliver_content_invalid_state(client, make_agent, make_listing, auth_header, db):
     """Return 400 when trying to deliver content before payment confirmation."""
     seller, seller_token = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id)
 
     init_resp = await client.post(
@@ -272,10 +303,11 @@ async def test_deliver_content_invalid_state(client, make_agent, make_listing, a
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_verify_delivery_success(client, make_agent, make_listing, auth_header):
+async def test_verify_delivery_success(client, make_agent, make_listing, auth_header, db):
     """Buyer can verify delivery and complete transaction."""
     seller, seller_token = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
 
     # Create listing with known content hash
     content_hash = "sha256:abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab"
@@ -314,11 +346,12 @@ async def test_verify_delivery_success(client, make_agent, make_listing, auth_he
 
 
 @pytest.mark.asyncio
-async def test_verify_delivery_not_buyer(client, make_agent, make_listing, auth_header):
+async def test_verify_delivery_not_buyer(client, make_agent, make_listing, auth_header, db):
     """Only the buyer can verify delivery (403 for others)."""
     seller, seller_token = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
     intruder, intruder_token = await make_agent(name="intruder")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id)
 
     # Initiate, confirm, deliver
@@ -349,10 +382,11 @@ async def test_verify_delivery_not_buyer(client, make_agent, make_listing, auth_
 
 
 @pytest.mark.asyncio
-async def test_verify_delivery_invalid_state(client, make_agent, make_listing, auth_header):
+async def test_verify_delivery_invalid_state(client, make_agent, make_listing, auth_header, db):
     """Return 400 when trying to verify before delivery."""
     seller, _ = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id)
 
     init_resp = await client.post(
@@ -381,10 +415,11 @@ async def test_verify_delivery_invalid_state(client, make_agent, make_listing, a
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_get_transaction_success(client, make_agent, make_listing, auth_header):
+async def test_get_transaction_success(client, make_agent, make_listing, auth_header, db):
     """Retrieve a transaction by ID."""
     seller, _ = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id, price_usdc=4.5)
 
     init_resp = await client.post(
@@ -422,10 +457,11 @@ async def test_get_transaction_not_found(client, make_agent, auth_header):
 
 
 @pytest.mark.asyncio
-async def test_get_transaction_no_auth(client, make_agent, make_listing, auth_header):
+async def test_get_transaction_no_auth(client, make_agent, make_listing, auth_header, db):
     """Reject get transaction without authentication."""
     seller, _ = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
     listing = await make_listing(seller.id)
 
     init_resp = await client.post(
@@ -444,11 +480,12 @@ async def test_get_transaction_no_auth(client, make_agent, make_listing, auth_he
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_list_transactions_as_buyer(client, make_agent, make_listing, auth_header):
+async def test_list_transactions_as_buyer(client, make_agent, make_listing, auth_header, db):
     """List transactions where current agent is buyer."""
     seller, _ = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
     other, _ = await make_agent(name="other")
+    await _set_trust_tier(db, buyer.id)
 
     listing1 = await make_listing(seller.id, price_usdc=1.0)
     listing2 = await make_listing(seller.id, price_usdc=2.0)
@@ -480,11 +517,13 @@ async def test_list_transactions_as_buyer(client, make_agent, make_listing, auth
 
 
 @pytest.mark.asyncio
-async def test_list_transactions_as_seller(client, make_agent, make_listing, auth_header):
+async def test_list_transactions_as_seller(client, make_agent, make_listing, auth_header, db):
     """List transactions where current agent is seller."""
     seller, seller_token = await make_agent(name="seller")
     buyer1, buyer1_token = await make_agent(name="buyer1")
     buyer2, buyer2_token = await make_agent(name="buyer2")
+    await _set_trust_tier(db, buyer1.id)
+    await _set_trust_tier(db, buyer2.id)
 
     listing = await make_listing(seller.id, price_usdc=5.0)
 
@@ -513,10 +552,11 @@ async def test_list_transactions_as_seller(client, make_agent, make_listing, aut
 
 
 @pytest.mark.asyncio
-async def test_list_transactions_with_status_filter(client, make_agent, make_listing, auth_header):
+async def test_list_transactions_with_status_filter(client, make_agent, make_listing, auth_header, db):
     """Filter transactions by status."""
     seller, seller_token = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
 
     listing1 = await make_listing(seller.id)
     listing2 = await make_listing(seller.id)
@@ -563,10 +603,11 @@ async def test_list_transactions_with_status_filter(client, make_agent, make_lis
 
 
 @pytest.mark.asyncio
-async def test_list_transactions_pagination(client, make_agent, make_listing, auth_header):
+async def test_list_transactions_pagination(client, make_agent, make_listing, auth_header, db):
     """Test pagination with page and page_size parameters."""
     seller, _ = await make_agent(name="seller")
     buyer, buyer_token = await make_agent(name="buyer")
+    await _set_trust_tier(db, buyer.id)
 
     # Create 5 listings and transactions
     for i in range(5):

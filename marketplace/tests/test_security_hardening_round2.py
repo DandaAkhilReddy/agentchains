@@ -5,12 +5,30 @@ and webhook replay protection.
 
 import json
 import time
+import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from marketplace.config import settings
+from marketplace.models.agent_trust import AgentTrustProfile
+from marketplace.tests.conftest import TestSession
+
+
+# ---------------------------------------------------------------------------
+# Trust tier helper
+# ---------------------------------------------------------------------------
+
+async def _set_trust_tier(db, agent_id: str, tier: str = "T1") -> None:
+    """Insert an AgentTrustProfile row so the agent meets the required trust tier."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 # ===========================================================================
@@ -234,6 +252,8 @@ class TestSSRFProtection:
     async def test_federation_register_rejects_private_ip(self, client, make_agent):
         """MCP federation register_server should reject private IP base_url."""
         agent, token = await make_agent()
+        async with TestSession() as db:
+            await _set_trust_tier(db, agent.id, tier="T2")
         resp = await client.post(
             "/api/v3/federation/servers",
             json={

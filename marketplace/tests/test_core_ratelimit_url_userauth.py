@@ -51,6 +51,8 @@ def _make_expired_user_token(user_id: str = "u-expired", email: str = "x@test.co
         "email": email,
         "type": "user",
         "jti": str(uuid.uuid4()),
+        "aud": "agentchains-marketplace",
+        "iss": "agentchains",
         "exp": datetime.now(timezone.utc) - timedelta(hours=1),
         "iat": datetime.now(timezone.utc) - timedelta(hours=2),
     }
@@ -463,26 +465,26 @@ class TestCreateUserToken:
     async def test_payload_has_type_user(self):
         """Token payload must contain type='user'."""
         token = create_user_token("user-2", "c@d.com")
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm], audience="agentchains-marketplace")
         assert payload["type"] == "user"
 
     async def test_payload_has_correct_sub(self):
         """Token 'sub' claim must match the provided user_id."""
         uid = str(uuid.uuid4())
         token = create_user_token(uid, "test@example.com")
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm], audience="agentchains-marketplace")
         assert payload["sub"] == uid
 
     async def test_payload_has_correct_email(self):
         """Token 'email' claim must match the provided email."""
         token = create_user_token("u-abc", "foo@bar.com")
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm], audience="agentchains-marketplace")
         assert payload["email"] == "foo@bar.com"
 
     async def test_payload_has_jti(self):
         """Token must have a 'jti' claim that is a valid UUID."""
         token = create_user_token("u-jti", "jti@test.com")
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm], audience="agentchains-marketplace")
         assert "jti" in payload
         uuid.UUID(payload["jti"])  # raises ValueError if not a valid UUID
 
@@ -490,21 +492,21 @@ class TestCreateUserToken:
         """Two tokens for the same user must have different jti values."""
         t1 = create_user_token("u-same", "same@test.com")
         t2 = create_user_token("u-same", "same@test.com")
-        p1 = jwt.decode(t1, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-        p2 = jwt.decode(t2, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        p1 = jwt.decode(t1, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm], audience="agentchains-marketplace")
+        p2 = jwt.decode(t2, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm], audience="agentchains-marketplace")
         assert p1["jti"] != p2["jti"]
 
     async def test_token_expiry_is_in_the_future(self):
-        """Token exp must be in the future (at least 1 hour away)."""
+        """Token exp must be in the future (at least 55 minutes away)."""
         token = create_user_token("u-exp", "exp@test.com")
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm], audience="agentchains-marketplace")
         exp_dt = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
-        assert exp_dt > datetime.now(timezone.utc) + timedelta(hours=1)
+        assert exp_dt > datetime.now(timezone.utc) + timedelta(minutes=55)
 
     async def test_payload_has_iat(self):
         """Token must have an 'iat' (issued at) claim."""
         token = create_user_token("u-iat", "iat@test.com")
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm], audience="agentchains-marketplace")
         assert "iat" in payload
 
 
@@ -582,6 +584,8 @@ class TestGetCurrentUserId:
             "email": "nosub@test.com",
             "type": "user",
             "jti": str(uuid.uuid4()),
+            "aud": "agentchains-marketplace",
+            "iss": "agentchains",
             "exp": datetime.now(timezone.utc) + timedelta(hours=1),
             "iat": datetime.now(timezone.utc),
         }

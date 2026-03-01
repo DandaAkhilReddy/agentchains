@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
+from marketplace.core.auth_context import AuthContext
+from marketplace.core.trust_gate import require_trust_tier
 from marketplace.database import get_db
 from marketplace.services import mcp_federation_service
 
@@ -78,6 +80,7 @@ async def register_server(
     req: ServerRegisterRequest,
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
+    _trust: AuthContext = Depends(require_trust_tier("T2")),
 ):
     """Register a new federated MCP server."""
     from marketplace.core.url_validation import validate_url

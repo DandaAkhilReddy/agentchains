@@ -18,26 +18,19 @@ import json
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from jose import jwt as jose_jwt
 
 from marketplace.config import settings
-from marketplace.core.auth import create_access_token, decode_token
-from marketplace.core.exceptions import UnauthorizedError
-from marketplace.mcp.auth import validate_mcp_auth
+from marketplace.core.auth import create_access_token
 from marketplace.mcp.resources import RESOURCE_DEFINITIONS
 from marketplace.mcp.server import (
-    MCP_VERSION,
-    SERVER_NAME,
-    SERVER_VERSION,
-    _jsonrpc_error,
-    _jsonrpc_response,
     handle_message,
 )
-from marketplace.mcp.session_manager import MCPSession, SessionManager, session_manager
-from marketplace.mcp.tools import TOOL_DEFINITIONS, execute_tool
+from marketplace.mcp.session_manager import SessionManager, session_manager
+from marketplace.mcp.tools import TOOL_DEFINITIONS
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +105,7 @@ class TestMalformedRequests:
         """A request with no 'method' key falls through to the -32601 branch."""
         _, sid, _ = await _init_session()
 
-        body = {"jsonrpc": "2.0", "id": 1, "params": {"_session_id": sid}}
+        body = {"jsonrpc": "2.0", "id": 1, "params": {}}
         # method defaults to "" which is not matched by any handler
         resp = await handle_message(body, session_id=sid)
 
@@ -126,7 +119,7 @@ class TestMalformedRequests:
         _, sid, _ = await _init_session()
 
         resp = await handle_message(
-            _rpc("", {"_session_id": sid}, msg_id=2),
+            _rpc("", {}, msg_id=2),
             session_id=sid,
         )
 
@@ -138,7 +131,7 @@ class TestMalformedRequests:
         """A request with id=None (null) returns the null id in the response."""
         _, sid, _ = await _init_session()
 
-        body = {"jsonrpc": "2.0", "id": None, "method": "ping", "params": {"_session_id": sid}}
+        body = {"jsonrpc": "2.0", "id": None, "method": "ping", "params": {}}
         resp = await handle_message(body, session_id=sid)
 
         assert resp["id"] is None
@@ -167,7 +160,7 @@ class TestMalformedRequests:
             "jsonrpc": "2.0",
             "id": 4,
             "method": "ping",
-            "params": {"_session_id": sid},
+            "params": {},
             "extra_field": "should be ignored",
             "another_unknown": 42,
         }
@@ -267,7 +260,8 @@ class TestSessionManagement:
         real_session.last_activity = time.monotonic() - (session_manager._timeout + 10)
 
         resp = await handle_message(
-            _rpc("ping", {"_session_id": real_sid}, msg_id=10),
+            _rpc("ping", {}, msg_id=10),
+            session_id=real_sid,
         )
 
         assert "error" in resp
@@ -301,14 +295,14 @@ class TestSessionManagement:
         _, sid, _ = await _init_session()
 
         # Verify it works before close
-        resp = await handle_message(_rpc("ping", {"_session_id": sid}, msg_id=20))
+        resp = await handle_message(_rpc("ping", {}, msg_id=20), session_id=sid)
         assert "result" in resp
 
         # Close the session
         session_manager.close_session(sid)
 
         # Now it should fail
-        resp = await handle_message(_rpc("ping", {"_session_id": sid}, msg_id=21))
+        resp = await handle_message(_rpc("ping", {}, msg_id=21), session_id=sid)
         assert "error" in resp
         assert resp["error"]["code"] == -32000
 
@@ -320,26 +314,28 @@ class TestSessionManagement:
         sessions_to_expire = []
         sessions_to_keep = []
 
-        # Create 5 sessions to expire
+        # Create all 10 sessions first, then mark 5 as expired
         for _ in range(5):
             s = mgr.create_session(f"expire-{uuid.uuid4()}")
-            s.last_activity = time.monotonic() - 200  # Well past timeout
-            sessions_to_expire.append(s.session_id)
+            sessions_to_expire.append(s)
 
-        # Create 5 sessions to keep
         for _ in range(5):
             s = mgr.create_session(f"keep-{uuid.uuid4()}")
-            sessions_to_keep.append(s.session_id)
+            sessions_to_keep.append(s)
 
         assert mgr.active_count == 10
+
+        # Now mark the first 5 as expired
+        for s in sessions_to_expire:
+            s.last_activity = time.monotonic() - 200  # Well past timeout
 
         mgr.cleanup_expired()
 
         assert mgr.active_count == 5
-        for sid in sessions_to_expire:
-            assert mgr.get_session(sid) is None
-        for sid in sessions_to_keep:
-            assert mgr.get_session(sid) is not None
+        for s in sessions_to_expire:
+            assert mgr.get_session(s.session_id) is None
+        for s in sessions_to_keep:
+            assert mgr.get_session(s.session_id) is not None
 
     @pytest.mark.asyncio
     async def test_session_activity_updates_on_rate_check(self):
@@ -372,9 +368,9 @@ class TestResourceLimits:
 
         resp = await handle_message(
             _rpc("resources/read", {
-                "_session_id": sid,
                 "uri": "https://evil.com/data",
             }, msg_id=30),
+            session_id=sid,
         )
 
         # The read_resource function has an async_session call, so it may succeed
@@ -395,9 +391,9 @@ class TestResourceLimits:
 
         resp = await handle_message(
             _rpc("resources/read", {
-                "_session_id": sid,
                 "uri": "",
             }, msg_id=31),
+            session_id=sid,
         )
 
         assert "jsonrpc" in resp
@@ -415,9 +411,9 @@ class TestResourceLimits:
 
         resp = await handle_message(
             _rpc("resources/read", {
-                "_session_id": sid,
                 "uri": "marketplace://../../etc/passwd",
             }, msg_id=32),
+            session_id=sid,
         )
 
         assert "jsonrpc" in resp
@@ -437,7 +433,8 @@ class TestResourceLimits:
         _, sid, _ = await _init_session()
 
         resp = await handle_message(
-            _rpc("resources/list", {"_session_id": sid}, msg_id=33),
+            _rpc("resources/list", {}, msg_id=33),
+            session_id=sid,
         )
 
         assert "result" in resp
@@ -454,9 +451,9 @@ class TestResourceLimits:
 
         resp = await handle_message(
             _rpc("resources/read", {
-                "_session_id": sid,
                 "uri": "marketplace://agent/fake-id-with-slashes/and/more",
             }, msg_id=34),
+            session_id=sid,
         )
 
         assert "jsonrpc" in resp
@@ -484,10 +481,10 @@ class TestToolExecutionEdgeCases:
 
         resp = await handle_message(
             _rpc("tools/call", {
-                "_session_id": sid,
                 "name": "this_tool_definitely_does_not_exist",
                 "arguments": {},
             }, msg_id=40),
+            session_id=sid,
         )
 
         assert "result" in resp
@@ -504,10 +501,10 @@ class TestToolExecutionEdgeCases:
 
         resp = await handle_message(
             _rpc("tools/call", {
-                "_session_id": sid,
                 "name": "",
                 "arguments": {},
             }, msg_id=41),
+            session_id=sid,
         )
 
         assert "result" in resp
@@ -529,10 +526,10 @@ class TestToolExecutionEdgeCases:
 
             resp = await handle_message(
                 _rpc("tools/call", {
-                    "_session_id": sid,
                     "name": "marketplace_discover",
                     "arguments": {"q": "test"},
                 }, msg_id=42),
+                session_id=sid,
             )
 
         assert "error" in resp
@@ -547,10 +544,10 @@ class TestToolExecutionEdgeCases:
         # marketplace_discover expects min_quality as number, pass a string
         resp = await handle_message(
             _rpc("tools/call", {
-                "_session_id": sid,
                 "name": "marketplace_discover",
                 "arguments": {"min_quality": "not_a_number", "max_price": "also_not"},
             }, msg_id=43),
+            session_id=sid,
         )
 
         # Should get either a result (if the service handles it gracefully) or an error
@@ -573,10 +570,10 @@ class TestToolExecutionEdgeCases:
 
             resp = await handle_message(
                 _rpc("tools/call", {
-                    "_session_id": sid,
                     "name": "marketplace_express_buy",
                     "arguments": {},  # Missing required 'listing_id'
                 }, msg_id=44),
+                session_id=sid,
             )
 
         assert "error" in resp

@@ -6,9 +6,11 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from marketplace.config import settings
 from marketplace.core.auth import create_stream_token
+from marketplace.core.password_validation import validate_password_strength
 from marketplace.core.user_auth import get_current_user_id
 from marketplace.database import get_db
 from marketplace.schemas.dual_layer import (
@@ -18,7 +20,7 @@ from marketplace.schemas.dual_layer import (
     EndUserResponse,
     UserStreamTokenResponse,
 )
-from marketplace.services import dual_layer_service
+from marketplace.services import auth_event_service, dual_layer_service
 
 router = APIRouter(prefix="/users", tags=["users-v2"])
 
@@ -28,6 +30,7 @@ async def register_user_v2(
     req: EndUserRegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    validate_password_strength(req.password)
     try:
         return await dual_layer_service.register_end_user(
             db,
@@ -41,8 +44,18 @@ async def register_user_v2(
 @router.post("/login", response_model=EndUserAuthResponse)
 async def login_user_v2(
     req: EndUserLoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    ip_address = request.client.host if request.client else None
+    is_brute_force = await auth_event_service.detect_brute_force(
+        db,
+        ip_address=ip_address,
+        window_minutes=5,
+        threshold=10,
+    )
+    if is_brute_force:
+        raise HTTPException(status_code=429, detail="Too many login attempts. Please try again later.")
     try:
         return await dual_layer_service.login_end_user(
             db,
@@ -50,6 +63,13 @@ async def login_user_v2(
             password=req.password,
         )
     except ValueError as exc:
+        await auth_event_service.log_auth_event(
+            db,
+            actor_type="user",
+            event_type="login_failure",
+            ip_address=ip_address,
+            details={"email": req.email},
+        )
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 

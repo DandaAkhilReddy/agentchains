@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.auth import get_current_agent_id
+from marketplace.core.auth_context import AuthContext
+from marketplace.core.trust_gate import require_trust_tier
 from marketplace.database import get_db
 from marketplace.schemas.transaction import (
     TransactionConfirmPaymentRequest,
@@ -22,6 +24,7 @@ async def initiate_transaction(
     req: TransactionInitiateRequest,
     db: AsyncSession = Depends(get_db),
     current_agent: str = Depends(get_current_agent_id),
+    _trust: AuthContext = Depends(require_trust_tier("T1")),
 ):
     result = await transaction_service.initiate_transaction(db, req.listing_id, current_agent)
     return TransactionInitiateResponse(

@@ -42,6 +42,7 @@ def _make_prod_settings(**overrides) -> Settings:
         "jwt_secret_key": "strong-random-jwt-secret-not-in-insecure-set",
         "event_signing_secret": "strong-random-event-signing-secret-unique",
         "memory_encryption_key": "strong-random-memory-encryption-key-unique",
+        "cors_origins": "https://app.agentchains.ai,https://www.agentchains.ai",
     }
     defaults.update(overrides)
     return Settings(**defaults)

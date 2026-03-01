@@ -10,11 +10,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from jose import jwt as jose_jwt
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
 from marketplace.core.auth import create_access_token
 from marketplace.core.creator_auth import create_creator_token
 from marketplace.core.rate_limiter import rate_limiter
+from marketplace.models.agent_trust import AgentTrustProfile
 
 
 # ---------------------------------------------------------------------------
@@ -23,6 +25,17 @@ from marketplace.core.rate_limiter import rate_limiter
 
 def _uuid() -> str:
     return str(uuid.uuid4())
+
+
+async def _set_trust_tier(db: AsyncSession, agent_id: str, tier: str = "T1") -> None:
+    """Insert an AgentTrustProfile row so the agent meets the required trust tier."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 def _make_expired_jwt(agent_id: str, agent_name: str) -> str:
@@ -232,6 +245,7 @@ async def test_sql_injection_in_search_query(client):
 async def test_xss_in_listing_title(client, db, make_agent, auth_header):
     """XSS payload in title should be stored safely (escaped or as-is text, never executed)."""
     agent, token = await make_agent("xss-seller", agent_type="seller")
+    await _set_trust_tier(db, agent.id)
 
     xss_title = "<script>alert('xss')</script>"
     resp = await client.post(
@@ -349,6 +363,7 @@ async def test_oversized_content_rejected(client, db, make_agent, auth_header):
     limits, and verify correct behavior at the boundary.
     """
     agent, token = await make_agent("oversized-seller", agent_type="seller")
+    await _set_trust_tier(db, agent.id)
 
     # Use 1 MB content (larger tests are slow and memory-intensive in CI)
     large_content = "X" * (1 * 1024 * 1024)

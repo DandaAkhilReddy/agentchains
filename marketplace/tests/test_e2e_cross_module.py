@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
+from marketplace.models.agent_trust import AgentTrustProfile
 from marketplace.services import (
     token_service,
     reputation_service,
@@ -33,6 +34,17 @@ from marketplace.tests.conftest import TestSession
 # CDN patch target — express_service imports cdn_get_content from cdn_service
 CDN_PATCH = "marketplace.services.express_service.cdn_get_content"
 SAMPLE_CONTENT = b'{"data": "cross-module integration test payload"}'
+
+
+async def _set_trust_tier(db, agent_id: str, tier: str = "T1") -> None:
+    """Insert an AgentTrustProfile row so the agent meets the required trust tier."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +79,7 @@ async def test_e2e_agent_registers_and_gets_bonus(client, auth_header):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_e2e_seller_lists_and_buyer_discovers(client, auth_header):
+async def test_e2e_seller_lists_and_buyer_discovers(client, auth_header, db):
     """Seller creates listing via HTTP, buyer searches and finds it."""
     # Register seller
     seller_resp = await client.post("/api/v1/agents/register", json={
@@ -76,7 +88,9 @@ async def test_e2e_seller_lists_and_buyer_discovers(client, auth_header):
         "public_key": "ssh-rsa AAAA_seller_disc_key",
     })
     assert seller_resp.status_code == 201
+    seller_id = seller_resp.json()["id"]
     seller_token = seller_resp.json()["jwt_token"]
+    await _set_trust_tier(db, seller_id)
 
     # Seller creates listing
     listing_resp = await client.post(
@@ -112,7 +126,7 @@ async def test_e2e_seller_lists_and_buyer_discovers(client, auth_header):
 
 @pytest.mark.asyncio
 @patch(CDN_PATCH, new_callable=AsyncMock)
-async def test_e2e_full_purchase_flow(mock_cdn, client, auth_header, seed_platform):
+async def test_e2e_full_purchase_flow(mock_cdn, client, auth_header, seed_platform, db):
     """Buyer deposits -> finds listing -> express buys -> gets content."""
     mock_cdn.return_value = SAMPLE_CONTENT
 
@@ -122,7 +136,9 @@ async def test_e2e_full_purchase_flow(mock_cdn, client, auth_header, seed_platfo
         "agent_type": "seller",
         "public_key": "ssh-rsa AAAA_seller_full_key",
     })
+    seller_id = seller_resp.json()["id"]
     seller_token = seller_resp.json()["jwt_token"]
+    await _set_trust_tier(db, seller_id)
 
     listing_resp = await client.post(
         "/api/v1/listings",
@@ -329,7 +345,7 @@ async def test_e2e_creator_redeems_api_credits(client):
     email = f"redeem-{uuid.uuid4().hex[:8]}@test.com"
     reg_resp = await client.post("/api/v1/creators/register", json={
         "email": email,
-        "password": "testpass123",
+        "password": "SecurePass1!",
         "display_name": "Redeemer",
     })
     assert reg_resp.status_code == 201
@@ -553,7 +569,7 @@ async def test_e2e_multi_category_discovery(db, make_agent, make_listing):
 @pytest.mark.asyncio
 @patch(CDN_PATCH, new_callable=AsyncMock)
 async def test_e2e_concurrent_buyers_same_listing(
-    mock_cdn, client, auth_header, seed_platform
+    mock_cdn, client, auth_header, seed_platform, db
 ):
     """Two buyers purchase same listing, both succeed."""
     mock_cdn.return_value = SAMPLE_CONTENT
@@ -564,7 +580,9 @@ async def test_e2e_concurrent_buyers_same_listing(
         "agent_type": "seller",
         "public_key": "ssh-rsa AAAA_cc_seller_key",
     })
+    seller_id = seller_resp.json()["id"]
     seller_token = seller_resp.json()["jwt_token"]
+    await _set_trust_tier(db, seller_id)
 
     listing_resp = await client.post(
         "/api/v1/listings",
@@ -677,7 +695,7 @@ async def test_e2e_balance_after_multiple_transfers(
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_e2e_health_endpoint_reflects_state(client, auth_header):
+async def test_e2e_health_endpoint_reflects_state(client, auth_header, db):
     """After creating agents/listings, health counts are correct."""
     # Initial health check
     h0 = await client.get("/api/v1/health")
@@ -692,7 +710,9 @@ async def test_e2e_health_endpoint_reflects_state(client, auth_header):
             "public_key": "ssh-rsa AAAA_health_key",
         })
         assert resp.status_code == 201
+        agent_id = resp.json()["id"]
         token = resp.json()["jwt_token"]
+        await _set_trust_tier(db, agent_id)
 
         # Each agent creates a listing
         await client.post(

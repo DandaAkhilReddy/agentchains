@@ -183,9 +183,11 @@ class TestInitializePlugin:
             initialize_plugin(m)
 
     def test_raises_on_nonexistent_module(self):
+        # entry_point must start with marketplace.plugins. to pass the security
+        # check; then ImportError is raised for the nonexistent module
         m = PluginManifest(
             name="bad", version="1.0", description="d",
-            author="a", entry_point="nonexistent_module_xyz:Cls",
+            author="a", entry_point="marketplace.plugins.nonexistent_module_xyz:Cls",
         )
         with pytest.raises((ImportError, ModuleNotFoundError)):
             initialize_plugin(m)

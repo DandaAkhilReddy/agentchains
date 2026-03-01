@@ -644,7 +644,7 @@ class TestAgentServiceServicerExecuteTask:
         assert result["task_id"] == "t-2"
 
     async def test_execute_task_unknown_type_still_succeeds(self):
-        """ExecuteTask succeeds for an unknown task type (dispatch handles it)."""
+        """ExecuteTask rejects unknown task types (whitelist enforced)."""
         from marketplace.grpc.server import AgentServiceServicer
 
         svc = AgentServiceServicer()
@@ -658,7 +658,7 @@ class TestAgentServiceServicerExecuteTask:
 
         result = await svc.ExecuteTask(request, context)
 
-        assert result["status"] == "success"
+        assert result["status"] == "error"
         assert result["task_id"] == "t-3"
 
     async def test_execute_task_empty_input_json(self):
@@ -748,7 +748,9 @@ class TestAgentServiceServicerExecuteTask:
 
         assert result["status"] == "error"
         assert result["task_id"] == "t-err"
-        assert "kaboom" in result["error_message"]
+        # Generic exceptions are masked as "Internal execution error" to avoid
+        # information disclosure; the real message is only in server logs
+        assert "error_message" in result
 
     async def test_execute_task_exception_still_decrements_active_tasks(self):
         """_active_tasks is decremented even when execution raises (finally block)."""
@@ -876,16 +878,21 @@ class TestAgentServiceServicerHealthCheck:
         assert result["version"] == "1.0.0"
 
     async def test_health_check_active_tasks(self):
+        """HealthCheck returns minimal info; active_tasks not exposed to avoid info disclosure."""
         from marketplace.grpc.server import AgentServiceServicer
         svc = AgentServiceServicer()
         result = await svc.HealthCheck(_make_request(), MagicMock())
-        assert result["active_tasks"] == 0
+        # active_tasks is tracked internally but not returned by HealthCheck
+        assert svc._active_tasks == 0
 
     async def test_health_check_uptime_positive(self):
+        """HealthCheck returns minimal info; uptime_seconds not exposed to avoid info disclosure."""
         from marketplace.grpc.server import AgentServiceServicer
         svc = AgentServiceServicer()
         result = await svc.HealthCheck(_make_request(), MagicMock())
-        assert result["uptime_seconds"] >= 0.0
+        # uptime is tracked internally but not returned by HealthCheck
+        import time
+        assert svc._start_time <= time.time()
 
 
 class TestAgentServiceServicerGetCapabilities:
@@ -962,7 +969,7 @@ class TestAgentServiceServicerDispatchTask:
         svc = AgentServiceServicer()
         result = await svc._dispatch_task("agent_call", {"x": 1}, "agent-1")
         assert "result" in result
-        assert "agent-1" in result["result"]
+        assert "Agent call completed" in result["result"]
 
     async def test_dispatch_tool_call(self):
         from marketplace.grpc.server import AgentServiceServicer
@@ -975,13 +982,14 @@ class TestAgentServiceServicerDispatchTask:
         from marketplace.grpc.server import AgentServiceServicer
         svc = AgentServiceServicer()
         result = await svc._dispatch_task("mystery_type", {}, "agent-1")
-        assert "Unknown task type" in result["result"]
+        assert "Unsupported task type" in result["result"]
 
     async def test_dispatch_input_data_echoed(self):
+        """_dispatch_task returns a result dict; input data is not echoed back."""
         from marketplace.grpc.server import AgentServiceServicer
         svc = AgentServiceServicer()
         result = await svc._dispatch_task("agent_call", {"echo_me": True}, "agent-1")
-        assert result["input"] == {"echo_me": True}
+        assert "result" in result
 
 
 # ===========================================================================

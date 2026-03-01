@@ -42,6 +42,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     auth[7:],
                     settings.jwt_secret_key,
                     algorithms=[settings.jwt_algorithm],
+                    audience="agentchains-marketplace",
+                    options={"verify_aud": True},
                 )
                 return f"agent:{payload.get('sub', 'unknown')}", True
             except JWTError:

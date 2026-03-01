@@ -1,8 +1,22 @@
 """API integration tests for the Phase 2 auto-chaining endpoints."""
 
 import json
+import uuid
 
 import pytest
+
+from marketplace.models.agent_trust import AgentTrustProfile
+
+
+async def _set_trust_tier(db, agent_id: str, tier: str = "T2") -> None:
+    """Set the trust tier for an agent so trust-gated endpoints pass."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +171,7 @@ async def test_validate_chain_success(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id, "T2")
 
     # Create a chain template first
     graph = json.dumps({
@@ -200,6 +215,7 @@ async def test_validate_chain_inactive_agent(client, make_agent, db):
     agent, token = await make_agent()
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
+    await _set_trust_tier(db, agent.id, "T2")
 
     graph = json.dumps({
         "nodes": {"n1": {"type": "agent_call", "config": {"agent_id": agent.id}}},

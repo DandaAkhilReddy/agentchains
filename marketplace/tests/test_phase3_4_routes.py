@@ -5,7 +5,9 @@ import uuid
 from decimal import Decimal
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.models.agent_trust import AgentTrustProfile
 from marketplace.models.chain_provenance import ChainProvenanceEntry
 from marketplace.models.chain_template import ChainExecution, ChainTemplate
 from marketplace.models.workflow import WorkflowDefinition
@@ -13,6 +15,17 @@ from marketplace.models.workflow import WorkflowDefinition
 
 def _new_id() -> str:
     return str(uuid.uuid4())
+
+
+async def _set_trust_tier(db: AsyncSession, agent_id: str, tier: str = "T1") -> None:
+    """Insert an AgentTrustProfile row so the agent meets the required trust tier."""
+    profile = AgentTrustProfile(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        trust_tier=tier,
+    )
+    db.add(profile)
+    await db.commit()
 
 
 def _make_graph_json(agent_ids: list[str]) -> str:
@@ -266,6 +279,7 @@ async def test_list_policies(client, make_agent, db):
 @pytest.mark.asyncio
 async def test_evaluate_policies(client, make_agent, db):
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id, tier="T2")
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
 
@@ -354,6 +368,7 @@ async def test_get_settlement_report_not_found(client, make_agent, db):
 @pytest.mark.asyncio
 async def test_get_cost_estimate(client, make_agent, db):
     agent, token = await make_agent()
+    await _set_trust_tier(db, agent.id, tier="T2")
     agent.a2a_endpoint = "http://test:9000"
     await db.commit()
 
