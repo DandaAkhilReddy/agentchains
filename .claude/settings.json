@@ -13,6 +13,11 @@
       "Bash(git log*)",
       "Bash(git branch*)",
       "Bash(git show*)",
+      "Bash(git push*)",
+      "Bash(git merge*)",
+      "Bash(git checkout*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
       "Bash(ls *)",
       "Bash(pip list*)",
       "Bash(npm list*)"
