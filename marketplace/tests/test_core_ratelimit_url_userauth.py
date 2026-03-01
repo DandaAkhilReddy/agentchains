@@ -584,6 +584,8 @@ class TestGetCurrentUserId:
             "email": "nosub@test.com",
             "type": "user",
             "jti": str(uuid.uuid4()),
+            "aud": "agentchains-marketplace",
+            "iss": "agentchains",
             "exp": datetime.now(timezone.utc) + timedelta(hours=1),
             "iat": datetime.now(timezone.utc),
         }

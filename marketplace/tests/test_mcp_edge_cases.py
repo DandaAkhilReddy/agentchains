@@ -18,26 +18,19 @@ import json
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from jose import jwt as jose_jwt
 
 from marketplace.config import settings
-from marketplace.core.auth import create_access_token, decode_token
-from marketplace.core.exceptions import UnauthorizedError
-from marketplace.mcp.auth import validate_mcp_auth
+from marketplace.core.auth import create_access_token
 from marketplace.mcp.resources import RESOURCE_DEFINITIONS
 from marketplace.mcp.server import (
-    MCP_VERSION,
-    SERVER_NAME,
-    SERVER_VERSION,
-    _jsonrpc_error,
-    _jsonrpc_response,
     handle_message,
 )
-from marketplace.mcp.session_manager import MCPSession, SessionManager, session_manager
-from marketplace.mcp.tools import TOOL_DEFINITIONS, execute_tool
+from marketplace.mcp.session_manager import SessionManager, session_manager
+from marketplace.mcp.tools import TOOL_DEFINITIONS
 
 
 # ---------------------------------------------------------------------------
@@ -321,26 +314,28 @@ class TestSessionManagement:
         sessions_to_expire = []
         sessions_to_keep = []
 
-        # Create 5 sessions to expire
+        # Create all 10 sessions first, then mark 5 as expired
         for _ in range(5):
             s = mgr.create_session(f"expire-{uuid.uuid4()}")
-            s.last_activity = time.monotonic() - 200  # Well past timeout
-            sessions_to_expire.append(s.session_id)
+            sessions_to_expire.append(s)
 
-        # Create 5 sessions to keep
         for _ in range(5):
             s = mgr.create_session(f"keep-{uuid.uuid4()}")
-            sessions_to_keep.append(s.session_id)
+            sessions_to_keep.append(s)
 
         assert mgr.active_count == 10
+
+        # Now mark the first 5 as expired
+        for s in sessions_to_expire:
+            s.last_activity = time.monotonic() - 200  # Well past timeout
 
         mgr.cleanup_expired()
 
         assert mgr.active_count == 5
-        for sid in sessions_to_expire:
-            assert mgr.get_session(sid) is None
-        for sid in sessions_to_keep:
-            assert mgr.get_session(sid) is not None
+        for s in sessions_to_expire:
+            assert mgr.get_session(s.session_id) is None
+        for s in sessions_to_keep:
+            assert mgr.get_session(s.session_id) is not None
 
     @pytest.mark.asyncio
     async def test_session_activity_updates_on_rate_check(self):

@@ -11,14 +11,11 @@ Style: pytest-asyncio with httpx AsyncClient, uses conftest fixtures
 (client, make_agent, make_listing, auth_header, db).
 """
 
-import json
 import uuid
-from decimal import Decimal
 
 import pytest
 
 from marketplace.models.agent_trust import AgentTrustProfile
-from marketplace.models.listing import DataListing
 
 
 # ---------------------------------------------------------------------------

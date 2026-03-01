@@ -30,7 +30,6 @@ import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -49,7 +48,6 @@ from marketplace.models.dual_layer import (
 )
 from marketplace.models.listing import DataListing
 from marketplace.services import dual_layer_service, event_subscription_service
-from marketplace.tests.conftest import _new_id
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -262,7 +260,7 @@ class TestEndUserRegistration:
         """Successful login updates last_login_at timestamp."""
         await _register_user_mocked(db, email="lastlogin@test.com", password="TestPw2!@#")
 
-        result = await dual_layer_service.login_end_user(
+        await dual_layer_service.login_end_user(
             db, email="lastlogin@test.com", password="TestPw2!@#"
         )
 
