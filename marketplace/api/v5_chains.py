@@ -23,6 +23,7 @@ from marketplace.services import (
     chain_registry_service,
     chain_settlement_service,
 )
+from marketplace.services.smart_orchestrator import SmartOrchestrator
 
 router = APIRouter(prefix="", tags=["chains"])
 
@@ -70,6 +71,13 @@ class SuggestAgentsRequest(BaseModel):
     max_results: int = Field(default=10, ge=1, le=50)
     max_price: float | None = Field(default=None, ge=0)
     min_quality: float | None = Field(default=None, ge=0, le=1)
+
+
+class SmartComposeRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    task_description: str = Field(..., min_length=5, max_length=2000)
+    auto_approve: bool = Field(default=True)
 
 
 class ChainPolicyCreateRequest(BaseModel):
@@ -412,6 +420,36 @@ async def validate_chain(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    return result
+
+
+@router.post("/chains/smart-compose", status_code=200)
+async def smart_compose_chain(
+    req: SmartComposeRequest,
+    db: AsyncSession = Depends(get_db),
+    agent_id: str = Depends(get_current_agent_id),
+):
+    """Use an LLM to decompose a task and build an agent chain.
+
+    When a LangGraph-compatible environment and LLM client are configured,
+    this endpoint performs full LLM-driven task decomposition, agent matching,
+    DAG construction, workflow execution, and result synthesis.
+
+    Without an LLM client it falls back to keyword-based capability extraction
+    using the existing auto_chain_service — no external dependencies required.
+    """
+    orchestrator = SmartOrchestrator(
+        db=db,
+        llm_client=None,  # No LLM client wired by default; callers may extend this
+        auto_approve=req.auto_approve,
+    )
+    try:
+        result = await orchestrator.compose_and_execute(
+            task_description=req.task_description,
+            initiated_by=agent_id,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
     return result
 
 

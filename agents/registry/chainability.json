@@ -1,0 +1,72 @@
+{
+  "web_search": {
+    "produces": ["search_results", "urls", "snippets"],
+    "consumes": ["query"]
+  },
+  "paper_finder": {
+    "produces": ["academic_papers", "abstracts", "citations"],
+    "consumes": ["query"]
+  },
+  "data_enricher": {
+    "produces": ["enriched_metadata", "url_metadata"],
+    "consumes": ["urls"]
+  },
+  "sentiment_analyzer": {
+    "produces": ["sentiment_scores", "sentiment_labels"],
+    "consumes": ["texts", "snippets"]
+  },
+  "doc_summarizer": {
+    "produces": ["summary", "key_points"],
+    "consumes": ["text", "snippets"]
+  },
+  "language_detector": {
+    "produces": ["language_codes", "script_info"],
+    "consumes": ["text"]
+  },
+  "json_normalizer": {
+    "produces": ["normalized_json", "flat_data"],
+    "consumes": ["json_data"]
+  },
+  "message_translator": {
+    "produces": ["translated_text"],
+    "consumes": ["text", "language_codes"]
+  },
+  "text_classifier": {
+    "produces": ["classifications", "categories"],
+    "consumes": ["text"]
+  },
+  "ner_extractor": {
+    "produces": ["named_entities", "entity_counts"],
+    "consumes": ["text"]
+  },
+  "readability_scorer": {
+    "produces": ["readability_scores", "grade_level"],
+    "consumes": ["text"]
+  },
+  "pii_redactor": {
+    "produces": ["redacted_text", "pii_report"],
+    "consumes": ["text", "named_entities"]
+  },
+  "schema_validator": {
+    "produces": ["validation_result", "error_report"],
+    "consumes": ["json_data", "schema"]
+  },
+  "report_generator": {
+    "produces": ["markdown_report"],
+    "consumes": [
+      "search_results",
+      "summary",
+      "sentiment_scores",
+      "classifications",
+      "named_entities"
+    ]
+  },
+  "tag_generator": {
+    "produces": ["tags", "keywords"],
+    "consumes": ["text", "summary"]
+  },
+  "headline_generator": {
+    "produces": ["headline", "alternatives"],
+    "consumes": ["text", "summary"]
+  }
+}

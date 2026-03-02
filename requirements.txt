@@ -54,3 +54,8 @@ grpcio-tools>=1.60
 
 # ML
 scikit-learn>=1.4
+
+# LangGraph / LangChain (optional — used by SmartOrchestrator; fallback path works without these)
+langgraph>=0.2.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
