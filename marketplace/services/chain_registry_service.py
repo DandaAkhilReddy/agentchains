@@ -329,6 +329,8 @@ async def _resolve_graph_endpoints(
             raise ValueError(f"Agent '{aid}' not found or not active")
 
         config["endpoint"] = agent.a2a_endpoint
+        config["protocol"] = "a2a"
+        config["skill_id"] = config.get("skill_id", "default")
         participant_ids.append(aid)
 
     return resolved, sorted(set(participant_ids))

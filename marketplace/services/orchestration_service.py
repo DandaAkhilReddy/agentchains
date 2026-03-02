@@ -466,30 +466,64 @@ async def _execute_node(
 
 
 async def _execute_agent_call(config: dict, input_data: dict) -> dict:
-    """Call a remote agent endpoint via HTTP POST."""
+    """Call a remote agent endpoint via HTTP POST or A2A JSON-RPC 2.0."""
     endpoint = config.get("endpoint", "")
-    method = config.get("method", "POST").upper()
-    headers = config.get("headers", {})
     timeout = config.get("timeout", 30.0)
 
     if not endpoint:
         return {"error": "No endpoint configured for agent_call node"}
 
-    payload = {**input_data, **config.get("payload", {})}
+    if config.get("protocol") == "a2a":
+        skill_id = config.get("skill_id", "default")
+        message = {
+            "role": "user",
+            "parts": [{"type": "text", "text": json.dumps(input_data)}],
+        }
+        rpc_payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tasks/send",
+            "params": {
+                "skill_id": skill_id,
+                "message": message,
+            },
+        }
 
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            if method == "GET":
-                resp = await client.get(endpoint, headers=headers, params=payload)
-            else:
-                resp = await client.post(endpoint, json=payload, headers=headers)
-            resp.raise_for_status()
-            return resp.json()
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(endpoint, json=rpc_payload)
+                resp.raise_for_status()
+                result = resp.json()
 
-    except httpx.HTTPStatusError as exc:
-        return {"error": f"Agent call failed: HTTP {exc.response.status_code}"}
-    except (httpx.RequestError, Exception) as exc:
-        return {"error": f"Agent call failed: {exc}"}
+            try:
+                text = result["result"]["artifacts"][0]["parts"][0]["text"]
+                return json.loads(text)
+            except (KeyError, IndexError, TypeError, json.JSONDecodeError):
+                return result.get("result", result)
+
+        except httpx.HTTPStatusError as exc:
+            return {"error": f"Agent call failed: HTTP {exc.response.status_code}"}
+        except httpx.RequestError as exc:
+            return {"error": f"Agent call failed: {exc}"}
+
+    else:
+        method = config.get("method", "POST").upper()
+        headers = config.get("headers", {})
+        payload = {**input_data, **config.get("payload", {})}
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                if method == "GET":
+                    resp = await client.get(endpoint, headers=headers, params=payload)
+                else:
+                    resp = await client.post(endpoint, json=payload, headers=headers)
+                resp.raise_for_status()
+                return resp.json()
+
+        except httpx.HTTPStatusError as exc:
+            return {"error": f"Agent call failed: HTTP {exc.response.status_code}"}
+        except (httpx.RequestError, Exception) as exc:
+            return {"error": f"Agent call failed: {exc}"}
 
 
 def _execute_condition(config: dict, input_data: dict) -> dict:
