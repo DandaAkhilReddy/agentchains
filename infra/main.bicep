@@ -263,7 +263,7 @@ var coreEnvVars = [
   }
   {
     name: 'POSTGRES_HOST'
-    value: 'placeholder'
+    value: postgres.outputs.fqdn
   }
   {
     name: 'POSTGRES_DB'
@@ -368,7 +368,7 @@ module containerapp 'modules/containerapp.bicep' = {
     tags: tags
     envVars: allEnvVars
     // Secret values for Container Apps secrets array
-    databaseUrl: 'postgresql+asyncpg://${postgresAdminLogin}:${postgresAdminPassword}@placeholder:5432/agentchains?ssl=require'
+    databaseUrl: 'postgresql+asyncpg://${postgresAdminLogin}:${postgresAdminPassword}@${postgres.outputs.fqdn}:5432/agentchains?sslmode=require'
     jwtSecretKeyValue: jwtSecretKey
     eventSigningSecretValue: eventSigningSecret
     memoryEncryptionKeyValue: memoryEncryptionKey
@@ -395,8 +395,8 @@ output containerAppUrl string = containerapp.outputs.url
 @description('The Container App FQDN')
 output containerAppFqdn string = containerapp.outputs.fqdn
 
-// TODO: Re-enable once PostgreSQL is deployed
-// output postgresFqdn string = postgres.outputs.fqdn
+@description('The PostgreSQL FQDN')
+output postgresFqdn string = postgres.outputs.fqdn
 
 @description('The Redis hostname (empty if Redis not deployed)')
 output redisHostName string = deployRedis ? redis.outputs.hostName : ''

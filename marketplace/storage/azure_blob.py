@@ -6,6 +6,8 @@ Supports async upload/download/delete/exists operations.
 Requires: AZURE_BLOB_CONNECTION and AZURE_BLOB_CONTAINER env vars.
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 from typing import Optional
@@ -19,9 +21,13 @@ logger = logging.getLogger(__name__)
 
 
 class AzureBlobStore:
-    """Azure Blob Storage backend for content storage."""
+    """Azure Blob Storage backend for content storage.
 
-    def __init__(self, connection_string: str, container_name: str = "content-store"):
+    Interface-compatible with HashFS: put() returns 'sha256:<hex>',
+    get/exists/delete/get_url accept 'sha256:<hex>' or bare hex.
+    """
+
+    def __init__(self, connection_string: str, container_name: str = "content-store") -> None:
         if not connection_string:
             raise ValueError(
                 "Azure Blob Storage requires AZURE_BLOB_CONNECTION. "
@@ -61,29 +67,43 @@ class AzureBlobStore:
             container=self._container_name, blob=blob_name
         )
 
-    def put(self, data: bytes, content_hash: Optional[str] = None) -> str:
+    @staticmethod
+    def _strip_prefix(content_hash: str) -> str:
+        """Strip 'sha256:' prefix if present, returning bare hex."""
+        if content_hash.startswith("sha256:"):
+            return content_hash[7:]
+        return content_hash
+
+    def _blob_path(self, hex_hash: str) -> str:
+        """Build the sharded blob path from a bare hex hash."""
+        return f"sha256/{hex_hash[:2]}/{hex_hash[2:4]}/{hex_hash}"
+
+    def put(self, content: bytes, content_hash: str | None = None) -> str:
         """Upload content to Azure Blob Storage.
 
-        Returns the SHA-256 content hash used as the blob name.
+        Returns 'sha256:<hex>' matching HashFS convention.
         """
         if content_hash is None:
-            content_hash = hashlib.sha256(data).hexdigest()
+            hex_hash = hashlib.sha256(content).hexdigest()
+        else:
+            hex_hash = self._strip_prefix(content_hash)
 
-        blob_name = f"sha256/{content_hash[:2]}/{content_hash[2:4]}/{content_hash}"
+        blob_name = self._blob_path(hex_hash)
         blob_client = self._blob_client(blob_name)
 
         try:
-            blob_client.upload_blob(data, overwrite=True)
-            logger.debug("Uploaded blob: %s (%d bytes)", blob_name, len(data))
+            blob_client.upload_blob(content, overwrite=True)
+            logger.debug("Uploaded blob: %s (%d bytes)", blob_name, len(content))
         except Exception:
             logger.exception("Failed to upload blob: %s", blob_name)
             raise
 
-        return content_hash
+        return f"sha256:{hex_hash}"
 
-    def get(self, content_hash: str) -> Optional[bytes]:
+    def get(self, content_hash: str) -> bytes | None:
         """Download content from Azure Blob Storage by hash."""
-        blob_name = f"sha256/{content_hash[:2]}/{content_hash[2:4]}/{content_hash}"
+        hex_hash = self._strip_prefix(content_hash)
+        blob_name = self._blob_path(hex_hash)
         blob_client = self._blob_client(blob_name)
 
         try:
@@ -97,7 +117,8 @@ class AzureBlobStore:
 
     def exists(self, content_hash: str) -> bool:
         """Check if content exists in Azure Blob Storage."""
-        blob_name = f"sha256/{content_hash[:2]}/{content_hash[2:4]}/{content_hash}"
+        hex_hash = self._strip_prefix(content_hash)
+        blob_name = self._blob_path(hex_hash)
         blob_client = self._blob_client(blob_name)
 
         try:
@@ -108,7 +129,8 @@ class AzureBlobStore:
 
     def delete(self, content_hash: str) -> bool:
         """Delete content from Azure Blob Storage."""
-        blob_name = f"sha256/{content_hash[:2]}/{content_hash[2:4]}/{content_hash}"
+        hex_hash = self._strip_prefix(content_hash)
+        blob_name = self._blob_path(hex_hash)
         blob_client = self._blob_client(blob_name)
 
         try:
@@ -123,15 +145,26 @@ class AzureBlobStore:
 
     def get_url(self, content_hash: str) -> str:
         """Get the URL for a blob (without SAS token — internal use only)."""
-        blob_name = f"sha256/{content_hash[:2]}/{content_hash[2:4]}/{content_hash}"
+        hex_hash = self._strip_prefix(content_hash)
+        blob_name = self._blob_path(hex_hash)
         blob_client = self._blob_client(blob_name)
         return blob_client.url
+
+    def verify(self, content: bytes, expected_hash: str) -> bool:
+        """Verify that content matches the expected hash."""
+        hex_hash = self._strip_prefix(expected_hash)
+        actual = hashlib.sha256(content).hexdigest()
+        return actual == hex_hash
+
+    def compute_hash(self, content: bytes) -> str:
+        """Compute and return the prefixed SHA-256 hash without storing."""
+        return f"sha256:{hashlib.sha256(content).hexdigest()}"
 
 
 class AzureBlobStorage:
     """Key-value blob storage interface backed by Azure Blob Storage."""
 
-    def __init__(self, connection_string: str = "", container_name: str = "content-store"):
+    def __init__(self, connection_string: str = "", container_name: str = "content-store") -> None:
         self._container_client = None
         if connection_string:
             try:
