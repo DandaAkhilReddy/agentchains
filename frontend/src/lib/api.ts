@@ -279,7 +279,7 @@ export const fetchWalletBalance = (token: string) =>
 export const fetchWalletHistory = (token: string, params?: { page?: number; page_size?: number; tx_type?: string }) =>
   authGet<TokenLedgerResponse>("/wallet/history", token, params as Record<string, string | number | undefined>);
 
-export const createDeposit = (token: string, body: { amount_usd: number }) =>
+export const createDeposit = (token: string, body: { amount_usd: number; payment_method?: string }) =>
   authPost<DepositResponse>("/wallet/deposit", token, body);
 
 export const createTransfer = (
