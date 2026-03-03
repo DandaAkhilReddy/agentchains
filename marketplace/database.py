@@ -1,6 +1,6 @@
 import re
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -45,6 +45,15 @@ _SQLITE_COLUMN_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("verification_updated_at", "DATETIME"),
     ],
 }
+
+# PostgreSQL additive column migrations — same idea, runs on startup.
+# Each entry: table -> [(column, pg_ddl), ...]
+_PG_COLUMN_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
+    "registered_agents": [
+        ("creator_id", "VARCHAR(36) REFERENCES creators(id)"),
+    ],
+}
+_ALLOWED_PG_TABLES = frozenset(_PG_COLUMN_MIGRATIONS.keys())
 
 
 def _sqlite_table_exists(sync_conn, table: str) -> bool:
@@ -105,6 +114,40 @@ def _apply_sqlite_compat_migrations(sync_conn) -> None:
             sync_conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
+def _pg_has_column(sync_conn, table: str, column: str) -> bool:
+    """Check if a column exists on a PostgreSQL table via information_schema."""
+    if table not in _ALLOWED_PG_TABLES:
+        raise ValueError(f"Table {table!r} not in allowed PG migration tables")
+    _validate_identifier(table, "table name")
+    _validate_identifier(column, "column name")
+    row = sync_conn.execute(
+        text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = :tbl AND column_name = :col"
+        ),
+        {"tbl": table, "col": column},
+    ).fetchone()
+    return bool(row)
+
+
+def _apply_pg_column_migrations(sync_conn) -> None:
+    """Apply lightweight additive PostgreSQL column migrations on startup."""
+    for table, migrations in _PG_COLUMN_MIGRATIONS.items():
+        _validate_identifier(table, "table name")
+        if table not in _ALLOWED_PG_TABLES:
+            raise ValueError(f"Table {table!r} not in allowed PG migration tables")
+        for column, ddl in migrations:
+            _validate_identifier(column, "column name")
+            if _pg_has_column(sync_conn, table, column):
+                continue
+            _DANGEROUS_KW = {"DROP", "DELETE", "TRUNCATE", "INSERT", "UPDATE", ";", "--"}
+            if any(kw in ddl.upper() for kw in _DANGEROUS_KW):
+                raise ValueError(f"Dangerous keyword in DDL: {ddl!r}")
+            sync_conn.exec_driver_sql(
+                f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"
+            )
+
+
 async def get_db() -> AsyncSession:
     """FastAPI dependency that yields a database session."""
     async with async_session() as session:
@@ -112,11 +155,13 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db():
-    """Create all tables."""
+    """Create all tables and apply additive column migrations."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         if _is_sqlite:
             await conn.run_sync(_apply_sqlite_compat_migrations)
+        else:
+            await conn.run_sync(_apply_pg_column_migrations)
 
 
 async def drop_db():
