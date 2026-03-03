@@ -176,6 +176,40 @@ def _apply_pg_column_migrations(sync_conn) -> None:
             sync_conn.exec_driver_sql(
                 f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"
             )
+    # Fix stale NOT-NULL columns that the model no longer populates.
+    # token_accounts.tier existed in the AXN-era model but was removed
+    # when the economy switched to USD. Production PG still has it as NOT NULL.
+    _apply_pg_column_defaults(sync_conn)
+
+
+# Columns that exist in production but were removed from the model.
+# We add a DEFAULT so INSERTs without them succeed.
+_PG_COLUMN_DEFAULTS: list[tuple[str, str, str]] = [
+    ("token_accounts", "tier", "'bronze'"),
+]
+
+
+def _apply_pg_column_defaults(sync_conn) -> None:
+    """Set DEFAULT on stale columns the model no longer populates."""
+    for table, column, default_val in _PG_COLUMN_DEFAULTS:
+        _validate_identifier(table, "table name")
+        _validate_identifier(column, "column name")
+        # Only apply if the column actually exists
+        row = sync_conn.execute(
+            text(
+                "SELECT column_default FROM information_schema.columns "
+                "WHERE table_schema = 'public' "
+                "AND table_name = :tbl AND column_name = :col"
+            ),
+            {"tbl": table, "col": column},
+        ).fetchone()
+        if row is None:
+            continue  # Column doesn't exist, skip
+        if row[0] is not None:
+            continue  # Already has a default, skip
+        sync_conn.exec_driver_sql(
+            f"ALTER TABLE {table} ALTER COLUMN {column} SET DEFAULT {default_val}"
+        )
 
 
 async def get_db() -> AsyncSession:
