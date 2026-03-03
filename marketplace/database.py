@@ -123,7 +123,8 @@ def _pg_has_column(sync_conn, table: str, column: str) -> bool:
     row = sync_conn.execute(
         text(
             "SELECT 1 FROM information_schema.columns "
-            "WHERE table_name = :tbl AND column_name = :col"
+            "WHERE table_schema = 'public' "
+            "AND table_name = :tbl AND column_name = :col"
         ),
         {"tbl": table, "col": column},
     ).fetchone()
