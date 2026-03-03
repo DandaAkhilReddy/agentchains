@@ -1,4 +1,5 @@
 """Seed the marketplace with sample agents and listings for demo purposes."""
+import argparse
 import asyncio
 import json
 import os
@@ -8,10 +9,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import httpx
 
-BASE_URL = "http://localhost:8000/api/v1"
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Seed marketplace with demo data")
+    parser.add_argument(
+        "--base-url",
+        default="http://localhost:8000/api/v1",
+        help="API base URL (default: http://localhost:8000/api/v1)",
+    )
+    return parser.parse_args()
 
 
-async def seed():
+async def seed(base_url: str) -> None:
     async with httpx.AsyncClient(timeout=30) as client:
         print("=== Seeding Agent-to-Agent Data Marketplace ===\n")
 
@@ -53,7 +62,7 @@ async def seed():
         ]
 
         for config in agent_configs:
-            resp = await client.post(f"{BASE_URL}/agents/register", json=config)
+            resp = await client.post(f"{base_url}/agents/register", json=config)
             if resp.status_code == 201:
                 data = resp.json()
                 agents[config["name"]] = data
@@ -160,7 +169,7 @@ async def seed():
                 print(f"  Skipped: {listing['title'][:50]}... (no auth token)")
                 continue
             resp = await client.post(
-                f"{BASE_URL}/listings",
+                f"{base_url}/listings",
                 json=listing,
                 headers={"Authorization": f"Bearer {token}"},
             )
@@ -173,9 +182,10 @@ async def seed():
         print(f"\n=== Seed complete: {len(agent_configs)} agents, {len(listings_data)} listings ===")
 
         # Show health
-        health = await client.get(f"{BASE_URL}/health")
+        health = await client.get(f"{base_url}/health")
         print(f"\nMarketplace health: {health.json()}")
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    args = parse_args()
+    asyncio.run(seed(args.base_url))
