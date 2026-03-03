@@ -64,14 +64,3 @@ jobs:
             exit 1
           fi
 
-      - name: Promote traffic to new revision
-        run: |
-          LATEST_REVISION=$(az containerapp revision list \
-            --name agentchains-marketplace \
-            --resource-group rg-agentchains \
-            --query "[-1].name" -o tsv)
-          echo "Promoting revision: $LATEST_REVISION"
-          az containerapp ingress traffic set \
-            --name agentchains-marketplace \
-            --resource-group rg-agentchains \
-            --revision-weight "$LATEST_REVISION=100"
