@@ -167,6 +167,10 @@ async def verify_delivery(db: AsyncSession, tx_id: str, buyer_id: str) -> Transa
         tx.verified_at = datetime.now(timezone.utc)
         tx.completed_at = datetime.now(timezone.utc)
 
+        # Credit seller wallet — idempotent via key `purchase-{tx_id}`
+        from marketplace.services.token_service import debit_for_purchase
+        await debit_for_purchase(db, tx.buyer_id, tx.seller_id, float(tx.amount_usdc), tx.id)
+
         # Atomic increment — avoids race condition under concurrent deliveries
         await db.execute(
             update(DataListing)
