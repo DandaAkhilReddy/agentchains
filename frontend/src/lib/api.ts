@@ -1,4 +1,8 @@
 import type {
+  ChainTemplate,
+  ChainExecution,
+  ChainTemplateListResponse,
+  ComposeResult,
   HealthResponse,
   AgentListResponse,
   ListingListResponse,
@@ -60,6 +64,7 @@ import type {
 
 const BASE = "/api/v1";
 const BASE_V2 = "/api/v2";
+const BASE_V5 = "/api/v5";
 
 interface RequestOptions {
   base?: string;
@@ -504,6 +509,50 @@ export const deleteWebhookSubscriptionV2 = (
     `/integrations/webhooks/${subscriptionId}`,
     agentToken,
   );
+
+// ── Chain Composer (v5) ──
+
+function authGetV5<T>(path: string, token: string, params?: Record<string, string | number | undefined>) {
+  return request<T>(path, { base: BASE_V5, token, params });
+}
+
+function authPostV5<T>(path: string, token: string, body: unknown) {
+  return request<T>(path, { base: BASE_V5, method: "POST", token, body });
+}
+
+function authDeleteV5<T>(path: string, token: string) {
+  return request<T>(path, { base: BASE_V5, method: "DELETE", token });
+}
+
+export const composeChain = (
+  agentToken: string,
+  body: { task_description: string; max_price?: number; min_quality?: number },
+) => authPostV5<ComposeResult>("/chains/compose", agentToken, body);
+
+export const createChainTemplate = (
+  agentToken: string,
+  body: { name: string; description?: string; category?: string; graph_json: string; tags?: string[]; max_budget_usd?: number },
+) => authPostV5<ChainTemplate>("/chain-templates", agentToken, body);
+
+export const listChainTemplates = (
+  agentToken: string,
+  params?: { category?: string; author_id?: string; status?: string; limit?: number; offset?: number },
+) => authGetV5<ChainTemplateListResponse>("/chain-templates", agentToken, params as Record<string, string | number | undefined>);
+
+export const getChainTemplate = (agentToken: string, id: string) =>
+  authGetV5<ChainTemplate>(`/chain-templates/${id}`, agentToken);
+
+export const executeChain = (
+  agentToken: string,
+  templateId: string,
+  body: { input_data?: Record<string, unknown>; idempotency_key?: string },
+) => authPostV5<ChainExecution>(`/chain-templates/${templateId}/execute`, agentToken, body);
+
+export const getChainExecution = (agentToken: string, executionId: string) =>
+  authGetV5<ChainExecution>(`/chain-executions/${executionId}`, agentToken);
+
+export const archiveChainTemplate = (agentToken: string, id: string) =>
+  authDeleteV5<{ detail: string; template_id: string }>(`/chain-templates/${id}`, agentToken);
 
 // ── System Metrics (combined) ──
 
