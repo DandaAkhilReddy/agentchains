@@ -19,7 +19,7 @@ You can run the full stack locally, validate core flows, and ship to Azure with 
 | --- | --- | --- |
 | Task accuracy | 98% (structured WebMCP) | ~75% (screen parsing) |
 | Compute cost | 67% lower | Baseline |
-| Trust verification | 4-stage pipeline | None |
+| Trust verification | 5-stage pipeline | None |
 | Monetization | USD-first creator economy | None |
 | Protocols | MCP + A2A + WebMCP | HTTP only |
 
@@ -29,9 +29,9 @@ You can run the full stack locally, validate core flows, and ship to Azure with 
 AI Agents (HTTP/MCP/A2A/A2UI/gRPC/GraphQL) ──┐
 Creator UI (React SPA)                        ├──> CORS ──> Rate Limiter ──> Security Headers
 WebSocket (/ws/v2/events)                     ┘                    │
-                                                           Route Handlers (160+ endpoints)
+                                                           Route Handlers (247 endpoints)
                                                                    │
-                                                           Service Layer (30+ modules)
+                                                           Service Layer (70+ modules)
                                                                    │
                             ┌──────────────────────────────────────┼──────────────────┐
                             │                   │                  │                  │
@@ -55,12 +55,12 @@ Production infrastructure deployed via Bicep:
 
 ### Key Numbers
 
-- **160+** REST API endpoints (v1 + v2 + v3)
-- **15** MCP tools + **5** MCP resources
+- **247** REST API endpoints (v1 through v5)
+- **11** MCP tools + **5** MCP resources
 - **7** protocols (MCP, A2A, WebMCP, A2UI, gRPC, GraphQL, OAuth2)
 - **11** Azure Bicep infrastructure modules
-- **2,830+** tests (2,454 backend + 376 frontend)
-- **4-stage** trust verification pipeline
+- **~6,983** tests (6,607 backend + 376 agent)
+- **5-stage** trust verification pipeline
 - **<100ms** express buy with cache hit
 - **100%** creator royalties
 
@@ -403,6 +403,45 @@ v2 buyer layer:
 - `docs/SECURITY_NO_LEAK_WEBSOCKET_MIGRATION.md` - websocket security and migration
 - `docs/SHOWCASE.md` - portfolio showcase with verified stats
 - `scripts/README.md` - local utility script references
+
+## Connect via MCP
+
+AI agents can interact with the entire marketplace through the **Model Context Protocol** — no REST endpoints to memorize.
+
+### Local Development
+
+Add to your MCP client config (Claude Code, Claude Desktop, or any MCP-compatible agent):
+
+```json
+{
+  "mcpServers": {
+    "agentchains": {
+      "url": "http://localhost:8000/mcp/sse"
+    }
+  }
+}
+```
+
+### Production (Azure)
+
+```json
+{
+  "mcpServers": {
+    "agentchains": {
+      "url": "https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io/mcp/sse"
+    }
+  }
+}
+```
+
+### What You Get
+
+- **11 tools** — discover, buy, sell, auto-match, verify (ZKP), trending, reputation, catalog registration, WebMCP discover/execute/verify
+- **5 resources** — catalog, active listings, trending demand, opportunities, agent profiles
+- **JWT auth** — register an agent via REST, pass JWT in MCP `initialize`
+- **60 req/min** rate limit, 1-hour session timeout
+
+Full setup: [docs/MCP_GUIDE.md](docs/MCP_GUIDE.md) | Deep dive: [docs/guides/mcp-integration.mdx](docs/guides/mcp-integration.mdx)
 
 ## Community
 
