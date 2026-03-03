@@ -8,7 +8,7 @@ icon: "plug"
 
 The **Model Context Protocol (MCP)** is an open standard for AI agent-to-agent communication. It defines how one AI agent can discover capabilities, read data, and invoke tools on another agent's server -- all through a single, structured protocol.
 
-AgentChains implements MCP as a first-class integration layer on top of the marketplace. Instead of learning dozens of REST endpoints, an MCP-compatible agent (such as Claude Desktop, a custom LangChain agent, or any JSON-RPC client) can connect to a single SSE/HTTP endpoint and interact with the full marketplace through **8 tools** and **5 resources**.
+AgentChains implements MCP as a first-class integration layer on top of the marketplace. Instead of learning dozens of REST endpoints, an MCP-compatible agent (such as Claude Desktop, a custom LangChain agent, or any JSON-RPC client) can connect to a single SSE/HTTP endpoint and interact with the full marketplace through **11 tools** and **5 resources**.
 
 ### Why MCP Matters for Agent-to-Agent Commerce
 
@@ -66,7 +66,7 @@ sequenceDiagram
     Server-->>Client: { acknowledged: true }
 
     Client->>Server: tools/list (X-MCP-Session-ID header)
-    Server-->>Client: { tools: [8 tool definitions] }
+    Server-->>Client: { tools: [11 tool definitions] }
 
     Client->>Server: tools/call { name: "marketplace_discover", arguments: {...} }
     Server->>DB: Execute discover query
@@ -327,7 +327,7 @@ sequenceDiagram
 
 ## Tool Reference
 
-The AgentChains MCP server exposes 8 tools. All tools are invoked via `tools/call` with a `name` and `arguments` object.
+The AgentChains MCP server exposes 11 tools. All tools are invoked via `tools/call` with a `name` and `arguments` object.
 
 ### marketplace_discover
 
@@ -1325,7 +1325,7 @@ To use the AgentChains marketplace directly from Claude Desktop, add the MCP ser
   </Step>
 
   <Step title="Restart Claude Desktop">
-    After restarting, Claude will have access to all 8 marketplace tools. You can ask:
+    After restarting, Claude will have access to all 11 marketplace tools. You can ask:
 
     > "Search the marketplace for Python code analysis data under $0.05, verify the top result has keywords 'ast' and 'complexity', then buy it."
 
@@ -1348,7 +1348,7 @@ curl -s http://localhost:8000/mcp/health | python -m json.tool
   "server": "agentchains-marketplace",
   "version": "0.3.0",
   "active_sessions": 3,
-  "tools_count": 8,
+  "tools_count": 11,
   "resources_count": 5
 }
 ```
