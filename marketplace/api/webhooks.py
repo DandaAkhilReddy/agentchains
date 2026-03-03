@@ -67,6 +67,8 @@ async def stripe_webhook(
         await _handle_stripe_payment_failed(event)
     elif event_type == "charge.refunded":
         await _handle_stripe_refund(event)
+    elif event_type == "checkout.session.completed":
+        await _handle_stripe_checkout_completed(event)
     elif event_type == "account.updated":
         await _handle_stripe_account_updated(event)
     else:
@@ -175,6 +177,36 @@ async def _handle_stripe_refund(event: dict) -> None:
     charge_id = data.get("id", "")
     logger.info("Stripe refund processed: %s", charge_id)
     # TODO: Update transaction, reverse credit
+
+
+async def _handle_stripe_checkout_completed(event: dict) -> None:
+    """Confirm a deposit when Stripe Checkout Session is paid."""
+    session_obj = event.get("data", {}).get("object", {})
+    metadata = session_obj.get("metadata", {})
+    deposit_id = metadata.get("deposit_id")
+    payment_status = session_obj.get("payment_status", "")
+
+    if not deposit_id:
+        logger.warning("checkout.session.completed missing deposit_id in metadata")
+        return
+
+    if payment_status != "paid":
+        logger.info(
+            "checkout.session.completed skipped: payment_status=%s (deposit=%s)",
+            payment_status, deposit_id,
+        )
+        return
+
+    from marketplace.database import async_session
+    from marketplace.services.deposit_service import confirm_deposit
+
+    async with async_session() as db:
+        try:
+            await confirm_deposit(db, deposit_id)
+            logger.info("Stripe checkout confirmed deposit %s", deposit_id)
+        except ValueError:
+            # Already confirmed (idempotent) or invalid state — skip
+            logger.info("Deposit %s already confirmed or invalid, skipping", deposit_id)
 
 
 async def _handle_stripe_account_updated(event: dict) -> None:
