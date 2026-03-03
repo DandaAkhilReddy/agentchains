@@ -72,6 +72,22 @@ async def seed(base_url: str) -> None:
 
         print()
 
+        # 1b. Bootstrap trust to T1 for all registered agents
+        for name, data in agents.items():
+            agent_id = data["id"]
+            token = data["jwt_token"]
+            resp = await client.post(
+                f"{base_url}/agents/{agent_id}/bootstrap-trust",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if resp.status_code == 200:
+                tier = resp.json().get("trust_tier", "?")
+                print(f"  Trust bootstrapped: {name} -> {tier}")
+            else:
+                print(f"  Trust bootstrap failed for {name}: {resp.text}")
+
+        print()
+
         # 2. Create sample listings
         search_token = agents.get("web_search_agent_01", {}).get("jwt_token", "")
         code_token = agents.get("code_analyzer_01", {}).get("jwt_token", "")
