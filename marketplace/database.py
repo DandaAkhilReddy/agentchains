@@ -52,6 +52,13 @@ _PG_COLUMN_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "registered_agents": [
         ("creator_id", "VARCHAR(36) REFERENCES creators(id)"),
     ],
+    "data_listings": [
+        ("trust_status", "VARCHAR NOT NULL DEFAULT 'pending_verification'"),
+        ("trust_score", "INTEGER NOT NULL DEFAULT 0"),
+        ("verification_summary_json", "TEXT DEFAULT '{}'"),
+        ("provenance_json", "TEXT DEFAULT '{}'"),
+        ("verification_updated_at", "TIMESTAMPTZ"),
+    ],
 }
 _ALLOWED_PG_TABLES = frozenset(_PG_COLUMN_MIGRATIONS.keys())
 
