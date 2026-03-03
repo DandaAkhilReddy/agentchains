@@ -167,7 +167,7 @@ export default function App() {
                 {activeTab === "onboarding" && (
                   <Suspense fallback={loading}>
                     {creatorAuth.isAuthenticated ? (
-                      <OnboardingWizardPage creatorToken={creatorAuth.token!} />
+                      <OnboardingWizardPage creatorToken={creatorAuth.token!} onAgentCreated={agentAuth.setAgent} />
                     ) : (
                       <CreatorLoginPage
                         onLogin={async (email, password) => { await creatorAuth.login(email, password); }}

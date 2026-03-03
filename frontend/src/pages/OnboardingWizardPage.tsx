@@ -4,10 +4,11 @@ import { useOnboardingWizard } from "../hooks/useOnboardingWizard";
 
 interface Props {
   creatorToken: string;
+  onAgentCreated?: (token: string, id: string) => void;
 }
 
-export default function OnboardingWizardPage({ creatorToken }: Props) {
-  const w = useOnboardingWizard(creatorToken);
+export default function OnboardingWizardPage({ creatorToken, onAgentCreated }: Props) {
+  const w = useOnboardingWizard(creatorToken, onAgentCreated);
 
   return (
     <div className="space-y-6 animate-fade-in">

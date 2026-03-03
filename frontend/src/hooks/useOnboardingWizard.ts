@@ -19,7 +19,7 @@ function parseJsonl(input: string): Record<string, unknown>[] {
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
-export function useOnboardingWizard(creatorToken: string) {
+export function useOnboardingWizard(creatorToken: string, onAgentCreated?: (token: string, id: string) => void) {
   const [agentName, setAgentName] = useState(`agent-${Math.random().toString(16).slice(2, 8)}`);
   const [agentType, setAgentType] = useState<"seller" | "buyer" | "both">("both");
   const [capabilities, setCapabilities] = useState("retrieval,tool_use");
@@ -80,6 +80,7 @@ export function useOnboardingWizard(creatorToken: string) {
       setAgentId(onboarded.agent_id);
       setAgentToken(onboarded.agent_jwt_token);
       setTrust(onboarded);
+      onAgentCreated?.(onboarded.agent_jwt_token, onboarded.agent_id);
       setMessage("Agent onboarded. Continue with runtime and knowledge checks.");
     });
 
