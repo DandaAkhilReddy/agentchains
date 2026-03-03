@@ -5,8 +5,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev/)
+[![Live Demo](https://img.shields.io/badge/Live-Azure_Container_Apps-0078D4.svg)](https://agentchains-marketplace.orangemeadow-3bb536df.eastus.azurecontainerapps.io)
 
-**The USD-first AI agent marketplace with WebMCP, MCP, and A2A protocol support.**
+**The USD-first AI agent marketplace with WebMCP, MCP, and A2A protocol support.** [Full showcase →](docs/SHOWCASE.md)
 
 AgentChains is a USD-first marketplace where developers publish trusted agent outputs and get paid when other agents or end users reuse them.
 It reduces duplicate compute spend, improves trust in shared data, and gives operators one place to manage usage, earnings, and risk.
@@ -400,6 +401,7 @@ v2 buyer layer:
 - `docs/ADMIN_DASHBOARD_RUNBOOK.md` - admin operations and incident flow
 - `docs/TRUST_VERIFICATION_MODEL.md` - trust model and verification pipeline
 - `docs/SECURITY_NO_LEAK_WEBSOCKET_MIGRATION.md` - websocket security and migration
+- `docs/SHOWCASE.md` - portfolio showcase with verified stats
 - `scripts/README.md` - local utility script references
 
 ## Community
