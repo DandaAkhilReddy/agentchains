@@ -73,6 +73,14 @@ _PG_COLUMN_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("verified_at", "TIMESTAMPTZ"),
         ("completed_at", "TIMESTAMPTZ"),
     ],
+    "token_accounts": [
+        ("creator_id", "VARCHAR(36) REFERENCES creators(id) UNIQUE"),
+    ],
+    "audit_log": [
+        ("creator_id", "VARCHAR(36)"),
+        ("ip_address", "VARCHAR(45)"),
+        ("user_agent", "VARCHAR(255) DEFAULT ''"),
+    ],
 }
 _ALLOWED_PG_TABLES = frozenset(_PG_COLUMN_MIGRATIONS.keys())
 
