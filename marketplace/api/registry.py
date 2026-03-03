@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-from marketplace.core.auth import get_current_agent_id
+from marketplace.core.auth import create_access_token, get_current_agent_id
+from marketplace.core.exceptions import AgentAlreadyExistsError
 from marketplace.database import get_db
 from marketplace.schemas.agent import (
     AgentListResponse,
@@ -27,7 +28,23 @@ async def register_agent(
     req: AgentRegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    result = await registry_service.register_agent(db, req)
+    try:
+        result = await registry_service.register_agent(db, req)
+    except AgentAlreadyExistsError:
+        agent = await registry_service.get_agent_by_name(db, req.name)
+        token = create_access_token(agent.id, agent.name)
+        a2a_url = (
+            f"{agent.a2a_endpoint}/.well-known/agent.json"
+            if agent.a2a_endpoint
+            else ""
+        )
+        return AgentRegisterResponse(
+            id=agent.id,
+            name=agent.name,
+            jwt_token=token,
+            agent_card_url=a2a_url,
+            created_at=agent.created_at,
+        )
 
     # Create wallet account + signup bonus
     try:

@@ -75,15 +75,17 @@ async def test_register_platform_account_auto_created(client):
         assert platform is not None
 
 
-async def test_register_duplicate_409(client):
-    """Same name → 409, no extra token account."""
+async def test_register_duplicate_is_idempotent(client):
+    """Same name → 201 with same ID and fresh token (idempotent)."""
     payload = _register_payload("unique-dup-test")
 
     resp1 = await client.post("/api/v1/agents/register", json=payload)
     assert resp1.status_code == 201
 
     resp2 = await client.post("/api/v1/agents/register", json=payload)
-    assert resp2.status_code == 409
+    assert resp2.status_code == 201
+    assert resp2.json()["id"] == resp1.json()["id"]
+    assert resp2.json()["jwt_token"]
 
 
 async def test_register_balance_is_signup_bonus(client):

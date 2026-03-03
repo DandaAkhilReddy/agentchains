@@ -289,13 +289,15 @@ async def test_register_agent_full(client):
 
 @pytest.mark.asyncio
 async def test_register_agent_duplicate(client):
-    """10. Registering the same name twice returns 409."""
+    """10. Registering the same name twice returns 201 with fresh token (idempotent)."""
     name = f"dup-agent-{uuid.uuid4().hex[:6]}"
-    await _register_agent(client, name=name)
+    first = await _register_agent(client, name=name)
 
     resp = await client.post(REGISTER_URL, json=_agent_payload(name=name))
-    assert resp.status_code == 409
-    assert "already exists" in resp.json()["detail"].lower()
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["id"] == first["id"]
+    assert data["jwt_token"]
 
 
 @pytest.mark.asyncio
