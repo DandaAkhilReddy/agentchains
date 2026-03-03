@@ -8,3 +8,4 @@ export * from "./transaction";
 export * from "./wallet";
 export * from "./creator";
 export * from "./admin";
+export * from "./chain";

@@ -97,6 +97,8 @@ def _apply_sqlite_compat_migrations(sync_conn) -> None:
             continue
         for column, ddl in migrations:
             _validate_identifier(column, "column name")
+            if _sqlite_has_column(sync_conn, table, column):
+                continue
             _DANGEROUS_KW = {"DROP", "DELETE", "TRUNCATE", "INSERT", "UPDATE", ";", "--"}
             if any(kw in ddl.upper() for kw in _DANGEROUS_KW):
                 raise ValueError(f"Dangerous keyword in DDL: {ddl!r}")

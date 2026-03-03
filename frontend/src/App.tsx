@@ -9,6 +9,7 @@ import ListingsPage from "./pages/ListingsPage";
 import TransactionsPage from "./pages/TransactionsPage";
 import ReputationPage from "./pages/ReputationPage";
 import { useCreatorAuth } from "./hooks/useCreatorAuth";
+import { useAgentToken } from "./hooks/useAgentToken";
 
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const CatalogPage = lazy(() => import("./pages/CatalogPage"));
@@ -28,6 +29,7 @@ const ActionsPage = lazy(() => import("./pages/ActionsPage"));
 const AgentInteractionPage = lazy(() => import("./pages/AgentInteractionPage"));
 const BillingPage = lazy(() => import("./pages/BillingPage"));
 const PluginMarketplacePage = lazy(() => import("./pages/PluginMarketplacePage"));
+const ChainsPage = lazy(() => import("./pages/ChainsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,6 +74,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>("roles");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const creatorAuth = useCreatorAuth();
+  const agentAuth = useAgentToken();
 
   const loading = (
     <div className="flex items-center justify-center py-20" style={{ color: '#64748b' }}>Loading...</div>
@@ -125,6 +128,31 @@ export default function App() {
                 {activeTab === "actions" && (
                   <Suspense fallback={loading}><ActionsPage /></Suspense>
                 )}
+                {activeTab === "chains" && (
+                  <Suspense fallback={loading}>
+                    {creatorAuth.isAuthenticated && agentAuth.hasAgent ? (
+                      <ChainsPage
+                        agentToken={agentAuth.agentToken!}
+                        agentId={agentAuth.agentId!}
+                      />
+                    ) : (
+                      <div className="text-center py-16 space-y-3">
+                        <p className="text-sm text-[#94a3b8]">
+                          {!creatorAuth.isAuthenticated
+                            ? "Sign in as a creator first, then onboard an agent."
+                            : "You need an agent to compose chains. Go to Onboarding to create one."}
+                        </p>
+                        <button
+                          onClick={() => setActiveTab(creatorAuth.isAuthenticated ? "onboarding" : "creator")}
+                          className="rounded-lg px-4 py-2 text-sm font-medium text-white"
+                          style={{ background: "linear-gradient(135deg, #60a5fa, #a78bfa)" }}
+                        >
+                          {creatorAuth.isAuthenticated ? "Go to Onboarding" : "Sign In"}
+                        </button>
+                      </div>
+                    )}
+                  </Suspense>
+                )}
                 {activeTab === "transactions" && <TransactionsPage />}
                 {activeTab === "wallet" && (
                   <Suspense fallback={loading}><WalletPage /></Suspense>
@@ -139,7 +167,7 @@ export default function App() {
                 {activeTab === "onboarding" && (
                   <Suspense fallback={loading}>
                     {creatorAuth.isAuthenticated ? (
-                      <OnboardingWizardPage creatorToken={creatorAuth.token!} />
+                      <OnboardingWizardPage creatorToken={creatorAuth.token!} onAgentCreated={agentAuth.setAgent} />
                     ) : (
                       <CreatorLoginPage
                         onLogin={async (email, password) => { await creatorAuth.login(email, password); }}

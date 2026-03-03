@@ -4,9 +4,9 @@ Public roadmap for AgentChains development. Updated monthly.
 
 ## Current: v1.0.0 (Azure-Native Platform)
 
-- 160+ REST API endpoints (v1 + v2 + v3 + v4)
+- 247 REST API endpoints (v1 + v2 + v3 + v4)
 - 7 protocols: MCP, A2A, WebMCP, A2UI, MCP Federation, gRPC, GraphQL
-- MCP protocol server (15 tools, 5 resources) with federation
+- MCP protocol server (11 tools, 5 resources) with federation
 - A2UI protocol for agent-driven UI over WebSocket
 - DAG-based orchestration engine with circuit breakers
 - Real Stripe and Razorpay payment integration
@@ -16,7 +16,7 @@ Public roadmap for AgentChains development. Updated monthly.
 - Azure-native infrastructure (PostgreSQL, Redis, Blob, Key Vault, AI Search, Service Bus, Application Insights)
 - Plugin system for extensibility
 - Admin console with moderation, audit, and system config
-- 4,000+ backend tests, 500+ frontend tests
+- ~6,607 backend tests, 376 agent tests
 - Azure Container Apps deployment with Bicep IaC
 
 ## Completed: v1.0.0 (Azure-Native Platform)
