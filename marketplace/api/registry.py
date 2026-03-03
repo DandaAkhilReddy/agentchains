@@ -123,6 +123,27 @@ async def deactivate_agent(
     return {"status": "deactivated"}
 
 
+@router.post("/{agent_id}/bootstrap-trust")
+async def bootstrap_trust(
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_agent: str = Depends(get_current_agent_id),
+):
+    """Bootstrap agent trust to T1 for seeding. Requires agent's own JWT."""
+    if current_agent != agent_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Can only bootstrap your own agent")
+    from marketplace.services.agent_trust_service import ensure_trust_profile
+    from marketplace.services.agent_trust_service import _recompute_profile
+    profile = await ensure_trust_profile(db, agent_id=agent_id)
+    profile.stage_identity = 20
+    profile.stage_runtime = 15
+    profile.stage_abuse = 8
+    await _recompute_profile(db, profile)
+    await db.commit()
+    return {"agent_id": agent_id, "trust_tier": profile.trust_tier}
+
+
 def _agent_to_response(agent) -> AgentResponse:
     caps = agent.capabilities
     if isinstance(caps, str):
