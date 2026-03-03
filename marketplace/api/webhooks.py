@@ -8,10 +8,12 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.config import settings
+from marketplace.database import get_db
 from marketplace.services.stripe_service import StripePaymentService
 
 # Maximum age for webhook events (5 minutes) to prevent replay attacks
@@ -24,6 +26,7 @@ logger = logging.getLogger(__name__)
 @router.post("/webhooks/stripe")
 async def stripe_webhook(
     request: Request,
+    db: AsyncSession = Depends(get_db),
     stripe_signature: str = Header(None, alias="Stripe-Signature"),
 ):
     """Handle Stripe webhook events."""
@@ -68,7 +71,7 @@ async def stripe_webhook(
     elif event_type == "charge.refunded":
         await _handle_stripe_refund(event)
     elif event_type == "checkout.session.completed":
-        await _handle_stripe_checkout_completed(event)
+        await _handle_stripe_checkout_completed(event, db)
     elif event_type == "account.updated":
         await _handle_stripe_account_updated(event)
     else:
@@ -179,7 +182,7 @@ async def _handle_stripe_refund(event: dict) -> None:
     # TODO: Update transaction, reverse credit
 
 
-async def _handle_stripe_checkout_completed(event: dict) -> None:
+async def _handle_stripe_checkout_completed(event: dict, db: AsyncSession) -> None:
     """Confirm a deposit when Stripe Checkout Session is paid."""
     session_obj = event.get("data", {}).get("object", {})
     metadata = session_obj.get("metadata", {})
@@ -197,16 +200,14 @@ async def _handle_stripe_checkout_completed(event: dict) -> None:
         )
         return
 
-    from marketplace.database import async_session
     from marketplace.services.deposit_service import confirm_deposit
 
-    async with async_session() as db:
-        try:
-            await confirm_deposit(db, deposit_id)
-            logger.info("Stripe checkout confirmed deposit %s", deposit_id)
-        except ValueError:
-            # Already confirmed (idempotent) or invalid state — skip
-            logger.info("Deposit %s already confirmed or invalid, skipping", deposit_id)
+    try:
+        await confirm_deposit(db, deposit_id)
+        logger.info("Stripe checkout confirmed deposit %s", deposit_id)
+    except ValueError:
+        # Already confirmed (idempotent) or invalid state — skip
+        logger.info("Deposit %s already confirmed or invalid, skipping", deposit_id)
 
 
 async def _handle_stripe_account_updated(event: dict) -> None:
