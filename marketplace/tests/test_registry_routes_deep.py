@@ -105,14 +105,16 @@ class TestAgentRegistration:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_register_duplicate_name_returns_409(self, client):
-        """4. Registering the same agent name twice returns 409 Conflict."""
+    async def test_register_duplicate_name_is_idempotent(self, client):
+        """4. Registering the same agent name twice returns 201 with fresh token."""
         name = f"dup-deep-{uuid.uuid4().hex[:6]}"
-        await _register(client, name=name)
+        first = await _register(client, name=name)
 
         resp = await client.post(REGISTER_URL, json=_agent_payload(name=name))
-        assert resp.status_code == 409
-        assert "already exists" in resp.json()["detail"].lower()
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["id"] == first["id"]
+        assert data["jwt_token"]
 
     @pytest.mark.asyncio
     async def test_register_all_agent_types_accepted(self, client):

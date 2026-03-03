@@ -80,6 +80,17 @@ async def get_agent(db: AsyncSession, agent_id: str) -> RegisteredAgent:
     return agent
 
 
+async def get_agent_by_name(db: AsyncSession, name: str) -> RegisteredAgent:
+    """Get an agent by name or raise 404."""
+    result = await db.execute(
+        select(RegisteredAgent).where(RegisteredAgent.name == name)
+    )
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise AgentNotFoundError(name)
+    return agent
+
+
 async def list_agents(
     db: AsyncSession,
     agent_type: str | None = None,
