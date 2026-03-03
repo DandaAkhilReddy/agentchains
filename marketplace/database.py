@@ -59,6 +59,20 @@ _PG_COLUMN_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("provenance_json", "TEXT DEFAULT '{}'"),
         ("verification_updated_at", "TIMESTAMPTZ"),
     ],
+    "transactions": [
+        ("payment_method", "VARCHAR(20) DEFAULT 'token'"),
+        ("payment_tx_hash", "VARCHAR(66)"),
+        ("payment_network", "VARCHAR(30) DEFAULT 'base-sepolia'"),
+        ("content_hash", "VARCHAR(71) NOT NULL DEFAULT ''"),
+        ("delivered_hash", "VARCHAR(71)"),
+        ("verification_status", "VARCHAR(20) DEFAULT 'pending'"),
+        ("error_message", "TEXT"),
+        ("initiated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()"),
+        ("paid_at", "TIMESTAMPTZ"),
+        ("delivered_at", "TIMESTAMPTZ"),
+        ("verified_at", "TIMESTAMPTZ"),
+        ("completed_at", "TIMESTAMPTZ"),
+    ],
 }
 _ALLOWED_PG_TABLES = frozenset(_PG_COLUMN_MIGRATIONS.keys())
 
