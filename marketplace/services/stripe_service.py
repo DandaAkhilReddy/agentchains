@@ -20,10 +20,11 @@ class StripePaymentService:
     def __init__(self, secret_key: str = "", webhook_secret: str = ""):
         self.secret_key = secret_key
         self.webhook_secret = webhook_secret
-        self._simulated = not secret_key or secret_key.startswith("sk_test_")
+        # Simulated only when key is empty — sk_test_* keys use real SDK
+        self._simulated = not secret_key
         self._stripe = None
 
-        if secret_key and not self._simulated:
+        if secret_key:
             try:
                 import stripe
 
@@ -58,10 +59,20 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        raise NotImplementedError(
-            "Stripe live API integration is not yet available. "
-            "Use a test key (sk_test_*) for simulated mode."
+        pi = self._stripe.PaymentIntent.create(
+            amount=int(amount_usd * 100),
+            currency=currency,
+            metadata=metadata or {},
         )
+        return {
+            "id": pi.id,
+            "amount": pi.amount,
+            "currency": pi.currency,
+            "status": pi.status,
+            "metadata": dict(pi.metadata or {}),
+            "created": pi.created,
+            "simulated": False,
+        }
 
     async def confirm_payment(self, payment_intent_id: str) -> dict:
         """Confirm a PaymentIntent."""
@@ -72,9 +83,12 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        raise NotImplementedError(
-            "Stripe live API integration is not yet available."
-        )
+        pi = self._stripe.PaymentIntent.confirm(payment_intent_id)
+        return {
+            "id": pi.id,
+            "status": pi.status,
+            "simulated": False,
+        }
 
     async def retrieve_payment_intent(self, payment_intent_id: str) -> dict:
         """Retrieve a PaymentIntent by ID."""
@@ -85,9 +99,12 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        raise NotImplementedError(
-            "Stripe live API integration is not yet available."
-        )
+        pi = self._stripe.PaymentIntent.retrieve(payment_intent_id)
+        return {
+            "id": pi.id,
+            "status": pi.status,
+            "simulated": False,
+        }
 
     async def create_refund(
         self,
@@ -104,9 +121,17 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        raise NotImplementedError(
-            "Stripe live API integration is not yet available."
-        )
+        params: dict = {"payment_intent": payment_intent_id}
+        if amount_usd is not None:
+            params["amount"] = int(amount_usd * 100)
+        refund = self._stripe.Refund.create(**params)
+        return {
+            "id": refund.id,
+            "payment_intent": payment_intent_id,
+            "amount": refund.amount,
+            "status": refund.status,
+            "simulated": False,
+        }
 
     async def create_connected_account(self, email: str, country: str = "US") -> dict:
         """Create a Stripe Connect account for a creator."""
@@ -119,9 +144,18 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        raise NotImplementedError(
-            "Stripe live API integration is not yet available."
+        account = self._stripe.Account.create(
+            type="express",
+            email=email,
+            country=country,
         )
+        return {
+            "id": account.id,
+            "email": email,
+            "country": country,
+            "payouts_enabled": account.payouts_enabled,
+            "simulated": False,
+        }
 
     async def create_payout(
         self,
@@ -140,9 +174,19 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        raise NotImplementedError(
-            "Stripe live API integration is not yet available."
+        payout = self._stripe.Payout.create(
+            amount=int(amount_usd * 100),
+            currency=currency,
+            stripe_account=account_id,
         )
+        return {
+            "id": payout.id,
+            "account": account_id,
+            "amount": payout.amount,
+            "currency": payout.currency,
+            "status": payout.status,
+            "simulated": False,
+        }
 
     def verify_webhook_signature(self, payload: bytes, sig_header: str) -> dict | None:
         """Verify a Stripe webhook signature and return the event."""
@@ -150,6 +194,47 @@ class StripePaymentService:
             logger.warning("Webhook signature verification skipped (simulated mode)")
             return None
 
-        raise NotImplementedError(
-            "Stripe live webhook verification is not yet available."
+        event = self._stripe.Webhook.construct_event(
+            payload, sig_header, self.webhook_secret,
         )
+        return dict(event)
+
+    async def create_checkout_session(
+        self,
+        amount_usd: Decimal,
+        deposit_id: str,
+        success_url: str,
+        cancel_url: str,
+    ) -> dict:
+        """Create a Stripe Checkout Session for a deposit.
+
+        Returns dict with 'id' and 'url' keys.
+        """
+        if self._simulated:
+            sim_id = f"cs_sim_{uuid.uuid4().hex[:16]}"
+            return {
+                "id": sim_id,
+                "url": None,
+            }
+
+        session = self._stripe.checkout.Session.create(
+            mode="payment",
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "unit_amount": int(amount_usd * 100),
+                    "product_data": {
+                        "name": f"AgentChains Credit — ${amount_usd}",
+                    },
+                },
+                "quantity": 1,
+            }],
+            metadata={"deposit_id": deposit_id},
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+        return {
+            "id": session.id,
+            "url": session.url,
+        }
