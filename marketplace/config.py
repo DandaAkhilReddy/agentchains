@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
     stripe_connect_enabled: bool = False
+    stripe_frontend_url: str = ""  # frontend origin for Stripe redirect URLs
 
     # Rate Limiting
     rest_rate_limit_authenticated: int = 120  # req/min for JWT-authenticated

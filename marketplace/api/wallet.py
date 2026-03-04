@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marketplace.config import settings
 from marketplace.core.auth import get_current_agent_id
 from marketplace.api.deprecations import apply_legacy_v1_deprecation_headers
 from marketplace.database import get_db
@@ -15,7 +16,9 @@ from marketplace.services.token_service import (
 from marketplace.services.deposit_service import (
     confirm_deposit,
     create_deposit,
+    update_deposit_payment_ref,
 )
+from marketplace.services.stripe_service import StripePaymentService
 from marketplace.core.rate_limiter import SlidingWindowRateLimiter
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
@@ -57,6 +60,11 @@ class HistoryResponse(BaseModel):
 
 class DepositRequest(BaseModel):
     amount_usd: float = Field(..., gt=0, le=100_000, description="USD amount to deposit")
+    payment_method: str = Field(
+        default="simulated",
+        pattern=r"^(simulated|stripe)$",
+        description="Payment method: simulated or stripe",
+    )
 
 
 class TransferRequest(BaseModel):
@@ -102,13 +110,47 @@ async def wallet_deposit(
     db: AsyncSession = Depends(get_db),
     agent_id: str = Depends(get_current_agent_id),
 ):
-    """Create a USD deposit request."""
+    """Create a USD deposit request.
+
+    When payment_method is 'stripe' and a Stripe key is configured, returns
+    a checkout_url for the hosted Stripe Checkout page. Otherwise auto-confirms
+    immediately (simulated mode).
+    """
     apply_legacy_v1_deprecation_headers(response)
+
+    use_stripe = req.payment_method == "stripe" and settings.stripe_secret_key
+
     try:
-        deposit = await create_deposit(db, agent_id, req.amount_usd)
+        method = "stripe" if use_stripe else "simulated"
+        deposit = await create_deposit(db, agent_id, req.amount_usd, method)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return deposit
+
+    checkout_url: str | None = None
+
+    if use_stripe:
+        stripe_svc = StripePaymentService(
+            secret_key=settings.stripe_secret_key,
+            webhook_secret=settings.stripe_webhook_secret,
+        )
+        frontend = settings.stripe_frontend_url or settings.cors_origins.split(",")[0].strip()
+        success_url = f"{frontend}/wallet?deposit_status=success"
+        cancel_url = f"{frontend}/wallet?deposit_status=cancel"
+
+        from decimal import Decimal
+        session = await stripe_svc.create_checkout_session(
+            amount_usd=Decimal(str(req.amount_usd)),
+            deposit_id=deposit["id"],
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+        await update_deposit_payment_ref(db, deposit["id"], session["id"])
+        checkout_url = session.get("url")
+    else:
+        # Simulated: auto-confirm immediately
+        deposit = await confirm_deposit(db, deposit["id"])
+
+    return {**deposit, "checkout_url": checkout_url}
 
 
 @router.post("/deposit/{deposit_id}/confirm")

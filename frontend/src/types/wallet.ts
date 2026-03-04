@@ -59,6 +59,7 @@ export interface DepositResponse {
   payment_ref: string | null;
   created_at: string | null;
   completed_at: string | null;
+  checkout_url?: string | null;
 }
 
 export interface TransferResponse {

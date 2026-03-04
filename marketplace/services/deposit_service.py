@@ -88,6 +88,13 @@ async def confirm_deposit(db: AsyncSession, deposit_id: str, agent_id: str | Non
     return _deposit_to_dict(deposit)
 
 
+async def update_deposit_payment_ref(db: AsyncSession, deposit_id: str, payment_ref: str) -> None:
+    """Store the Stripe Checkout Session ID on a pending deposit."""
+    deposit = await _get_deposit(db, deposit_id, for_update=True)
+    deposit.payment_ref = payment_ref
+    await db.commit()
+
+
 async def cancel_deposit(db: AsyncSession, deposit_id: str, agent_id: str | None = None) -> dict:
     """Mark a deposit as failed (uses row-level lock to prevent race conditions)."""
     deposit = await _get_deposit(db, deposit_id, for_update=True)

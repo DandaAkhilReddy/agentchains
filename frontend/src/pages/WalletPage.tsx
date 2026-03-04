@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../components/Toast";
@@ -174,8 +174,16 @@ export default function WalletPage() {
 
   const depositMutation = useMutation({
     mutationFn: () =>
-      createDeposit(token!, { amount_usd: parseFloat(depositAmount) }),
-    onSuccess: () => {
+      createDeposit(token!, {
+        amount_usd: parseFloat(depositAmount),
+        payment_method: "stripe",
+      }),
+    onSuccess: (data) => {
+      if (data.checkout_url) {
+        // Redirect to Stripe Checkout hosted page
+        window.location.href = data.checkout_url;
+        return;
+      }
       toast(
         `Deposited ${formatUSD(parseFloat(depositAmount))} successfully!`,
         "success"
@@ -187,6 +195,25 @@ export default function WalletPage() {
     },
     onError: (err) => toast((err as Error).message, "error"),
   });
+
+  // Handle Stripe redirect callback params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const depositStatus = params.get("deposit_status");
+    if (depositStatus === "success") {
+      toast("Payment received! Your balance will update shortly.", "success");
+      queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet-history"] });
+    } else if (depositStatus === "cancel") {
+      toast("Payment cancelled.", "error");
+    }
+    if (depositStatus) {
+      // Clean URL params without full reload
+      const url = new URL(window.location.href);
+      url.searchParams.delete("deposit_status");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
 
   const handleConnect = () => {
     const t = inputToken.trim();
