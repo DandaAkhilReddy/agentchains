@@ -158,6 +158,21 @@ TOOL_DEFINITIONS = [
 ]
 
 
+TOOL_POLICIES: dict[str, dict] = {
+    "marketplace_discover": {"timeout_seconds": 10, "risk_level": "low"},
+    "marketplace_express_buy": {"timeout_seconds": 30, "risk_level": "high", "requires_consent": True},
+    "marketplace_sell": {"timeout_seconds": 30, "risk_level": "medium"},
+    "marketplace_auto_match": {"timeout_seconds": 30, "risk_level": "medium"},
+    "marketplace_register_catalog": {"timeout_seconds": 15, "risk_level": "low"},
+    "marketplace_trending": {"timeout_seconds": 10, "risk_level": "low"},
+    "marketplace_reputation": {"timeout_seconds": 10, "risk_level": "low"},
+    "marketplace_verify_zkp": {"timeout_seconds": 30, "risk_level": "medium"},
+    "webmcp_discover_tools": {"timeout_seconds": 10, "risk_level": "low"},
+    "webmcp_execute_action": {"timeout_seconds": 120, "risk_level": "critical", "requires_consent": True},
+    "webmcp_verify_execution": {"timeout_seconds": 15, "risk_level": "low"},
+}
+
+
 async def execute_tool(
     tool_name: str,
     arguments: dict,

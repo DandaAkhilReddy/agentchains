@@ -367,6 +367,31 @@ async def verify_snapshot(
         "verification_run_id": run.id,
     })
 
+    # Promote verified snapshots to semantic memory (fire-and-forget)
+    if status == "verified":
+        try:
+            from marketplace.config import settings as _mem_settings
+            from marketplace.memory.consolidation import MemoryConsolidator
+            from marketplace.memory.embedding_service import EmbeddingService
+            from marketplace.memory.semantic_store import SemanticMemoryStore
+
+            embedding_svc = EmbeddingService(
+                foundry_url=_mem_settings.foundry_local_base_url,
+                ollama_url=_mem_settings.ollama_base_url,
+                openai_api_key=_mem_settings.openai_api_key,
+                model=_mem_settings.memory_embedding_model,
+            )
+            store = SemanticMemoryStore(embedding_svc)
+            consolidator = MemoryConsolidator(store, embedding_svc)
+            await consolidator.promote_episodic(db, agent_id, snapshot_id)
+        except Exception:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "Semantic memory promotion failed for snapshot %s",
+                snapshot_id,
+            )
+
     return {
         "snapshot": _serialize_snapshot(snapshot),
         "verification_run_id": run.id,

@@ -61,6 +61,7 @@ from marketplace.models.refresh_token import RefreshToken
 from marketplace.models.role import ActorRole, Role
 from marketplace.models.api_key import ApiKey
 from marketplace.models.auth_event import AuthEvent
+from marketplace.models.semantic_memory import SemanticMemory
 
 __all__ = [
     "RegisteredAgent",
@@ -130,4 +131,5 @@ __all__ = [
     "Role",
     "ApiKey",
     "AuthEvent",
+    "SemanticMemory",
 ]

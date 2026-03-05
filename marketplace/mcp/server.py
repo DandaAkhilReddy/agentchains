@@ -13,9 +13,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marketplace.config import settings
 from marketplace.database import get_db
 from marketplace.mcp.auth import validate_mcp_auth
+from marketplace.mcp.guarded_executor import GuardedToolExecutor
 from marketplace.mcp.session_manager import session_manager
-from marketplace.mcp.tools import TOOL_DEFINITIONS, execute_tool
+from marketplace.mcp.tool_registry import RiskLevel, ToolPolicy, ToolRegistry
+from marketplace.mcp.tools import TOOL_DEFINITIONS, TOOL_POLICIES, execute_tool
 from marketplace.mcp.resources import RESOURCE_DEFINITIONS, read_resource
+
+# Initialize tool registry with policies
+_tool_registry = ToolRegistry()
+for _defn in TOOL_DEFINITIONS:
+    _name = _defn["name"]
+    _pol_cfg = TOOL_POLICIES.get(_name, {})
+    _policy = ToolPolicy(
+        name=_name,
+        timeout_seconds=_pol_cfg.get("timeout_seconds", 30.0),
+        requires_consent=_pol_cfg.get("requires_consent", False),
+        risk_level=RiskLevel(_pol_cfg.get("risk_level", "medium")),
+    )
+    _tool_registry.register_tool(_defn, _policy)
+
+_guarded_executor = GuardedToolExecutor(_tool_registry)
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 
@@ -86,7 +103,9 @@ async def handle_message(
         tool_name = params.get("name", "")
         arguments = params.get("arguments", {})
         try:
-            result = await execute_tool(tool_name, arguments, session.agent_id, db=db)
+            result = await _guarded_executor.execute(
+                tool_name, arguments, session.agent_id, db=db,
+            )
             return _jsonrpc_response(msg_id, {
                 "content": [{"type": "text", "text": json.dumps(result)}],
             })
