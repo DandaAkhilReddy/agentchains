@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -257,10 +257,12 @@ async def billing_transfer(
 
 @router.get("/plans", response_model=list[PlanResponse])
 async def billing_list_plans(
-    tier: str | None = Query(None, description="Filter by tier: free/starter/pro/enterprise"),
+    tier: Literal["free", "starter", "pro", "enterprise"] | None = Query(
+        None, description="Filter by tier"
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> list[PlanResponse]:
-    """List all active billing plans."""
+    """List all active billing plans. Public — no auth required."""
     plans = await get_plans(db, tier=tier)
     return [_plan_to_response(p) for p in plans]
 
@@ -282,7 +284,7 @@ async def billing_get_plan(
     plan_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> PlanResponse:
-    """Get a single plan by ID."""
+    """Get a single plan by ID. Public — no auth required."""
     plan = await get_plan(db, plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -338,7 +340,20 @@ async def billing_create_subscription(
         sub = await subscribe(db, agent_id, req.plan_id)
         return {"subscription_id": sub.id, "checkout_url": None}
 
-    # Paid plans: create Stripe Checkout Session
+    # Paid plans: create a pending subscription record, then redirect to Stripe
+    from marketplace.models.billing import Subscription as SubscriptionModel
+    from marketplace.core.utils import utcnow as _utcnow
+
+    pending_sub = SubscriptionModel(
+        agent_id=agent_id,
+        plan_id=req.plan_id,
+        status="pending",
+        current_period_start=_utcnow(),
+    )
+    db.add(pending_sub)
+    await db.commit()
+    await db.refresh(pending_sub)
+
     stripe_svc = _get_stripe_service()
     interval = "year" if req.billing_cycle == "yearly" else "month"
     frontend_url = settings.stripe_frontend_url or "http://localhost:5173"
@@ -353,7 +368,7 @@ async def billing_create_subscription(
     )
 
     return {
-        "subscription_id": None,
+        "subscription_id": pending_sub.id,
         "checkout_url": session.get("url"),
         "checkout_session_id": session.get("id"),
     }
@@ -391,7 +406,11 @@ async def billing_change_plan(
     if not new_plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    price = float(new_plan.price_usd_monthly)
+    price = (
+        float(new_plan.price_usd_yearly)
+        if req.billing_cycle == "yearly"
+        else float(new_plan.price_usd_monthly)
+    )
 
     # Free plans: switch directly
     if price == 0:
@@ -400,11 +419,12 @@ async def billing_change_plan(
 
     # Paid plans: Stripe Checkout for the new plan
     stripe_svc = _get_stripe_service()
+    interval = "year" if req.billing_cycle == "yearly" else "month"
     frontend_url = settings.stripe_frontend_url or "http://localhost:5173"
     session = await stripe_svc.create_subscription_checkout(
         plan_name=new_plan.name,
         price_usd=Decimal(str(price)),
-        interval="month",
+        interval=interval,
         agent_id=agent_id,
         plan_id=req.new_plan_id,
         success_url=f"{frontend_url}/billing?session_id={{CHECKOUT_SESSION_ID}}",

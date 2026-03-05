@@ -60,6 +60,7 @@ class CreateSubscriptionRequest(BaseModel):
 
 class ChangePlanRequest(BaseModel):
     new_plan_id: str = Field(..., min_length=1, max_length=36)
+    billing_cycle: Literal["monthly", "yearly"] = "monthly"
 
 
 class CancelSubscriptionRequest(BaseModel):

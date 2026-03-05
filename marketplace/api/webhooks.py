@@ -239,21 +239,32 @@ async def _handle_subscription_created(event: dict, db: AsyncSession) -> None:
         logger.warning("subscription.created missing agent_id/plan_id in metadata")
         return
 
-    from marketplace.services.billing_v2_service import get_subscription, subscribe
     from marketplace.models.billing import Subscription
     from sqlalchemy import select
 
-    # Check for existing subscription to update
-    existing = await get_subscription(db, agent_id)
-    if existing:
+    # Look for a pending subscription from checkout, or an active one without stripe_id
+    result = await db.execute(
+        select(Subscription)
+        .where(
+            Subscription.agent_id == agent_id,
+            Subscription.plan_id == plan_id,
+            Subscription.status.in_(["pending", "active"]),
+        )
+        .order_by(Subscription.created_at.desc())
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing and not existing.stripe_subscription_id:
         existing.stripe_subscription_id = stripe_sub_id
         existing.status = "active"
         await db.commit()
-        logger.info("Updated existing subscription %s with stripe_id=%s", existing.id, stripe_sub_id)
+        logger.info("Activated subscription %s with stripe_id=%s", existing.id, stripe_sub_id)
         return
 
+    # No pending sub found — create new one
+    from marketplace.services.billing_v2_service import subscribe
+
     sub = await subscribe(db, agent_id, plan_id)
-    # Update with stripe subscription ID
     result = await db.execute(
         select(Subscription).where(Subscription.id == sub.id)
     )

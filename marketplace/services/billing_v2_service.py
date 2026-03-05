@@ -279,15 +279,16 @@ async def change_plan(
     Cancels the current subscription immediately and creates a new one.
     Stripe proration is handled externally via checkout.
     """
+    new_plan = await get_plan(db, new_plan_id)
+    if not new_plan:
+        raise ValueError(f"Plan {new_plan_id} not found")
+
     current_sub = await get_subscription(db, agent_id)
     if current_sub:
         current_sub.status = "cancelled"
         current_sub.current_period_end = _utcnow()
         current_sub.updated_at = _utcnow()
-
-    new_plan = await get_plan(db, new_plan_id)
-    if not new_plan:
-        raise ValueError(f"Plan {new_plan_id} not found")
+        await db.commit()
 
     return await subscribe(db, agent_id, new_plan_id)
 

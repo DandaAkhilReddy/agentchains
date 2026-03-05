@@ -142,10 +142,13 @@ export default function BillingPage() {
 
   // ── Mutations ──
 
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   const subscribeMutation = useMutation({
     mutationFn: ({ planId, cycle }: { planId: string; cycle: "monthly" | "yearly" }) =>
       createSubscription(token, planId, cycle),
     onSuccess: (data) => {
+      setErrorMsg(null);
       if (data.checkout_url) {
         window.location.href = data.checkout_url;
       } else {
@@ -153,25 +156,30 @@ export default function BillingPage() {
         queryClient.invalidateQueries({ queryKey: ["plans"] });
       }
     },
+    onError: (err: Error) => setErrorMsg(err.message),
   });
 
   const cancelMutation = useMutation({
     mutationFn: (immediate: boolean) => cancelSubscription(token, immediate),
     onSuccess: () => {
+      setErrorMsg(null);
       setCancelDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["subscription"] });
     },
+    onError: (err: Error) => setErrorMsg(err.message),
   });
 
   const changePlanMutation = useMutation({
     mutationFn: (newPlanId: string) => changePlan(token, newPlanId),
     onSuccess: (data) => {
+      setErrorMsg(null);
       if (data.checkout_url) {
         window.location.href = data.checkout_url;
       } else {
         queryClient.invalidateQueries({ queryKey: ["subscription"] });
       }
     },
+    onError: (err: Error) => setErrorMsg(err.message),
   });
 
   // ── Derived data ──
@@ -205,8 +213,8 @@ export default function BillingPage() {
       if (result.pdf_url) {
         window.open(result.pdf_url, "_blank");
       }
-    } catch {
-      // Silently handled — PDF may not be available
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to download invoice");
     }
   };
 
@@ -218,6 +226,22 @@ export default function BillingPage() {
         subtitle="Manage your plan, monitor usage, and view invoices"
         icon={CreditCard}
       />
+
+      {/* ── Error Banner ── */}
+      {errorMsg && (
+        <div className="flex items-center justify-between rounded-xl border border-[rgba(248,113,113,0.2)] bg-[rgba(248,113,113,0.05)] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-[#f87171]" />
+            <span className="text-xs text-[#f87171]">{errorMsg}</span>
+          </div>
+          <button
+            onClick={() => setErrorMsg(null)}
+            className="text-xs text-[#64748b] hover:text-[#e2e8f0]"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ── Current Plan Banner ──────────────────────────────── */}
       {subscription ? (
