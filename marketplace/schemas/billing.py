@@ -36,7 +36,7 @@ class PlanScoredResponse(BaseModel):
 
     plan: PlanResponse
     score: float
-    label: str  # "good_fit" | "overpaying" | "at_risk" | "exceeds_limits"
+    label: Literal["good_fit", "overpaying", "at_risk", "exceeds_limits"]
 
 
 # ---------------------------------------------------------------------------

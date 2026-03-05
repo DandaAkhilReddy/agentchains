@@ -2,54 +2,30 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.utils import utcnow as _utcnow
 from marketplace.schemas.billing import (
-    PlanResponse,
     PlanScoredResponse,
     RecommendationResponse,
     UsageForecastResponse,
 )
 from marketplace.services.billing_v2_service import (
-    check_limits,
+    METRICS,
+    _current_period_start,
+    _period_end_from_start,
     get_plan,
+    get_plan_limits,
     get_subscription,
+    get_subscription_with_plan,
     get_usage,
     list_plans,
+    plan_to_response,
 )
 
 logger = logging.getLogger(__name__)
-
-# Metrics we analyze for recommendations
-_METRICS = ["api_calls", "storage", "bandwidth"]
-
-
-def _plan_to_response(plan: object) -> PlanResponse:
-    """Convert a BillingPlan ORM model to PlanResponse."""
-    features: list[str] = []
-    raw = getattr(plan, "features_json", "[]") or "[]"
-    try:
-        features = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        pass
-
-    return PlanResponse(
-        id=plan.id,
-        name=plan.name,
-        description=plan.description or "",
-        tier=plan.tier,
-        price_monthly=float(plan.price_usd_monthly),
-        price_yearly=float(plan.price_usd_yearly),
-        api_calls_limit=plan.api_calls_limit,
-        storage_gb_limit=plan.storage_gb_limit,
-        agents_limit=plan.agents_limit,
-        features=features,
-    )
 
 
 def _score_plan(
@@ -62,20 +38,16 @@ def _score_plan(
     Labels: 'good_fit', 'overpaying', 'at_risk', 'exceeds_limits'.
     """
     score = 50.0  # Base score
-    limit_map = {
-        "api_calls": plan.api_calls_limit,
-        "storage": plan.storage_gb_limit,
-        "bandwidth": plan.storage_gb_limit,
-    }
+    limits = get_plan_limits(plan)
 
     exceeded = False
     overpaying_count = 0
     at_risk_count = 0
     good_fit_count = 0
 
-    for metric in _METRICS:
+    for metric in METRICS:
         current = usage_by_metric.get(metric, 0.0)
-        limit = limit_map.get(metric, 0)
+        limit = limits.get(metric, 0)
 
         if limit <= 0:
             continue
@@ -128,11 +100,16 @@ async def recommend_plan(
 
     Rule-based scoring — no LLM dependency.
     """
-    # Gather current usage across metrics
+    # Fetch subscription + plan once for usage gathering
+    _, current_plan_obj = await get_subscription_with_plan(db, agent_id)
+    current_plan_limits = get_plan_limits(current_plan_obj) if current_plan_obj else {}
+
+    # Gather current usage across metrics (1 query per metric)
+    period_start = _current_period_start()
     usage_by_metric: dict[str, float] = {}
-    for metric in _METRICS:
-        limits_data = await check_limits(db, agent_id, metric)
-        usage_by_metric[metric] = limits_data["current"]
+    for metric in METRICS:
+        usage_records = await get_usage(db, agent_id, metric, period_start)
+        usage_by_metric[metric] = sum(float(u.value) for u in usage_records)
 
     # Score all plans
     plans = await list_plans(db)
@@ -144,7 +121,7 @@ async def recommend_plan(
         plan_score, label = _score_plan(plan, usage_by_metric)
         scored.append(
             PlanScoredResponse(
-                plan=_plan_to_response(plan),
+                plan=plan_to_response(plan),
                 score=plan_score,
                 label=label,
             )
@@ -156,13 +133,10 @@ async def recommend_plan(
 
     # Calculate savings estimate vs current plan
     savings = 0.0
-    current_sub = await get_subscription(db, agent_id)
-    if current_sub:
-        current_plan = await get_plan(db, current_sub.plan_id)
-        if current_plan:
-            current_price = float(current_plan.price_usd_monthly)
-            best_price = best.plan.price_monthly
-            savings = round(current_price - best_price, 2)
+    if current_plan_obj:
+        current_price = float(current_plan_obj.price_usd_monthly)
+        best_price = best.plan.price_monthly
+        savings = round(current_price - best_price, 2)
 
     # Generate reasoning
     reasoning = _generate_reasoning(best, usage_by_metric, savings)
@@ -224,21 +198,22 @@ async def forecast_usage(
     Uses linear extrapolation: (current_usage / days_elapsed) * days_in_period.
     """
     now = _utcnow()
-    period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    period_start = _current_period_start()
+    period_end = _period_end_from_start(period_start)
 
     days_elapsed = max((now - period_start).days, 1)
-    # Calculate days in current month
-    next_month = (period_start.month % 12) + 1
-    year = period_start.year + (1 if next_month == 1 else 0)
-    period_end = period_start.replace(year=year, month=next_month)
     days_in_period = (period_end - period_start).days
+
+    # Fetch subscription + plan once (avoids N+1 from calling check_limits per metric)
+    _, plan = await get_subscription_with_plan(db, agent_id)
+    limits = get_plan_limits(plan) if plan else {}
 
     forecasts: list[UsageForecastResponse] = []
 
-    for metric in _METRICS:
-        limits_data = await check_limits(db, agent_id, metric)
-        current = limits_data["current"]
-        limit = limits_data["limit"]
+    for metric in METRICS:
+        usage_records = await get_usage(db, agent_id, metric, period_start)
+        current = sum(float(u.value) for u in usage_records)
+        limit = limits.get(metric, 0)
 
         # Linear projection
         daily_rate = current / days_elapsed

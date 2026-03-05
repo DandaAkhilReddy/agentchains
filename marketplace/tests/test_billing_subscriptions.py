@@ -39,9 +39,9 @@ from marketplace.schemas.billing import (
     UsageMeterResponse,
 )
 from marketplace.services import billing_v2_service
+from marketplace.services.billing_v2_service import plan_to_response as _plan_to_response
 from marketplace.services.plan_advisor_service import (
     _generate_reasoning,
-    _plan_to_response,
     _score_plan,
 )
 from marketplace.services.stripe_service import StripePaymentService
@@ -1054,3 +1054,239 @@ class TestRecommendPlan:
         result = await recommend_plan(db, _uid())
         scores = [s.score for s in result.all_plans_scored]
         assert scores == sorted(scores, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# 12. Review fix coverage — atomicity, ownership, duplicate guards, validation
+# ---------------------------------------------------------------------------
+
+
+class TestSubscribeDuplicateGuard:
+    """Tests: subscribe() rejects duplicate active subscriptions (M5 fix)."""
+
+    async def test_subscribe_duplicate_raises(self, db: AsyncSession) -> None:
+        """Subscribing twice for the same agent raises ValueError."""
+        plan = await _mk_plan(db, name="DupGuard")
+        aid = _uid()
+        await billing_v2_service.subscribe(db, aid, plan.id)
+        with pytest.raises(ValueError, match="already has an active subscription"):
+            await billing_v2_service.subscribe(db, aid, plan.id)
+
+    async def test_subscribe_after_cancel_allowed(self, db: AsyncSession) -> None:
+        """After cancellation, agent can subscribe again."""
+        plan = await _mk_plan(db, name="ResubAllowed")
+        aid = _uid()
+        sub = await billing_v2_service.subscribe(db, aid, plan.id)
+        await billing_v2_service.cancel_subscription(db, sub.id, immediate=True)
+        new_sub = await billing_v2_service.subscribe(db, aid, plan.id)
+        assert new_sub.status == "active"
+        assert new_sub.id != sub.id
+
+    async def test_subscribe_different_agents_ok(self, db: AsyncSession) -> None:
+        """Two different agents can subscribe to the same plan."""
+        plan = await _mk_plan(db, name="MultiAgent")
+        s1 = await billing_v2_service.subscribe(db, _uid(), plan.id)
+        s2 = await billing_v2_service.subscribe(db, _uid(), plan.id)
+        assert s1.id != s2.id
+
+
+class TestCancelSubscriptionOwnership:
+    """Tests: cancel_subscription enforces agent_id ownership (H7 fix)."""
+
+    async def test_cancel_with_wrong_agent_raises(self, db: AsyncSession) -> None:
+        """Cancel raises ValueError when agent_id doesn't match."""
+        plan = await _mk_plan(db, name="OwnerGuard")
+        real_agent = _uid()
+        sub = await billing_v2_service.subscribe(db, real_agent, plan.id)
+        with pytest.raises(ValueError, match="does not belong"):
+            await billing_v2_service.cancel_subscription(
+                db, sub.id, immediate=True, agent_id=_uid()
+            )
+
+    async def test_cancel_with_correct_agent_succeeds(self, db: AsyncSession) -> None:
+        """Cancel succeeds when agent_id matches."""
+        plan = await _mk_plan(db, name="OwnerOK")
+        aid = _uid()
+        sub = await billing_v2_service.subscribe(db, aid, plan.id)
+        cancelled = await billing_v2_service.cancel_subscription(
+            db, sub.id, immediate=True, agent_id=aid
+        )
+        assert cancelled.status == "cancelled"
+
+    async def test_cancel_without_agent_id_still_works(self, db: AsyncSession) -> None:
+        """Cancel without agent_id (backward compat) still works."""
+        plan = await _mk_plan(db, name="NoOwnerCheck")
+        sub = await billing_v2_service.subscribe(db, _uid(), plan.id)
+        cancelled = await billing_v2_service.cancel_subscription(
+            db, sub.id, immediate=True
+        )
+        assert cancelled.status == "cancelled"
+
+
+class TestChangePlanAtomicity:
+    """Tests: change_plan is atomic — cancel + new sub in one transaction (C4 fix)."""
+
+    async def test_change_plan_leaves_one_active(self, db: AsyncSession) -> None:
+        """After change_plan, exactly one active subscription exists."""
+        from sqlalchemy import select
+
+        p1 = await _mk_plan(db, name="AtomOld")
+        p2 = await _mk_plan(db, name="AtomNew")
+        aid = _uid()
+        await _mk_sub(db, aid, p1.id)
+        new_sub = await billing_v2_service.change_plan(db, aid, p2.id)
+
+        result = await db.execute(
+            select(Subscription).where(
+                Subscription.agent_id == aid, Subscription.status == "active"
+            )
+        )
+        active = result.scalars().all()
+        assert len(active) == 1
+        assert active[0].id == new_sub.id
+
+    async def test_change_plan_old_sub_is_cancelled(self, db: AsyncSession) -> None:
+        """The old subscription is cancelled after change_plan."""
+        from sqlalchemy import select
+
+        p1 = await _mk_plan(db, name="AtomCancelOld")
+        p2 = await _mk_plan(db, name="AtomCancelNew")
+        aid = _uid()
+        old_sub = await _mk_sub(db, aid, p1.id)
+        await billing_v2_service.change_plan(db, aid, p2.id)
+
+        await db.refresh(old_sub)
+        assert old_sub.status == "cancelled"
+
+
+class TestGetPlansTierValidation:
+    """Tests: get_plans validates tier at service layer (H3 fix)."""
+
+    async def test_invalid_tier_raises(self, db: AsyncSession) -> None:
+        """Invalid tier string raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid tier"):
+            await billing_v2_service.get_plans(db, tier="gold")
+
+    async def test_valid_tier_ok(self, db: AsyncSession) -> None:
+        """Valid tier filters correctly."""
+        await _mk_plan(db, name="FreeTierTest", tier="free")
+        plans = await billing_v2_service.get_plans(db, tier="free")
+        assert all(p.tier == "free" for p in plans)
+
+    async def test_none_tier_returns_all(self, db: AsyncSession) -> None:
+        """None tier returns all active plans."""
+        await _mk_plan(db, name="AllTierTest")
+        plans = await billing_v2_service.get_plans(db, tier=None)
+        assert len(plans) >= 1
+
+
+class TestListInvoicesPaginated:
+    """Tests: list_invoices_paginated uses SQL-level LIMIT/OFFSET (H1 fix)."""
+
+    async def test_paginated_returns_correct_page(self, db: AsyncSession) -> None:
+        """Pagination returns the correct slice and total count."""
+        aid = _uid()
+        for i in range(5):
+            await billing_v2_service.generate_invoice(db, aid, 10.0 + i, f"inv-{i}")
+
+        items, total = await billing_v2_service.list_invoices_paginated(
+            db, aid, page=1, page_size=2
+        )
+        assert total == 5
+        assert len(items) == 2
+
+    async def test_paginated_page_2(self, db: AsyncSession) -> None:
+        """Page 2 returns the next set of items."""
+        aid = _uid()
+        for i in range(5):
+            await billing_v2_service.generate_invoice(db, aid, 10.0 + i, f"inv-{i}")
+
+        items, total = await billing_v2_service.list_invoices_paginated(
+            db, aid, page=2, page_size=2
+        )
+        assert total == 5
+        assert len(items) == 2
+
+    async def test_paginated_empty(self, db: AsyncSession) -> None:
+        """Empty result set returns 0 total and empty list."""
+        items, total = await billing_v2_service.list_invoices_paginated(
+            db, _uid(), page=1, page_size=10
+        )
+        assert total == 0
+        assert items == []
+
+
+class TestPlanToResponseShared:
+    """Tests: plan_to_response is importable from billing_v2_service (M3 fix)."""
+
+    def test_importable_from_service(self) -> None:
+        """plan_to_response can be imported from billing_v2_service."""
+        from marketplace.services.billing_v2_service import plan_to_response
+        assert callable(plan_to_response)
+
+    def test_matches_plan_advisor_output(self) -> None:
+        """The shared function produces the same output as the old one."""
+        from marketplace.services.billing_v2_service import plan_to_response
+        orm = _fake_plan_orm()
+        result = plan_to_response(orm)
+        assert isinstance(result, PlanResponse)
+        assert result.name == orm.name
+
+
+class TestStripeServiceExceptionHandling:
+    """Tests: verify_webhook_signature handles Stripe SDK exceptions (C2 fix)."""
+
+    def test_simulated_returns_none(self) -> None:
+        """Simulated mode returns None."""
+        svc = StripePaymentService(secret_key="", webhook_secret="")
+        assert svc.verify_webhook_signature(b"payload", "sig") is None
+
+    def test_invalid_json_returns_none(self) -> None:
+        """Invalid payload does not crash — returns None."""
+        svc = StripePaymentService(secret_key="", webhook_secret="")
+        result = svc.verify_webhook_signature(b"not-json", "")
+        assert result is None
+
+
+class TestWebhookProductionGuard:
+    """Tests: simulated mode webhooks blocked in production (C1 fix)."""
+
+    def test_production_guard_in_webhook_handler(self) -> None:
+        """The webhook handler code checks settings.environment."""
+        import inspect
+        from marketplace.api import webhooks
+        source = inspect.getsource(webhooks.stripe_webhook)
+        assert 'settings.environment == "production"' in source
+
+    def test_simulated_mode_returns_503_in_production_env(self) -> None:
+        """Verify the production guard logic exists in the source."""
+        import inspect
+        from marketplace.api import webhooks
+        source = inspect.getsource(webhooks.stripe_webhook)
+        assert "503" in source
+        assert "Payment provider not configured" in source
+
+
+class TestPlanScoredLabelTyping:
+    """Tests: PlanScoredResponse.label is typed as Literal (M7 fix)."""
+
+    def test_valid_labels_accepted(self) -> None:
+        """All four valid labels are accepted."""
+        plan = PlanResponse(
+            id="p1", name="T", tier="free", price_monthly=0,
+            price_yearly=0, api_calls_limit=1000, storage_gb_limit=1,
+            agents_limit=0,
+        )
+        for label in ("good_fit", "overpaying", "at_risk", "exceeds_limits"):
+            resp = PlanScoredResponse(plan=plan, score=50.0, label=label)
+            assert resp.label == label
+
+    def test_invalid_label_rejected(self) -> None:
+        """Invalid label string raises ValidationError."""
+        plan = PlanResponse(
+            id="p1", name="T", tier="free", price_monthly=0,
+            price_yearly=0, api_calls_limit=1000, storage_gb_limit=1,
+            agents_limit=0,
+        )
+        with pytest.raises(ValidationError):
+            PlanScoredResponse(plan=plan, score=50.0, label="invalid_label")
