@@ -263,14 +263,134 @@ async def get_invoices(
     return list(result.scalars().all())
 
 
+async def get_plan(db: AsyncSession, plan_id: str) -> BillingPlan | None:
+    """Get a single billing plan by ID."""
+    result = await db.execute(
+        select(BillingPlan).where(BillingPlan.id == plan_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def change_plan(
+    db: AsyncSession, agent_id: str, new_plan_id: str
+) -> Subscription:
+    """Change an agent's subscription to a different plan.
+
+    Cancels the current subscription immediately and creates a new one.
+    Stripe proration is handled externally via checkout.
+    """
+    current_sub = await get_subscription(db, agent_id)
+    if current_sub:
+        current_sub.status = "cancelled"
+        current_sub.current_period_end = _utcnow()
+        current_sub.updated_at = _utcnow()
+
+    new_plan = await get_plan(db, new_plan_id)
+    if not new_plan:
+        raise ValueError(f"Plan {new_plan_id} not found")
+
+    return await subscribe(db, agent_id, new_plan_id)
+
+
+async def seed_default_plans(db: AsyncSession) -> list[BillingPlan]:
+    """Idempotently create Free/Starter/Pro/Enterprise plans."""
+    defaults = [
+        {
+            "name": "Free",
+            "tier": "free",
+            "price_monthly": 0,
+            "price_yearly": 0,
+            "api_calls_limit": 1_000,
+            "storage_limit_gb": 1,
+            "features": [
+                "1,000 API calls/month",
+                "5 agent sessions",
+                "500 MB storage",
+                "Community support",
+            ],
+            "description": "Perfect for getting started and small experiments",
+        },
+        {
+            "name": "Starter",
+            "tier": "starter",
+            "price_monthly": 19,
+            "price_yearly": 190,
+            "api_calls_limit": 25_000,
+            "storage_limit_gb": 3,
+            "features": [
+                "25,000 API calls/month",
+                "100 agent sessions",
+                "3 GB storage",
+                "Email support",
+                "Custom agents",
+            ],
+            "description": "For hobbyists and small projects",
+        },
+        {
+            "name": "Pro",
+            "tier": "pro",
+            "price_monthly": 49,
+            "price_yearly": 490,
+            "api_calls_limit": 100_000,
+            "storage_limit_gb": 10,
+            "features": [
+                "100,000 API calls/month",
+                "500 agent sessions",
+                "10 GB storage",
+                "Priority support",
+                "Custom agents",
+                "Priority routing",
+                "Analytics dashboard",
+            ],
+            "description": "For professional developers and growing teams",
+        },
+        {
+            "name": "Enterprise",
+            "tier": "enterprise",
+            "price_monthly": 199,
+            "price_yearly": 1990,
+            "api_calls_limit": 1_000_000,
+            "storage_limit_gb": 100,
+            "features": [
+                "Unlimited API calls",
+                "Unlimited agent sessions",
+                "Unlimited storage",
+                "Dedicated support",
+                "Custom agents",
+                "Priority routing",
+                "Advanced analytics",
+                "99.99% SLA guarantee",
+            ],
+            "description": "Tailored solutions for large organizations",
+        },
+    ]
+
+    created: list[BillingPlan] = []
+    for plan_def in defaults:
+        # Check if plan with this name already exists
+        result = await db.execute(
+            select(BillingPlan).where(BillingPlan.name == plan_def["name"])
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            created.append(existing)
+            continue
+
+        plan = await create_plan(db, **plan_def)
+        created.append(plan)
+        logger.info("Seeded billing plan: %s", plan_def["name"])
+
+    return created
+
+
 class BillingV2Service:
     """Class wrapper for billing v2 functions."""
 
-    async def create_plan(self, db, **kwargs):
+    async def create_plan(self, db: AsyncSession, **kwargs: object) -> BillingPlan:
         return await create_plan(db, **kwargs)
 
-    async def subscribe(self, db, **kwargs):
+    async def subscribe(self, db: AsyncSession, **kwargs: object) -> Subscription:
         return await subscribe(db, **kwargs)
 
-    async def record_usage(self, db, **kwargs):
+    async def record_usage(self, db: AsyncSession, **kwargs: object) -> UsageMeter:
         return await record_usage(db, **kwargs)

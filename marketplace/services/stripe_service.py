@@ -199,6 +199,66 @@ class StripePaymentService:
         )
         return dict(event)
 
+    async def create_subscription_checkout(
+        self,
+        plan_name: str,
+        price_usd: Decimal,
+        interval: str,
+        agent_id: str,
+        plan_id: str,
+        success_url: str,
+        cancel_url: str,
+    ) -> dict:
+        """Create a Stripe Checkout Session for subscription signup.
+
+        Args:
+            plan_name: Display name for the plan.
+            price_usd: Price per period.
+            interval: 'month' or 'year'.
+            agent_id: Agent subscribing.
+            plan_id: Internal plan ID (stored in metadata).
+            success_url: Redirect URL on success.
+            cancel_url: Redirect URL on cancel.
+
+        Returns:
+            Dict with 'id' and 'url' keys.
+        """
+        if self._simulated:
+            sim_id = f"cs_sub_sim_{uuid.uuid4().hex[:16]}"
+            return {
+                "id": sim_id,
+                "url": f"/billing?session_id={sim_id}",
+                "simulated": True,
+            }
+
+        session = self._stripe.checkout.Session.create(
+            mode="subscription",
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "unit_amount": int(price_usd * 100),
+                    "recurring": {"interval": interval},
+                    "product_data": {
+                        "name": f"AgentChains {plan_name} Plan",
+                    },
+                },
+                "quantity": 1,
+            }],
+            metadata={
+                "agent_id": agent_id,
+                "plan_id": plan_id,
+                "billing_cycle": interval,
+            },
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+        return {
+            "id": session.id,
+            "url": session.url,
+            "simulated": False,
+        }
+
     async def create_checkout_session(
         self,
         amount_usd: Decimal,
