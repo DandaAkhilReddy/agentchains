@@ -236,14 +236,25 @@ async def _dispatch_event_subscriptions(event: dict) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # Configure structured logging before anything else
+    from marketplace.config import settings
+    from marketplace.core.structured_logging import configure_structlog
+
+    env = settings.log_format if settings.log_format == "json" else settings.environment
+    configure_structlog(env)
+
     # Startup: create tables
     await init_db()
-    from marketplace.config import settings
     from marketplace.database import async_session
 
     # Register the event broadcaster so services can import from core.events
     from marketplace.core.events import register_broadcaster
     register_broadcaster(broadcast_event)
+
+    # Initialize Model Router (Layer 1)
+    from marketplace.model_layer.router import build_model_router_from_settings
+
+    app.state.model_router = build_model_router_from_settings()
 
     # Seed system RBAC roles and auto-assign admin role to configured creator IDs
     from marketplace.services.role_service import assign_role, seed_system_roles
@@ -393,6 +404,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if servicebus_task:
         servicebus_task.cancel()
 
+    # Close model router connections
+    if hasattr(app, "state") and hasattr(app.state, "model_router"):
+        await app.state.model_router.close()
+
     from marketplace.database import dispose_engine
 
     await dispose_engine()
@@ -500,6 +515,16 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization", "X-MCP-Session-ID", "X-Request-ID"],
     )
 
+    # Correlation IDs (outermost — must wrap everything)
+    from marketplace.core.correlation_middleware import CorrelationMiddleware
+
+    app.add_middleware(CorrelationMiddleware)
+
+    # Prometheus metrics
+    from marketplace.core.metrics_middleware import MetricsMiddleware
+
+    app.add_middleware(MetricsMiddleware)
+
     # Rate limiting
     from marketplace.core.rate_limit_middleware import RateLimitMiddleware
 
@@ -539,6 +564,11 @@ def create_app() -> FastAPI:
     # OAuth2 routes at root level
     from marketplace.oauth2.routes import router as oauth2_router
     app.include_router(oauth2_router)
+
+    # Prometheus metrics endpoint
+    from marketplace.api.metrics_endpoint import router as metrics_router
+
+    app.include_router(metrics_router)
 
     # MCP server routes
     if settings.mcp_enabled:

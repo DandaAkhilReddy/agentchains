@@ -55,6 +55,10 @@ grpcio-tools>=1.60
 # ML
 scikit-learn>=1.4
 
+# Structured Logging & Metrics (Layer 5)
+structlog>=24.0
+prometheus_client>=0.20
+
 # LangGraph / LangChain (optional — used by SmartOrchestrator; fallback path works without these)
 langgraph>=0.2.0
 langchain-core>=0.3.0

@@ -93,13 +93,17 @@ async def execute_workflow(
     initiated_by: str,
     input_data: dict | None = None,
     on_node_event: OnNodeEventCallback = None,
+    eval_suite: Any | None = None,
 ) -> WorkflowExecution:
     """Start executing a workflow. Creates an execution record and runs the DAG.
 
     Args:
         on_node_event: Optional async callback invoked when node lifecycle
             events occur (node_started, node_completed, node_failed).
+        eval_suite: Optional EvalSuite to run after DAG completes.
     """
+    from marketplace.core.metrics import ACTIVE_WORKFLOWS
+
     workflow = await get_workflow(db, workflow_id)
     if not workflow:
         raise ValueError(f"Workflow not found: {workflow_id}")
@@ -115,15 +119,40 @@ async def execute_workflow(
     await db.refresh(execution)
     logger.info("Created execution '%s' for workflow '%s'", execution.id, workflow_id)
 
+    ACTIVE_WORKFLOWS.inc()
     # Run the DAG asynchronously
     try:
         await _run_dag(db, execution, workflow, on_node_event=on_node_event)
+
+        # Run eval suite if provided and execution completed
+        if eval_suite and execution.status == "completed":
+            try:
+                output_data = json.loads(execution.output_json) if execution.output_json else {}
+                eval_result = await eval_suite.run_on_workflow_output(
+                    input_data=input_data or {},
+                    output_data=output_data,
+                )
+                logger.info(
+                    "eval_suite_completed",
+                    execution_id=execution.id,
+                    suite=eval_result.suite_name,
+                    verdict=eval_result.overall_verdict.value,
+                    score=round(eval_result.overall_score, 3),
+                )
+            except Exception as eval_exc:
+                logger.warning(
+                    "eval_suite_failed",
+                    execution_id=execution.id,
+                    error=str(eval_exc),
+                )
     except Exception as exc:
         execution.status = "failed"
         execution.error_message = str(exc)
         execution.completed_at = datetime.now(timezone.utc)
         await db.commit()
         logger.error("Workflow execution '%s' failed: %s", execution.id, exc)
+    finally:
+        ACTIVE_WORKFLOWS.dec()
 
     return execution
 
@@ -267,6 +296,10 @@ async def _run_dag(
     on_node_event: OnNodeEventCallback = None,
 ) -> None:
     """Internal: parse the workflow graph and execute layer-by-layer."""
+    from marketplace.config import settings
+    from marketplace.core.budgets import BudgetTracker, CostBudget, LatencyBudget
+    from marketplace.core.metrics import AGENT_CALL_COST, AGENT_CALL_LATENCY
+
     execution.status = "running"
     execution.started_at = datetime.now(timezone.utc)
     await db.commit()
@@ -277,6 +310,18 @@ async def _run_dag(
     max_budget = Decimal(str(workflow.max_budget_usd)) if workflow.max_budget_usd else None
     total_cost = Decimal("0")
     node_outputs: dict[str, dict] = {}  # node_id -> output_data
+
+    # Initialize budget tracker with per-workflow limits
+    budget_tracker = BudgetTracker(
+        cost_budget=CostBudget(
+            warn_usd=settings.default_cost_warn_usd,
+            hard_limit_usd=float(max_budget) if max_budget else settings.default_cost_hard_usd,
+        ),
+        latency_budget=LatencyBudget(
+            warn_ms=settings.default_latency_warn_ms,
+            hard_limit_ms=settings.default_latency_hard_ms,
+        ),
+    )
 
     input_data = json.loads(execution.input_json) if execution.input_json else {}
 
@@ -299,6 +344,9 @@ async def _run_dag(
         async def _run_node(node_def: dict) -> tuple[str, dict]:
             node_id = node_def["_node_id"]
             deps = node_def.get("depends_on", [])
+            config = node_def.get("config", {})
+            agent_id = config.get("agent_id", node_id)
+            skill_id = config.get("skill_id", "default")
 
             # Merge workflow input with dependency outputs
             node_input = dict(input_data)
@@ -306,10 +354,26 @@ async def _run_dag(
                 if dep_id in node_outputs:
                     node_input[dep_id] = node_outputs[dep_id]
 
+            node_start = datetime.now(timezone.utc)
             result = await _execute_node(
                 db, execution.id, node_def, node_input,
                 on_node_event=on_node_event,
             )
+            node_end = datetime.now(timezone.utc)
+            duration_ms = (node_end - node_start).total_seconds() * 1000
+            node_cost = float(result.get("_cost", 0))
+
+            # Emit Prometheus metrics
+            AGENT_CALL_LATENCY.labels(
+                agent_id=agent_id, skill_id=skill_id,
+            ).observe(duration_ms / 1000)
+            if node_cost > 0:
+                AGENT_CALL_COST.labels(agent_id=agent_id).inc(node_cost)
+
+            # Track against budget (may raise BudgetExceededError)
+            budget_tracker.record_latency(duration_ms, operation=node_id)
+            budget_tracker.record_cost(node_cost, operation=node_id)
+
             return node_id, result
 
         # Execute all nodes in this layer concurrently

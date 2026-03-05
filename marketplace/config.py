@@ -128,6 +128,30 @@ class Settings(BaseSettings):
     orchestration_max_concurrent_workflows: int = 50
     orchestration_default_budget_usd: float = 10.0
 
+    # Structured Logging (Layer 5)
+    log_format: str = "console"  # "console" | "json"
+    log_level: str = "INFO"
+
+    # Budget Tracking (Layer 5)
+    default_latency_warn_ms: int = 1000
+    default_latency_hard_ms: int = 5000
+    default_cost_warn_usd: float = 1.00
+    default_cost_hard_usd: float = 10.00
+
+    # Model Layer (Layer 1)
+    model_default_provider: str = "azure_openai"
+    model_fallback_order: str = "foundry_local,ollama,azure_openai,openai"
+    foundry_local_base_url: str = "http://localhost:5272"
+    foundry_local_default_model: str = "phi-4-mini"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_default_model: str = "llama3.2"
+
+    # Memory Layer (Layer 6)
+    memory_embedding_model: str = ""
+    memory_consolidation_interval_hours: int = 24
+    memory_similarity_threshold: float = 0.85
+    memory_max_context_tokens: int = 2048
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
