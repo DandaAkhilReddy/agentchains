@@ -64,16 +64,22 @@ async def stripe_webhook(
     event_type = event.get("type", "")
     logger.info("Stripe webhook received: %s", event_type)
 
-    if event_type == "payment_intent.succeeded":
-        await _handle_stripe_payment_succeeded(event)
-    elif event_type == "payment_intent.payment_failed":
-        await _handle_stripe_payment_failed(event)
-    elif event_type == "charge.refunded":
-        await _handle_stripe_refund(event)
-    elif event_type == "checkout.session.completed":
-        await _handle_stripe_checkout_completed(event, db)
-    elif event_type == "account.updated":
-        await _handle_stripe_account_updated(event)
+    handlers = {
+        "payment_intent.succeeded": lambda: _handle_stripe_payment_succeeded(event),
+        "payment_intent.payment_failed": lambda: _handle_stripe_payment_failed(event),
+        "charge.refunded": lambda: _handle_stripe_refund(event),
+        "checkout.session.completed": lambda: _handle_stripe_checkout_completed(event, db),
+        "account.updated": lambda: _handle_stripe_account_updated(event),
+        "customer.subscription.created": lambda: _handle_subscription_created(event, db),
+        "customer.subscription.updated": lambda: _handle_subscription_updated(event, db),
+        "customer.subscription.deleted": lambda: _handle_subscription_deleted(event, db),
+        "invoice.payment_succeeded": lambda: _handle_invoice_payment_succeeded(event, db),
+        "invoice.payment_failed": lambda: _handle_invoice_payment_failed(event, db),
+    }
+
+    handler = handlers.get(event_type)
+    if handler:
+        await handler()
     else:
         logger.debug("Unhandled Stripe event type: %s", event_type)
 
@@ -216,6 +222,184 @@ async def _handle_stripe_account_updated(event: dict) -> None:
     account_id = data.get("id", "")
     logger.info("Stripe account updated: %s", account_id)
     # TODO: Update creator's payout status
+
+
+# ── Subscription lifecycle handlers ──
+
+
+async def _handle_subscription_created(event: dict, db: AsyncSession) -> None:
+    """Handle customer.subscription.created — activate subscription in DB."""
+    sub_obj = event.get("data", {}).get("object", {})
+    metadata = sub_obj.get("metadata", {})
+    agent_id = metadata.get("agent_id")
+    plan_id = metadata.get("plan_id")
+    stripe_sub_id = sub_obj.get("id", "")
+
+    if not agent_id or not plan_id:
+        logger.warning("subscription.created missing agent_id/plan_id in metadata")
+        return
+
+    from marketplace.models.billing import Subscription
+    from sqlalchemy import select
+
+    # Look for a pending subscription from checkout, or an active one without stripe_id
+    result = await db.execute(
+        select(Subscription)
+        .where(
+            Subscription.agent_id == agent_id,
+            Subscription.plan_id == plan_id,
+            Subscription.status.in_(["pending", "active"]),
+        )
+        .order_by(Subscription.created_at.desc())
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing and not existing.stripe_subscription_id:
+        existing.stripe_subscription_id = stripe_sub_id
+        existing.status = "active"
+        await db.commit()
+        logger.info("Activated subscription %s with stripe_id=%s", existing.id, stripe_sub_id)
+        return
+
+    # No pending sub found — create new one
+    from marketplace.services.billing_v2_service import subscribe
+
+    sub = await subscribe(db, agent_id, plan_id)
+    result = await db.execute(
+        select(Subscription).where(Subscription.id == sub.id)
+    )
+    db_sub = result.scalar_one_or_none()
+    if db_sub:
+        db_sub.stripe_subscription_id = stripe_sub_id
+        await db.commit()
+    logger.info("Subscription created for agent=%s plan=%s stripe=%s", agent_id, plan_id, stripe_sub_id)
+
+
+async def _handle_subscription_updated(event: dict, db: AsyncSession) -> None:
+    """Handle customer.subscription.updated — sync period dates and status."""
+    from datetime import datetime, timezone
+
+    from marketplace.models.billing import Subscription
+    from sqlalchemy import select
+
+    sub_obj = event.get("data", {}).get("object", {})
+    stripe_sub_id = sub_obj.get("id", "")
+    status = sub_obj.get("status", "")
+
+    result = await db.execute(
+        select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub_id)
+    )
+    sub = result.scalar_one_or_none()
+    if not sub:
+        logger.warning("subscription.updated: no local subscription for stripe_id=%s", stripe_sub_id)
+        return
+
+    # Map Stripe statuses to our statuses
+    status_map = {
+        "active": "active",
+        "past_due": "past_due",
+        "canceled": "cancelled",
+        "trialing": "trialing",
+        "incomplete": "past_due",
+        "incomplete_expired": "cancelled",
+        "unpaid": "past_due",
+    }
+    sub.status = status_map.get(status, sub.status)
+
+    # Update period dates
+    period_start = sub_obj.get("current_period_start")
+    period_end = sub_obj.get("current_period_end")
+    if period_start:
+        sub.current_period_start = datetime.fromtimestamp(period_start, tz=timezone.utc)
+    if period_end:
+        sub.current_period_end = datetime.fromtimestamp(period_end, tz=timezone.utc)
+
+    sub.cancel_at_period_end = sub_obj.get("cancel_at_period_end", False)
+    await db.commit()
+    logger.info("Subscription updated: stripe_id=%s status=%s", stripe_sub_id, sub.status)
+
+
+async def _handle_subscription_deleted(event: dict, db: AsyncSession) -> None:
+    """Handle customer.subscription.deleted — mark as cancelled."""
+    from marketplace.models.billing import Subscription
+    from sqlalchemy import select
+
+    sub_obj = event.get("data", {}).get("object", {})
+    stripe_sub_id = sub_obj.get("id", "")
+
+    result = await db.execute(
+        select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub_id)
+    )
+    sub = result.scalar_one_or_none()
+    if not sub:
+        logger.warning("subscription.deleted: no local subscription for stripe_id=%s", stripe_sub_id)
+        return
+
+    sub.status = "cancelled"
+    await db.commit()
+    logger.info("Subscription cancelled: stripe_id=%s agent=%s", stripe_sub_id, sub.agent_id)
+
+
+async def _handle_invoice_payment_succeeded(event: dict, db: AsyncSession) -> None:
+    """Handle invoice.payment_succeeded — mark invoice as paid."""
+    invoice_obj = event.get("data", {}).get("object", {})
+    stripe_invoice_id = invoice_obj.get("id", "")
+    stripe_sub_id = invoice_obj.get("subscription", "")
+
+    from marketplace.models.billing import Invoice
+    from sqlalchemy import select
+
+    # Try to find invoice by stripe_invoice_id
+    result = await db.execute(
+        select(Invoice).where(Invoice.stripe_invoice_id == stripe_invoice_id)
+    )
+    invoice = result.scalar_one_or_none()
+    if invoice:
+        from marketplace.services.invoice_service import mark_invoice_paid
+        await mark_invoice_paid(db, invoice.id, stripe_invoice_id)
+        logger.info("Invoice marked paid: stripe_id=%s", stripe_invoice_id)
+    else:
+        logger.debug(
+            "invoice.payment_succeeded: no local invoice for stripe_id=%s (may be Stripe-managed)",
+            stripe_invoice_id,
+        )
+
+    # Update subscription to active if it was past_due
+    if stripe_sub_id:
+        from marketplace.models.billing import Subscription
+
+        result = await db.execute(
+            select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub_id)
+        )
+        sub = result.scalar_one_or_none()
+        if sub and sub.status == "past_due":
+            sub.status = "active"
+            await db.commit()
+            logger.info("Subscription reactivated after payment: stripe_sub=%s", stripe_sub_id)
+
+
+async def _handle_invoice_payment_failed(event: dict, db: AsyncSession) -> None:
+    """Handle invoice.payment_failed — mark subscription as past_due."""
+    invoice_obj = event.get("data", {}).get("object", {})
+    stripe_sub_id = invoice_obj.get("subscription", "")
+
+    if not stripe_sub_id:
+        return
+
+    from marketplace.models.billing import Subscription
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub_id)
+    )
+    sub = result.scalar_one_or_none()
+    if not sub:
+        logger.warning("invoice.payment_failed: no subscription for stripe_sub=%s", stripe_sub_id)
+        return
+
+    sub.status = "past_due"
+    await db.commit()
+    logger.warning("Subscription set to past_due after payment failure: stripe_sub=%s", stripe_sub_id)
 
 
 # ── Razorpay event handlers ──
