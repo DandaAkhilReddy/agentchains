@@ -6,6 +6,9 @@ mode when no secret key is provided, and uses real Stripe SDK when configured.
 Requires: STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET env vars for live mode.
 """
 
+from __future__ import annotations
+
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -15,7 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 class StripePaymentService:
-    """Stripe payment operations with real SDK support."""
+    """Stripe payment operations with real SDK support.
+
+    All real Stripe SDK calls are offloaded to a thread via asyncio.to_thread
+    to avoid blocking the event loop.
+    """
 
     def __init__(self, secret_key: str = "", webhook_secret: str = ""):
         self.secret_key = secret_key
@@ -59,7 +66,8 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        pi = self._stripe.PaymentIntent.create(
+        pi = await asyncio.to_thread(
+            self._stripe.PaymentIntent.create,
             amount=int(amount_usd * 100),
             currency=currency,
             metadata=metadata or {},
@@ -83,7 +91,9 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        pi = self._stripe.PaymentIntent.confirm(payment_intent_id)
+        pi = await asyncio.to_thread(
+            self._stripe.PaymentIntent.confirm, payment_intent_id
+        )
         return {
             "id": pi.id,
             "status": pi.status,
@@ -99,7 +109,9 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        pi = self._stripe.PaymentIntent.retrieve(payment_intent_id)
+        pi = await asyncio.to_thread(
+            self._stripe.PaymentIntent.retrieve, payment_intent_id
+        )
         return {
             "id": pi.id,
             "status": pi.status,
@@ -124,7 +136,7 @@ class StripePaymentService:
         params: dict = {"payment_intent": payment_intent_id}
         if amount_usd is not None:
             params["amount"] = int(amount_usd * 100)
-        refund = self._stripe.Refund.create(**params)
+        refund = await asyncio.to_thread(self._stripe.Refund.create, **params)
         return {
             "id": refund.id,
             "payment_intent": payment_intent_id,
@@ -144,7 +156,8 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        account = self._stripe.Account.create(
+        account = await asyncio.to_thread(
+            self._stripe.Account.create,
             type="express",
             email=email,
             country=country,
@@ -174,7 +187,8 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        payout = self._stripe.Payout.create(
+        payout = await asyncio.to_thread(
+            self._stripe.Payout.create,
             amount=int(amount_usd * 100),
             currency=currency,
             stripe_account=account_id,
@@ -189,15 +203,27 @@ class StripePaymentService:
         }
 
     def verify_webhook_signature(self, payload: bytes, sig_header: str) -> dict | None:
-        """Verify a Stripe webhook signature and return the event."""
+        """Verify a Stripe webhook signature and return the event.
+
+        Returns None if verification fails or in simulated mode.
+        """
         if self._simulated:
             logger.warning("Webhook signature verification skipped (simulated mode)")
             return None
 
-        event = self._stripe.Webhook.construct_event(
-            payload, sig_header, self.webhook_secret,
-        )
-        return dict(event)
+        try:
+            event = self._stripe.Webhook.construct_event(
+                payload, sig_header, self.webhook_secret,
+            )
+            return dict(event)
+        except ValueError as exc:
+            logger.warning("Stripe webhook verification failed (invalid payload): %s", exc)
+            return None
+        except Exception as exc:
+            # Catches stripe.error.SignatureVerificationError — the class path
+            # varies across stripe SDK versions, so we catch broadly here.
+            logger.warning("Stripe webhook signature invalid: %s", exc)
+            return None
 
     async def create_subscription_checkout(
         self,
@@ -231,7 +257,8 @@ class StripePaymentService:
                 "simulated": True,
             }
 
-        session = self._stripe.checkout.Session.create(
+        session = await asyncio.to_thread(
+            self._stripe.checkout.Session.create,
             mode="subscription",
             payment_method_types=["card"],
             line_items=[{
@@ -277,7 +304,8 @@ class StripePaymentService:
                 "url": None,
             }
 
-        session = self._stripe.checkout.Session.create(
+        session = await asyncio.to_thread(
+            self._stripe.checkout.Session.create,
             mode="payment",
             payment_method_types=["card"],
             line_items=[{

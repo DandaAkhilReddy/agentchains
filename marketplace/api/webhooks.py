@@ -53,6 +53,17 @@ async def stripe_webhook(
                 content={"error": "Invalid webhook signature"},
             )
     else:
+        # Block simulated mode in production — forged events could activate
+        # paid subscriptions without payment.
+        if settings.environment == "production":
+            logger.error(
+                "Stripe webhook rejected: simulated mode active in production. "
+                "Set STRIPE_SECRET_KEY to enable real signature verification."
+            )
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Payment provider not configured"},
+            )
         try:
             event = json.loads(payload)
         except (json.JSONDecodeError, ValueError):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from decimal import Decimal
 from typing import Literal, Optional
@@ -29,13 +28,14 @@ from marketplace.schemas.billing import (
 from marketplace.services.billing_v2_service import (
     cancel_subscription,
     change_plan,
-    check_limits,
     get_plan,
+    get_plan_limits,
     get_plans,
     get_subscription,
+    get_subscription_with_plan,
     get_usage,
-    list_invoices,
-    list_plans,
+    list_invoices_paginated,
+    plan_to_response,
     subscribe,
 )
 from marketplace.services.deposit_service import confirm_deposit, create_deposit
@@ -104,29 +104,6 @@ class BillingTransferCreateRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _plan_to_response(plan: object) -> PlanResponse:
-    """Convert a BillingPlan ORM model to a PlanResponse schema."""
-    features: list[str] = []
-    raw = getattr(plan, "features_json", "[]") or "[]"
-    try:
-        features = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        pass
-
-    return PlanResponse(
-        id=plan.id,
-        name=plan.name,
-        description=plan.description or "",
-        tier=plan.tier,
-        price_monthly=float(plan.price_usd_monthly),
-        price_yearly=float(plan.price_usd_yearly),
-        api_calls_limit=plan.api_calls_limit,
-        storage_gb_limit=plan.storage_gb_limit,
-        agents_limit=plan.agents_limit,
-        features=features,
-    )
 
 
 def _get_stripe_service() -> StripePaymentService:
@@ -264,7 +241,7 @@ async def billing_list_plans(
 ) -> list[PlanResponse]:
     """List all active billing plans. Public — no auth required."""
     plans = await get_plans(db, tier=tier)
-    return [_plan_to_response(p) for p in plans]
+    return [plan_to_response(p) for p in plans]
 
 
 @router.get("/plans/recommend", response_model=RecommendationResponse)
@@ -288,7 +265,7 @@ async def billing_get_plan(
     plan = await get_plan(db, plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
-    return _plan_to_response(plan)
+    return plan_to_response(plan)
 
 
 # ---------------------------------------------------------------------------
@@ -302,15 +279,14 @@ async def billing_my_subscription(
     agent_id: str = Depends(get_current_agent_id),
 ) -> SubscriptionResponse | None:
     """Get the current agent's active subscription."""
-    sub = await get_subscription(db, agent_id)
+    sub, plan = await get_subscription_with_plan(db, agent_id)
     if not sub:
         return None
-    plan = await get_plan(db, sub.plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Subscription plan not found")
     return SubscriptionResponse(
         id=sub.id,
-        plan=_plan_to_response(plan),
+        plan=plan_to_response(plan),
         status=sub.status,
         current_period_start=sub.current_period_start,
         current_period_end=sub.current_period_end,
@@ -329,20 +305,18 @@ async def billing_create_subscription(
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    price = (
-        float(plan.price_usd_yearly)
-        if req.billing_cycle == "yearly"
-        else float(plan.price_usd_monthly)
+    price_decimal = (
+        plan.price_usd_yearly if req.billing_cycle == "yearly" else plan.price_usd_monthly
     )
 
     # Free plans: subscribe directly without Stripe
-    if price == 0:
+    if Decimal(str(price_decimal)) == 0:
         sub = await subscribe(db, agent_id, req.plan_id)
         return {"subscription_id": sub.id, "checkout_url": None}
 
-    # Paid plans: create a pending subscription record, then redirect to Stripe
-    from marketplace.models.billing import Subscription as SubscriptionModel
+    # Paid plans: create a pending subscription, call Stripe, commit only on success
     from marketplace.core.utils import utcnow as _utcnow
+    from marketplace.models.billing import Subscription as SubscriptionModel
 
     pending_sub = SubscriptionModel(
         agent_id=agent_id,
@@ -351,21 +325,30 @@ async def billing_create_subscription(
         current_period_start=_utcnow(),
     )
     db.add(pending_sub)
+    await db.flush()  # Write to DB within transaction — not committed yet
+
+    try:
+        stripe_svc = _get_stripe_service()
+        interval = "year" if req.billing_cycle == "yearly" else "month"
+        frontend_url = settings.stripe_frontend_url or "http://localhost:5173"
+        session = await stripe_svc.create_subscription_checkout(
+            plan_name=plan.name,
+            price_usd=Decimal(str(price_decimal)),
+            interval=interval,
+            agent_id=agent_id,
+            plan_id=req.plan_id,
+            success_url=f"{frontend_url}/billing?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{frontend_url}/billing?cancelled=true",
+        )
+    except Exception as exc:
+        await db.rollback()
+        logger.error("Stripe checkout creation failed: %s", exc)
+        raise HTTPException(
+            status_code=502, detail="Payment provider unavailable"
+        ) from exc
+
     await db.commit()
     await db.refresh(pending_sub)
-
-    stripe_svc = _get_stripe_service()
-    interval = "year" if req.billing_cycle == "yearly" else "month"
-    frontend_url = settings.stripe_frontend_url or "http://localhost:5173"
-    session = await stripe_svc.create_subscription_checkout(
-        plan_name=plan.name,
-        price_usd=Decimal(str(price)),
-        interval=interval,
-        agent_id=agent_id,
-        plan_id=req.plan_id,
-        success_url=f"{frontend_url}/billing?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{frontend_url}/billing?cancelled=true",
-    )
 
     return {
         "subscription_id": pending_sub.id,
@@ -385,7 +368,9 @@ async def billing_cancel_subscription(
     if not sub:
         raise HTTPException(status_code=404, detail="No active subscription found")
     try:
-        updated = await cancel_subscription(db, sub.id, immediate=req.immediate)
+        updated = await cancel_subscription(
+            db, sub.id, immediate=req.immediate, agent_id=agent_id
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {
@@ -406,14 +391,14 @@ async def billing_change_plan(
     if not new_plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    price = (
-        float(new_plan.price_usd_yearly)
+    price_decimal = (
+        new_plan.price_usd_yearly
         if req.billing_cycle == "yearly"
-        else float(new_plan.price_usd_monthly)
+        else new_plan.price_usd_monthly
     )
 
     # Free plans: switch directly
-    if price == 0:
+    if Decimal(str(price_decimal)) == 0:
         sub = await change_plan(db, agent_id, req.new_plan_id)
         return {"subscription_id": sub.id, "checkout_url": None}
 
@@ -423,7 +408,7 @@ async def billing_change_plan(
     frontend_url = settings.stripe_frontend_url or "http://localhost:5173"
     session = await stripe_svc.create_subscription_checkout(
         plan_name=new_plan.name,
-        price_usd=Decimal(str(price)),
+        price_usd=Decimal(str(price_decimal)),
         interval=interval,
         agent_id=agent_id,
         plan_id=req.new_plan_id,
@@ -449,13 +434,21 @@ async def billing_my_usage(
     agent_id: str = Depends(get_current_agent_id),
 ) -> list[UsageMeterResponse]:
     """Get the current agent's usage meters for this billing period."""
-    metrics = ["api_calls", "storage", "bandwidth"]
-    results: list[UsageMeterResponse] = []
+    from marketplace.services.billing_v2_service import (
+        METRICS,
+        _current_period_start,
+    )
 
-    for metric in metrics:
-        limits = await check_limits(db, agent_id, metric)
-        current = limits["current"]
-        limit = limits["limit"]
+    # Fetch subscription + plan once (avoids 9 queries from 3x check_limits)
+    _, plan = await get_subscription_with_plan(db, agent_id)
+    limits = get_plan_limits(plan) if plan else {}
+    period_start = _current_period_start()
+
+    results: list[UsageMeterResponse] = []
+    for metric in METRICS:
+        usage_records = await get_usage(db, agent_id, metric, period_start)
+        current = sum(float(u.value) for u in usage_records)
+        limit = limits.get(metric, 0)
         percent = round((current / limit) * 100, 1) if limit > 0 else 0.0
         results.append(
             UsageMeterResponse(
@@ -494,10 +487,7 @@ async def billing_my_invoices(
     agent_id: str = Depends(get_current_agent_id),
 ) -> InvoiceListResponse:
     """List the current agent's invoices (paginated)."""
-    all_invoices = await list_invoices(db, agent_id)
-    total = len(all_invoices)
-    start = (page - 1) * page_size
-    page_items = all_invoices[start : start + page_size]
+    page_items, total = await list_invoices_paginated(db, agent_id, page, page_size)
 
     items = [
         InvoiceResponse(

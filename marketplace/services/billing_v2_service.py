@@ -1,16 +1,76 @@
 """Billing V2 service: plan management, subscriptions, usage metering, and invoices."""
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime, timedelta
+from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marketplace.core.utils import utcnow as _utcnow
 from marketplace.models.billing import BillingPlan, Invoice, Subscription, UsageMeter
+from marketplace.schemas.billing import PlanResponse
 
 logger = logging.getLogger(__name__)
+
+_VALID_TIERS = frozenset({"free", "starter", "pro", "enterprise"})
+
+# Metrics tracked for usage metering
+METRICS = ("api_calls", "storage", "bandwidth")
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+
+def plan_to_response(plan: BillingPlan) -> PlanResponse:
+    """Convert a BillingPlan ORM model to a PlanResponse schema."""
+    features: list[str] = []
+    raw = getattr(plan, "features_json", "[]") or "[]"
+    try:
+        features = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    return PlanResponse(
+        id=plan.id,
+        name=plan.name,
+        description=plan.description or "",
+        tier=plan.tier,
+        price_monthly=float(plan.price_usd_monthly),
+        price_yearly=float(plan.price_usd_yearly),
+        api_calls_limit=plan.api_calls_limit,
+        storage_gb_limit=plan.storage_gb_limit,
+        agents_limit=plan.agents_limit,
+        features=features,
+    )
+
+
+def get_plan_limits(plan: BillingPlan) -> dict[str, int]:
+    """Get limit values for all metrics from a plan."""
+    return {
+        "api_calls": plan.api_calls_limit,
+        "storage": plan.storage_gb_limit,
+        "compute": plan.api_calls_limit,
+        "bandwidth": plan.storage_gb_limit,
+    }
+
+
+def _current_period_start() -> datetime:
+    """Return the start of the current billing period (1st of month, UTC)."""
+    now = _utcnow()
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def _period_end_from_start(period_start: datetime) -> datetime:
+    """Calculate the end of a billing period from its start."""
+    next_month = (period_start.month % 12) + 1
+    year = period_start.year + (1 if next_month == 1 else 0)
+    return period_start.replace(year=year, month=next_month)
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +117,8 @@ async def get_plans(db: AsyncSession, tier: str | None = None) -> list[BillingPl
     """List billing plans, optionally filtered by tier."""
     stmt = select(BillingPlan).where(BillingPlan.status == "active")
     if tier:
+        if tier not in _VALID_TIERS:
+            raise ValueError(f"Invalid tier '{tier}'. Must be one of: {sorted(_VALID_TIERS)}")
         stmt = stmt.where(BillingPlan.tier == tier)
     result = await db.execute(stmt)
     return list(result.scalars().all())
@@ -67,7 +129,17 @@ async def get_plans(db: AsyncSession, tier: str | None = None) -> list[BillingPl
 # ---------------------------------------------------------------------------
 
 async def subscribe(db: AsyncSession, agent_id: str, plan_id: str) -> Subscription:
-    """Create a new subscription for an agent."""
+    """Create a new subscription for an agent.
+
+    Raises ValueError if the agent already has an active subscription.
+    """
+    existing = await get_subscription(db, agent_id)
+    if existing:
+        raise ValueError(
+            f"Agent {agent_id} already has an active subscription (id={existing.id}). "
+            "Cancel it first or use change_plan()."
+        )
+
     now = _utcnow()
     sub = Subscription(
         agent_id=agent_id,
@@ -83,15 +155,24 @@ async def subscribe(db: AsyncSession, agent_id: str, plan_id: str) -> Subscripti
 
 
 async def cancel_subscription(
-    db: AsyncSession, subscription_id: str, immediate: bool = False
+    db: AsyncSession,
+    subscription_id: str,
+    immediate: bool = False,
+    agent_id: str | None = None,
 ) -> Subscription:
-    """Cancel a subscription, either immediately or at period end."""
+    """Cancel a subscription, either immediately or at period end.
+
+    When agent_id is provided, verifies ownership before cancelling.
+    """
     result = await db.execute(
         select(Subscription).where(Subscription.id == subscription_id)
     )
     sub = result.scalar_one_or_none()
     if not sub:
         raise ValueError(f"Subscription {subscription_id} not found")
+
+    if agent_id is not None and sub.agent_id != agent_id:
+        raise ValueError("Subscription does not belong to this agent")
 
     if immediate:
         sub.status = "cancelled"
@@ -115,6 +196,17 @@ async def get_subscription(db: AsyncSession, agent_id: str) -> Subscription | No
     return result.scalar_one_or_none()
 
 
+async def get_subscription_with_plan(
+    db: AsyncSession, agent_id: str
+) -> tuple[Subscription | None, BillingPlan | None]:
+    """Get agent's active subscription and its plan in two queries (cached together)."""
+    sub = await get_subscription(db, agent_id)
+    if not sub:
+        return None, None
+    plan = await get_plan(db, sub.plan_id)
+    return sub, plan
+
+
 # ---------------------------------------------------------------------------
 # Usage metering
 # ---------------------------------------------------------------------------
@@ -123,11 +215,8 @@ async def record_usage(
     db: AsyncSession, agent_id: str, meter_type: str, value: float
 ) -> UsageMeter:
     """Record a usage data point for an agent."""
-    now = _utcnow()
-    period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    next_month = (period_start.month % 12) + 1
-    year = period_start.year + (1 if next_month == 1 else 0)
-    period_end = period_start.replace(year=year, month=next_month)
+    period_start = _current_period_start()
+    period_end = _period_end_from_start(period_start)
 
     meter = UsageMeter(
         agent_id=agent_id,
@@ -177,18 +266,11 @@ async def check_limits(
     if not plan:
         return {"allowed": False, "current": 0, "limit": 0}
 
-    # Determine the limit based on meter type
-    limit_map = {
-        "api_calls": plan.api_calls_limit,
-        "storage": plan.storage_gb_limit,
-        "compute": plan.api_calls_limit,  # fallback to api_calls
-        "bandwidth": plan.storage_gb_limit,  # fallback to storage
-    }
-    limit = limit_map.get(meter_type, 0)
+    limits = get_plan_limits(plan)
+    limit = limits.get(meter_type, 0)
 
     # Sum usage for the current period
-    now = _utcnow()
-    period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    period_start = _current_period_start()
     usage_records = await get_usage(db, agent_id, meter_type, period_start)
     current = sum(float(u.value) for u in usage_records)
 
@@ -251,6 +333,34 @@ async def list_invoices(db: AsyncSession, agent_id: str) -> list[Invoice]:
     return list(result.scalars().all())
 
 
+async def list_invoices_paginated(
+    db: AsyncSession, agent_id: str, page: int = 1, page_size: int = 20
+) -> tuple[list[Invoice], int]:
+    """List invoices with SQL-level pagination.
+
+    Returns (items, total_count).
+    """
+    count_stmt = (
+        select(func.count())
+        .select_from(Invoice)
+        .where(Invoice.agent_id == agent_id)
+    )
+    total: int = (await db.execute(count_stmt)).scalar() or 0
+
+    offset = (page - 1) * page_size
+    stmt = (
+        select(Invoice)
+        .where(Invoice.agent_id == agent_id)
+        .order_by(Invoice.created_at.desc())
+        .limit(page_size)
+        .offset(offset)
+    )
+    result = await db.execute(stmt)
+    items = list(result.scalars().all())
+
+    return items, total
+
+
 async def get_invoices(
     db: AsyncSession, agent_id: str, status: str | None = None
 ) -> list[Invoice]:
@@ -276,8 +386,8 @@ async def change_plan(
 ) -> Subscription:
     """Change an agent's subscription to a different plan.
 
-    Cancels the current subscription immediately and creates a new one.
-    Stripe proration is handled externally via checkout.
+    Cancels the current subscription and creates a new one atomically
+    within a single transaction. Stripe proration handled externally via checkout.
     """
     new_plan = await get_plan(db, new_plan_id)
     if not new_plan:
@@ -288,9 +398,21 @@ async def change_plan(
         current_sub.status = "cancelled"
         current_sub.current_period_end = _utcnow()
         current_sub.updated_at = _utcnow()
-        await db.commit()
+        await db.flush()  # Write cancel within transaction — not committed yet
 
-    return await subscribe(db, agent_id, new_plan_id)
+    # subscribe() will commit both the cancel and the new sub atomically
+    now = _utcnow()
+    new_sub = Subscription(
+        agent_id=agent_id,
+        plan_id=new_plan_id,
+        status="active",
+        current_period_start=now,
+        current_period_end=now + timedelta(days=30),
+    )
+    db.add(new_sub)
+    await db.commit()
+    await db.refresh(new_sub)
+    return new_sub
 
 
 async def seed_default_plans(db: AsyncSession) -> list[BillingPlan]:
